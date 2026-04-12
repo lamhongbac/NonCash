@@ -1,0 +1,30 @@
+# Project Description
+
+## Overview
+This project aims to develop a scalable and secure platform for producing vouchers. The platform will be designed as a Software as a Service (SaaS) solution, allowing businesses to use it without the need for on-premises infrastructure.
+
+## Features
+1. **Production Planning**: Plan voucher production schedules.
+2. **Approval and Publication**: Approve and publish vouchers according to the planned schedule.
+3. **Voucher Usage at POS Systems**: Integrate with point-of-sale (POS) systems through RESTful APIs for voucher verification and usage.
+
+## Technology Stack
+- **Backend**: C#
+- **Database**: PostgreSQL or MongoDB (PostgreSQL preferred due to cost and performance)
+- **Frontend**: Blazor App
+
+## Architecture
+The application is designed with a three-layer architecture:
+1. **Data Access Layer (DAL)**: Handles database interactions using Entity Framework (EF). It uses repositories for data abstraction and is decoupled from other layers, allowing for easy changes in the underlying data model or technology.
+2. **Business Logic Layer (BLL)**: Contains business logic and interacts with DAL through repositories. BLL is organized into microservices to ensure loose coupling between components.
+3. **User Interface (GUI)**: Manages user interactions using Blazor framework. It communicates with BLL for processing business logic.
+
+## Security
+- **API Key Authentication**: Ensures secure access to the platform.
+- **JWT Token Management**: Provides a robust mechanism for user authentication and authorization.
+
+## Deployment
+The platform will be deployed as an SaaS solution, making it accessible via the web.
+
+## Conclusion
+This project is designed to provide a robust, scalable, and secure voucher production platform that can be easily adopted by businesses. The architecture ensures flexibility and maintainability, allowing for future enhancements and technology upgrades.
