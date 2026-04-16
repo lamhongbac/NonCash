@@ -1,0 +1,24 @@
+installation:
+  version: 6.3.0
+  installDate: 2026-04-13T08:09:34.584Z
+  lastUpdated: 2026-04-13T08:09:34.584Z
+modules:
+  - name: core
+    version: 6.3.0
+    installDate: 2026-04-13T08:09:33.316Z
+    lastUpdated: 2026-04-13T08:09:34.582Z
+    source: built-in
+    npmPackage: null
+    repoUrl: null
+  - name: bmm
+    version: 6.3.0
+    installDate: 2026-04-13T08:09:34.118Z
+    lastUpdated: 2026-04-13T08:09:34.584Z
+    source: built-in
+    npmPackage: null
+    repoUrl: null
+ides:
+  - claude-code
+  - gemini
+  - antigravity
+  - qwen

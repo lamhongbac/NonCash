@@ -1,0 +1,166 @@
+
+
+
+
+Key Functionalities
+
+I/Production Planning: 
+ Define production schedules for vouchers.
+ Allow businesses to set production targets.
+a.Mục tiêu:
+Công ty xây dựng kế hoạch xuất bản voucher gắn liền mục tiêu kinh doanh, thí dụ: tăng doanh số, thêm thành viên (acquire new member)...vv
+Thông thường kế hoạch là 1 phần của chiến dịch marketing
+
+
+b.Các thuộc tính cần có của 1 plan
+
+Plan bao gồm 2 phần lớn: 
+Plan Header là các thông tin chung của plan
+Plan detail: là chi tiết các voucher sinh ra trong 1 plan
+
+Plan Header: 	
+
++ID : GUID ,primary key
++Ngày lập Kế hoạch
++Người lập kế hoạch: là người login và có vai trò "lập kế hoạch" (xem chi tiết cách thiết lập role; 1 role là 1 set "right(list+CRUD) trên 1 business object", giả sử có 1 dịch vụ quản lý authentication and authorization độc lập, chúng đc thiết kế thành 1 framework cho việc kiểm soát phân quyền cho tất cả ứng dụng tập trung và độc lập)
++BrandID: Voucher phát hành bởi bên nào
++Loại voucher:complimentary voucher (cho / tặng) và Gift voucher(bán)
+Hình thức hiển thị:
++Image 
++Icon
++TOC: Term and condition/ điều khoản sử dụng
++Hình thức giá trị: Value vs Percentage
++Mệnh giá: giá trị sử dụng của VC
++NetValue: giá trị VC, giá trị này sẽ là giá trị tham khảo khi thực hiện bán voucher (ví dụ voucher có giá trị sử dụng là 100K, và NetValue =80K , Price là 90K)
+Có nghĩa khách hàng bỏ ra 90K có đc 100K su dung, va cty co 10K margin
++Ngày hết hạn: là ngày không được sử dụng, ngày này nếu lớn hơn ngày trong định nghĩa phạm vi thời gian sử dụng ở dưới, sẽ bị phạm vi sử dụng phủ quyết, ngày hết hạn có thể là tĩnh hoặc theo quy tắc logic
++Publish Date: là ngày chính thức được phép phân phát đi ( trước ngày trong phạm vi sử dụng)
++Phạm vi bán hàng: là danh sách các thương hiệu & điểm bán chấp nhận sử dụng
++Phạm vi thời gian:Từ-> Đến: nếu để trống là không định nghĩa hay không có giới hạn, nếu để rõ từ A->B thì chỉ sử dụng trong phạm vi ngày chỉ ra
++So Luong: so luong vc du kien xuat ban
++Ngân sách: tổng chi phí dự kiến cho dự án
+
+Target/mục tiêu hướng đến:
++So luong phân phát: distribute to customer (không phan biệt hình thức : bán trực tiếp, bán qua trung gian, cho - tặng)
++So lượng thực tế sử dụng: là số quay về sử dụng tại các quầy / POS
+
+
++Trạng thái duyệt: đồng ý và từ chối,chi tiết các giao dịch duyệt lưu trong bang Voucher Review, sẽ làm rõ trong muc duyệt voucher plan
+
+Plan detail: Chi tiết kế hoạch (Voucher Plan Detail)
+Sau khi duyệt hệ thống sẽ sinh ra danh sách chi tiết các voucher tương ứng với số lượng trong kế hoạch
+Mỗi 1 dòng chi tiết có  các thuộc tính sau:
++ID: khóa duy nhất
++ParentID: link to Voucher Plan header table
++SerialNo: là mã duy nhất trao đổi các bên
++Voucher Code: là code hiển thị trên App Voucher và là code động, biến động liên tục trong khoảng TG ngắn nhằm đảm bảo tính an ninh, nguyên tắc cũng tương tự JWT
++Mã khách hàng (nullable)/member ID (MemID) : sau bước phân phát chi tiết sẽ liên kết đến MemID của bảng customer (B2C) hoặc MemID của bảng Organizations (B2B)
+
++Trạng thái sử dụng  : Pending (default), In-Use, Complete
++Pending là chưa sử dụng
++In Use : bắt đầu sử dụng -> hệ thống sẽ lock voucher nhằm tránh gian lận thông qua copy code
++Complete: đã hoàn tất sử dụng, trong trường hợp hủy sử dụng-> quay về trạng thái pending
+Voucher chỉ valid for use khi ở trạng thái sử dụng= pending
+Used Date (nullable) : ngày sử dụng
+
+Track production progress.
++Chi tiết sử dụng voucher sẽ lưu tách biệt trong bảng Voucher Usage, sẽ làm rõ trong mục sử dụng voucher
++Chi tiết phân phát (distribute voucher) sẽ lưu trong bang Voucher Distribution, sẽ làm rõ trong mục phân phát voucher
+
+II Approval and Publication:
+Plan sau khi submit sẽ được route về để manager duyệt
+Manager người được giao role : review, login vào để thực hiện chức năng duyệt
+
+1 giao dịch duyệt bao gồm các thuộc tính
+
+Ai là người duyệt
+Ngày Duyệt
+Review Notes
+Trạng thái là gì: đồng ý hay từ chối, nếu từ chối thì phải sửa lại plan và submit, hoặc tạo plan mới
+Publish Date: điều chỉnh nếu muốn
+chú ý: trong phạm vi ứng dụng này chỉ có 1 cấp độ duyệt 
+
+Plan bị từ chối, người lập kế hoạch cần  điều chỉnh, và sau đó duyệt lại, và tạo ra phiên bản duyệt mới sao cho có thể trace back quá trình duyệt
+
+Plan sau khi approved, có thể sử dụng để phân phát căn cứ vào Publish Date
+
+III Distribution to Customer
+ Payment Management:
+    • Process payments for voucher sales.
+    • Record transaction details.
+    • Generate invoices and receipts.
+
+Có 2 phương thức để distribute voucher đến khách hàng
+
+Sale or promotion
+
+Phương thức sale
+Giả sử ta có nền tảng bán hàng , cho phép các đối tượng là Business hay customer thực hiện đăng ký và sau đó có tài khoản
+Mỗi cá nhân hay tổ chức đều có 1 mã định danh duy nhất gọi là member ID (MemID)
+
+
+Ucase : Tự mua
+ 
+Nhân viên cty  thực hiện login vào 
+Chọn cty cần mua voucher
+Chọn sản phẩm cần mua: chon loai voucher cần mua từ danh sách sản phẩm
+Khai báo số lượng 
+Khai báo thông tin khác như thông tin xuất hóa đơn
+và thanh toán
+Khách sử dụng App My Voucher, hoặc 1 app bất kỳ có khai báo đến nền tảng để thấy đc danh sach voucher vừa mua thông qua login ID
+
+Khách cũng có thể chuyển nhượng voucher cho các cá nhân và doanh nghiệp thông qua thủ tục chuyển nhượng , cho tặng
+
+Ucase : Cty thực hiện thủ tục khai báo cho đối tác
+
+Việc thanh toán có thể xảy ra bên ngoài nền tảng, 
+Sau thủ tục người thụ hưởng có thể login vào App và thấy trong mục My voucher
+Phương thức Promotion
+Công ty thực hiện promotion 
+sẽ thực hiện thao tác gửi các voucher vào Inbox của member ( có thể là customer hay Organization)
+Trong trường hợp có nhiều member nhận voucher , có thể có phương thức batch promotion , trong đó import 1 danh sách số điện thoại-> hệ thống khởi tạo member nếu chưa có và thực hiện gửi vào từng inbox của member
+
+notes: new member must login vào app có chức năng load danh sach voucher từ inbox
+
+
+
+Chuyển nhượng , cho tặng
+Các chủ voucher hoàn toàn có thể chuyển nhượng cho tặng  thông qua sdt hoặc memberID
+Thủ tục luôn có 2 chiều
+người sở hữu thực hiện: cho , tặng, chuyển nhượng
+người thụ hưởng xác nhận
+
+Luu ý nền tảng không cho phép thanh toán trong các nghiệp vụ này
+
+IV Voucher Usage at POS Systems:
+Quy trình sử dụng voucher đi qua các bước như sau
+
+Khách show App có voucher (ex: mục My voucher)
+Nhân viên hoặc hệ thống quét mã tại chức năng bán hàng
+Backend nhận diện đây là hoạt bán hàng
+kiểm tra tính hợp lệ, khóa vc, gửi tín hiệu dc phép đến POS
+POS thực hiện Apply , nhưng chưa kết thúc-> gửi thông tin dự định đến BE
+BE thực hiện giao dịch nhưng chưa commit -> gửi tín hiệu đến POS
+POS thực hiện kết thúc giao dich-> BE commit
+
+transaction  sử dụng voucher thực hiện trong kỹ thuật transaction begin, commit or  rollback nhằm đảm bảo tính toàn vẹn của giao dịch
+
+Order Management:
+    • Create orders for voucher production.
+    • Assign orders to production plans.
+    • Track order status.
+
+Mỗi giao dịch cần lưu chi tiết vào bảng Voucher Usage (Create orders for voucher production.)
+Đồng thời update vào bảng Plan Detail (    • Assign orders to production plans.)
+Update order status vào các bảng tương ứng
+
+
+V Các chức năng khác 
+ Customer Management: Cho phép các hoạt động liên quan đến quản lý danh sách khách
+ Business Management:Cho phép các hoạt động liên quan đến quản lý danh sách tổ chức
+
+Chú ý chức năng blacklist , chức năng import, export
+
+
+
+
