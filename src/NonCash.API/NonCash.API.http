@@ -1,0 +1,6 @@
+@NonCash.API_HostAddress = http://localhost:5108
+
+GET {{NonCash.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
