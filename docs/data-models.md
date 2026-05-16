@@ -12,16 +12,18 @@ The system uses a relational model (PostgreSQL) managed via Entity Framework Cor
 Represents the overall strategy for a voucher campaign.
 - `ID`: GUID (Primary Key)
 - `PlanDate`: DateTime (Creation date)
-- `CreatorID`: GUID (Link to Member/User)
-- `BrandID`: GUID (Issuing brand)
+- `CreatorID`: GUID (FK to UserAccount)
+- `ApproverID`: GUID? (Nullable, FK to UserAccount)
+- `BrandID`: GUID (FK to Brand)
 - `VoucherType`: Enum (Complimentary, Gift)
-- `DisplayMode`: Object (Image, Icon)
+- `ImageURL`: String (Url for detailed display)
+- `IconURL`: String (Url for grid/logo display)
 - `ValueType`: Enum (Value, Percentage)
 - `FaceValue`: Decimal (Usage value)
 - `NetValue`: Decimal (Reference cost)
 - `ExpiryDate`: DateTime (Hard expiry)
 - `PublishDate`: DateTime (Availability date)
-- `SalesRange`: List<BrandID> (Accepted locations)
+- `SalesRange`: List<OutletID> (Accepted outlet locations)
 - `TimeRange`: DateRange (Valid from-to)
 - `TargetQuantity`: Integer (Expected volume)
 - `Budget`: Decimal (Total cost)
@@ -58,13 +60,38 @@ Tracks how vouchers were sent to customers.
 - `Method`: Enum (Sale, Promotion, Transfer)
 - `DistributionDate`: DateTime
 
-### 3. Identity and Members
+### 3. Identity and Operations Management
 
-#### `Member` (B2B & B2C)
-Unified entity for individuals and organizations.
-- `MemID`: GUID (Primary Key)
+#### `Brand` (Organization / Tenant)
+Represents businesses that create and distribute vouchers (e.g., The Coffee House).
+- `BrandID`: GUID (Primary Key)
 - `Name`: String
-- `Type`: Enum (Customer, Organization)
-- `PhoneNumber`: String (Primary identifier for transfer)
+- `TaxCode`: String
+- `ContactEmail`: String
+- `Status`: Enum (Active, Suspended)
+
+#### `Outlet` (Point of Sale / Store)
+Represents physical or digital stores belonging to a Brand.
+- `OutletID`: GUID (Primary Key)
+- `BrandID`: GUID (FK to Brand)
+- `Name`: String
+- `Address`: String
+- `Status`: Enum (Active, Closed)
+
+#### `UserAccount` (Back-office Users)
+Platform access for creating, reviewing, and approving plans.
+- `UserID`: GUID (Primary Key)
+- `BrandID`: GUID (FK to Brand, nullable for system super-admins)
+- `Username`: String
+- `PasswordHash`: String
+- `FullName`: String
+- `Role`: Enum (Admin, Planner, Approver)
+- `Status`: Enum (Active, Locked)
+
+#### `Customer` (End-User / App Member)
+The consumers who hold and use the distributed vouchers.
+- `CustomerID`: GUID (Primary Key)
+- `PhoneNumber`: String (Primary identifier for transfer/login)
+- `FullName`: String
 - `Email`: String
 - `Status`: Enum (Active, Blacklisted)

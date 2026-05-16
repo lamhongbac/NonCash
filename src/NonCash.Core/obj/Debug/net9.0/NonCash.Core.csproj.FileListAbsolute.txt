@@ -1,0 +1,13 @@
+D:\GIT PROJECT\NonCash\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.deps.json
+D:\GIT PROJECT\NonCash\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.pdb
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.csproj.AssemblyReference.cache
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.AssemblyInfoInputs.cache
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.AssemblyInfo.cs
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.csproj.CoreCompileInputs.cache
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.sourcelink.json
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\refint\NonCash.Core.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.pdb
+D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\ref\NonCash.Core.dll

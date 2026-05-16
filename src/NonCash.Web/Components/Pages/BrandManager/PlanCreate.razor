@@ -1,0 +1,273 @@
+@page "/brandmanager/plans/create"
+@page "/brandmanager/plans/{PlanId:guid}/edit"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>@(_isEdit ? "Edit Plan" : "Create Voucher Plan")</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">@(_isEdit ? "Edit Voucher Plan" : "Create Voucher Plan")</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+}
+else
+{
+    <MudPaper Class="pa-6" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-3">Plan Information</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudSelect T="string" @bind-Value="_model.VoucherType" Label="Voucher Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("Complimentary")">Complimentary</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Gift")">Gift</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="string" @bind-Value="_model.ValueType" Label="Value Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("Value")">Fixed Value</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Percentage")">Percentage</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudDatePicker @bind-Date="_model.PlanDate" Label="Plan Date" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-3">Voucher Values</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_model.FaceValue" Label="Face Value" Variant="Variant.Outlined" Min="1" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_model.NetValue" Label="Net Value" Variant="Variant.Outlined" Min="0" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="int" @bind-Value="_model.TargetQuantity" Label="Target Quantity" Variant="Variant.Outlined" Min="1" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_model.Budget" Label="Budget" Variant="Variant.Outlined" Min="0" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-3">Dates</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_model.PublishDate" Label="Publish Date" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_model.ExpiryDate" Label="Expiry Date" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_model.ValidFrom" Label="Valid From (opt)" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_model.ValidTo" Label="Valid To (opt)" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-3">Applicable Outlets</MudText>
+        @if (_outlets.Any())
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                @foreach (var outlet in _outlets)
+                {
+                    <MudChip T="string"
+                        Variant="@(outlet.Selected ? Variant.Filled : Variant.Outlined)"
+                        Color="@(outlet.Selected ? Color.Primary : Color.Default)"
+                        OnClick="@(() => outlet.Selected = !outlet.Selected)">
+                        @outlet.Name
+                    </MudChip>
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Warning">No outlets found. Create outlets first.</MudText>
+        }
+
+        @if (_errorMessage != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+        }
+
+        <MudStack Row="true" Spacing="2" Class="mt-6">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleSubmit" Disabled="_submitting">
+                @if (_submitting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                @(_isEdit ? "Update Plan" : "Create Plan")
+            </MudButton>
+            <MudButton Color="Color.Default" Variant="Variant.Outlined" Href="/brandmanager/plans">Cancel</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid? PlanId { get; set; }
+
+    private bool _isEdit => PlanId.HasValue;
+    private bool _loading = true;
+    private bool _submitting = false;
+    private string? _errorMessage;
+    private PlanModel _model = new();
+    private List<OutletItem> _outlets = new();
+
+    public class PlanModel
+    {
+        public DateTime? PlanDate { get; set; } = DateTime.Today;
+        public string VoucherType { get; set; } = "Complimentary";
+        public string ValueType { get; set; } = "Value";
+        public decimal FaceValue { get; set; }
+        public decimal NetValue { get; set; }
+        public DateTime? PublishDate { get; set; } = DateTime.Today;
+        public DateTime? ExpiryDate { get; set; } = DateTime.Today.AddMonths(1);
+        public DateTime? ValidFrom { get; set; }
+        public DateTime? ValidTo { get; set; }
+        public int TargetQuantity { get; set; } = 100;
+        public decimal Budget { get; set; }
+    }
+
+    public class OutletItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool Selected { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutletsAsync();
+        if (_isEdit) await LoadPlanAsync();
+        else _loading = false;
+    }
+
+    private async Task LoadOutletsAsync()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/outlets");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<OutletResponse>>();
+                _outlets = result?.Select(o => new OutletItem { Id = o.Id, Name = o.Name }).ToList() ?? new();
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadPlanAsync()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var plan = await response.Content.ReadFromJsonAsync<PlanDetailResponse>();
+                if (plan != null)
+                {
+                    _model.PlanDate = plan.PlanDate;
+                    _model.VoucherType = plan.VoucherType;
+                    _model.ValueType = plan.ValueType;
+                    _model.FaceValue = plan.FaceValue;
+                    _model.NetValue = plan.NetValue;
+                    _model.PublishDate = plan.PublishDate;
+                    _model.ExpiryDate = plan.ExpiryDate;
+                    _model.ValidFrom = plan.ValidFrom;
+                    _model.ValidTo = plan.ValidTo;
+                    _model.TargetQuantity = plan.TargetQuantity;
+                    _model.Budget = plan.Budget;
+                    foreach (var outlet in _outlets)
+                        outlet.Selected = plan.OutletIds.Contains(outlet.Id);
+                }
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _errorMessage = null;
+        if (_model.FaceValue <= 0) { _errorMessage = "Face value must be greater than 0."; return; }
+        if (_model.NetValue > _model.FaceValue) { _errorMessage = "Net value cannot exceed face value."; return; }
+        if (_model.TargetQuantity <= 0) { _errorMessage = "Target quantity must be greater than 0."; return; }
+        if (_model.PublishDate > _model.ExpiryDate) { _errorMessage = "Expiry date must be on or after publish date."; return; }
+
+        _submitting = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var selectedOutlets = _outlets.Where(o => o.Selected).Select(o => o.Id).ToList();
+            var payload = new
+            {
+                PlanDate = _model.PlanDate ?? DateTime.Today,
+                VoucherType = _model.VoucherType,
+                ValueType = _model.ValueType,
+                FaceValue = _model.FaceValue,
+                NetValue = _model.NetValue,
+                ExpiryDate = _model.ExpiryDate ?? DateTime.Today.AddMonths(1),
+                PublishDate = _model.PublishDate ?? DateTime.Today,
+                ValidFrom = _model.ValidFrom,
+                ValidTo = _model.ValidTo,
+                TargetQuantity = _model.TargetQuantity,
+                Budget = _model.Budget,
+                ImageUrl = (string?)null,
+                IconUrl = (string?)null,
+                OutletIds = selectedOutlets
+            };
+
+            var request = new HttpRequestMessage(
+                _isEdit ? HttpMethod.Put : HttpMethod.Post,
+                _isEdit ? $"api/v1/plans/{PlanId}" : "api/v1/plans");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = JsonContent.Create(payload);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(_isEdit ? "Plan updated!" : "Plan created!", Severity.Success);
+                Navigation.NavigateTo("/brandmanager/plans");
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.message ?? error?.error ?? "Failed to save plan.";
+            }
+        }
+        catch (Exception ex) { _errorMessage = $"Error: {ex.Message}"; }
+        finally { _submitting = false; }
+    }
+
+    private class OutletResponse { public Guid Id { get; set; } public string Name { get; set; } = ""; }
+    private class PlanDetailResponse
+    {
+        public DateTime PlanDate { get; set; }
+        public string VoucherType { get; set; } = "";
+        public string ValueType { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public decimal NetValue { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public DateTime PublishDate { get; set; }
+        public DateTime? ValidFrom { get; set; }
+        public DateTime? ValidTo { get; set; }
+        public int TargetQuantity { get; set; }
+        public decimal Budget { get; set; }
+        public List<Guid> OutletIds { get; set; } = new();
+    }
+    private class ErrorResponse { public string? error { get; set; } public string? message { get; set; } }
+}

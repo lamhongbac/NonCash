@@ -18,7 +18,7 @@ Checks if a voucher is valid and available for use.
   ```json
   {
     "voucherCode": "DYNAMIC_CODE_HERE",
-    "posID": "STORE_001"
+    "outletID": "STORE_001"
   }
   ```
 - **Response**:
@@ -40,7 +40,7 @@ Sets voucher to `In-Use` status to prevent double-spending during a transaction.
   ```json
   {
     "voucherCode": "DYNAMIC_CODE_HERE",
-    "posID": "STORE_001"
+    "outletID": "STORE_001"
   }
   ```
 - **Response**:

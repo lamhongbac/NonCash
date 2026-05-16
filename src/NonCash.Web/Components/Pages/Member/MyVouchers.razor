@@ -1,0 +1,298 @@
+@page "/my-vouchers"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>My Vouchers</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">My Vouchers</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">View vouchers allocated to a Member ID. Provide your Member ID (Customer GUID) below — Member auth is a future epic.</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+        <MudTextField T="Guid" @bind-Value="_memberId" Label="Member ID (Customer GUID)" Required="true" Style="max-width: 400px;" />
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="LoadVouchers" Disabled="@_loading" StartIcon="@Icons.Material.Filled.Search">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Load
+        </MudButton>
+        <MudButton Color="Color.Secondary" Variant="Variant.Outlined" OnClick="OpenTransferDialog" Disabled="@(!_vouchers.Any(v => v.UsageStatus == "Pending"))" StartIcon="@Icons.Material.Filled.SwapHoriz">
+            Transfer Vouchers
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_searched && !_vouchers.Any())
+{
+    <MudAlert Severity="Severity.Info">No vouchers found for this Member ID.</MudAlert>
+}
+else if (_vouchers.Any())
+{
+    <MudGrid>
+        @foreach (var v in _vouchers)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="2" Outlined="@(_selectedIds.Contains(v.Id))">
+                    @if (v.UsageStatus == "Pending")
+                    {
+                        <MudCardActions Class="pa-2">
+                            <MudCheckBox T="bool" Value="@(_selectedIds.Contains(v.Id))" ValueChanged="@((bool b) => ToggleSelection(v.Id, b))" Label="Select for transfer" />
+                        </MudCardActions>
+                    }
+                    @if (!string.IsNullOrEmpty(v.ImageUrl))
+                    {
+                        <MudCardMedia Image="@v.ImageUrl" Height="140" />
+                    }
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h6">@v.FaceValue.ToString("N0") @(v.ValueType == "Percentage" ? "%" : "VND")</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(v.UsageStatus)">@v.UsageStatus</MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="mt-2">Serial: <b>@v.SerialNo</b></MudText>
+                        @if (v.ExpiryDate.HasValue)
+                        {
+                            <MudText Typo="Typo.caption">Expires: @v.ExpiryDate.Value.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                        }
+                        @if (v.UsedDate.HasValue)
+                        {
+                            <MudText Typo="Typo.caption">Used on: @v.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
+                        }
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.body2">Code (refresh every 2 min):</MudText>
+                        <MudPaper Class="pa-2 mt-1" Elevation="0" Style="background: #f5f5f5; font-family: monospace; word-break: break-all;">
+                            @v.VoucherCode
+                        </MudPaper>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@if (_history.Any())
+{
+    <MudPaper Class="pa-4 mt-6" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">Outgoing Transfer History</MudText>
+        <MudTable Items="_history" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Voucher Serial</MudTh>
+                <MudTh>Recipient Phone</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.TransferredAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                <MudTd>@context.SerialNo</MudTd>
+                <MudTd>@context.RecipientPhone</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<MudDialog @bind-Visible="_showTransfer" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Transfer Vouchers</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">Selected: <b>@_selectedIds.Count</b> voucher(s).</MudText>
+        <MudText Typo="Typo.caption" Class="mb-3">Provide one recipient phone per line. Count must equal selected voucher count.</MudText>
+        <MudTextField T="string" @bind-Value="_phoneList" Label="Recipient Phone Numbers" Lines="6" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showTransfer = false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="ExecuteTransfer" Disabled="_transferring">
+            @if (_transferring)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Transfer
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private Guid _memberId;
+    private bool _loading;
+    private bool _searched;
+    private List<MemberVoucher> _vouchers = new();
+
+    // Transfer state
+    private HashSet<Guid> _selectedIds = new();
+    private bool _showTransfer;
+    private bool _transferring;
+    private string _phoneList = string.Empty;
+    private List<TransferHistory> _history = new();
+    private DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private async Task LoadVouchers()
+    {
+        if (_memberId == Guid.Empty)
+        {
+            Snackbar.Add("Please enter a Member ID.", Severity.Warning);
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/members/{_memberId}/vouchers");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _vouchers = await response.Content.ReadFromJsonAsync<List<MemberVoucher>>() ?? new();
+                _selectedIds.Clear();
+                _searched = true;
+                await LoadHistory();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load vouchers: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/member/vouchers/transfer-history/{_memberId}");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _history = await response.Content.ReadFromJsonAsync<List<TransferHistory>>() ?? new();
+            }
+        }
+        catch
+        {
+            // Non-fatal: history is optional context
+            _history = new();
+        }
+    }
+
+    private void ToggleSelection(Guid voucherId, bool selected)
+    {
+        if (selected)
+            _selectedIds.Add(voucherId);
+        else
+            _selectedIds.Remove(voucherId);
+    }
+
+    private void OpenTransferDialog()
+    {
+        if (_selectedIds.Count == 0)
+        {
+            Snackbar.Add("Select at least one Pending voucher to transfer.", Severity.Warning);
+            return;
+        }
+        _phoneList = string.Empty;
+        _showTransfer = true;
+    }
+
+    private async Task ExecuteTransfer()
+    {
+        var phones = (_phoneList ?? string.Empty)
+            .Split(new[] { '\n', '\r', ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToList();
+
+        if (phones.Count != _selectedIds.Count)
+        {
+            Snackbar.Add($"Phone count ({phones.Count}) must equal selected voucher count ({_selectedIds.Count}).", Severity.Warning);
+            return;
+        }
+
+        _transferring = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var body = new
+            {
+                FromMemberId = _memberId,
+                VoucherIds = _selectedIds.ToList(),
+                RecipientPhones = phones
+            };
+            var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/member/vouchers/transfer")
+            {
+                Content = JsonContent.Create(body)
+            };
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TransferResultDto>();
+                Snackbar.Add($"Transferred {result?.TransferredCount}, skipped {result?.SkippedCount}.", Severity.Success);
+                _showTransfer = false;
+                await LoadVouchers();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Transfer failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _transferring = false;
+        }
+    }
+
+    private Color StatusColor(string status) => status switch
+    {
+        "Pending" => Color.Info,
+        "InUse" => Color.Warning,
+        "Complete" => Color.Success,
+        _ => Color.Default
+    };
+
+    public class MemberVoucher
+    {
+        public Guid Id { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string UsageStatus { get; set; } = "";
+        public DateTime? UsedDate { get; set; }
+        public decimal FaceValue { get; set; }
+        public string ValueType { get; set; } = "";
+        public DateTime? ExpiryDate { get; set; }
+        public string? ImageUrl { get; set; }
+        public string VoucherCode { get; set; } = "";
+    }
+
+    public class TransferHistory
+    {
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string RecipientPhone { get; set; } = "";
+        public DateTime TransferredAt { get; set; }
+    }
+
+    public class TransferResultDto
+    {
+        public int TransferredCount { get; set; }
+        public int SkippedCount { get; set; }
+    }
+}

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NonCash - Design Directions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0-[diff_block_end]05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .anim-spin-slow {
+            animation: spin 30s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+    
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">NonCash - Consumer App Design Directions</h1>
+        <p class="text-center mb-12 text-gray-600">Please review the 3 visual directions for the core "Voucher Redemption" screen.</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+            
+            <!-- Direction 1: Minimal Bank -->
+            <div class="relative mx-auto border-[8px] border-gray-800 rounded-[3rem] h-[700px] w-[350px] overflow-hidden bg-white shadow-2xl">
+                <!-- Top Bar -->
+                <div class="p-6 pb-2 text-[#0A2540]">
+                    <div class="flex justify-between items-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        <span class="font-semibold text-lg">Highlands Coffee</span>
+                        <div class="w-6"></div>
+                    </div>
+                </div>
+                <!-- Content -->
+                <div class="px-6 flex flex-col items-center">
+                    <h2 class="text-2xl font-bold text-[#0A2540] mb-2">Giảm 50% Toàn menu</h2>
+                    <p class="text-gray-500 mb-8">HSD: 30/04/2026</p>
+                    
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-100 mb-6 relative">
+                        <!-- Simulated QR Progress ring -->
+                        <div class="absolute -inset-2 border-4 border-gray-100 rounded-2xl">
+                            <div class="absolute -inset-1 border-4 border-[#20D489] rounded-2xl" style="clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 20% 0%);"></div>
+                        </div>
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=NonCashSecure01" alt="QR" class="w-48 h-48 relative z-10" />
+                    </div>
+                    
+                    <div class="text-center w-full">
+                        <p class="text-[32px] font-bold text-gray-800 tracking-[0.2em] mb-2">948 201 553</p>
+                        <p class="text-xs text-red-500 font-semibold bg-red-50 py-1 rounded">Mã thay đổi liên tục. Cấm chụp màn hình.</p>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 w-full p-6 text-center text-sm text-gray-400">
+                    Direction 1: Minimal Bank
+                </div>
+            </div>
+
+            <!-- Direction 2: Cyber/Dark Mode -->
+            <div class="relative mx-auto border-[8px] border-gray-800 rounded-[3rem] h-[700px] w-[350px] overflow-hidden bg-[#0A2540] shadow-2xl">
+                <!-- Top Bar -->
+                <div class="p-6 pb-2 text-white">
+                    <div class="flex justify-between items-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        <span class="font-semibold text-lg">Highlands Coffee</span>
+                        <div class="w-6"></div>
+                    </div>
+                </div>
+                <!-- Content -->
+                <div class="px-6 flex flex-col items-center">
+                    <h2 class="text-2xl font-bold text-white mb-2">Giảm 50% Toàn menu</h2>
+                    <p class="text-[#20D489] mb-8">HSD: 30/04/2026</p>
+                    
+                    <div class="bg-white p-4 rounded-xl mb-6 relative shadow-[0_0_30px_rgba(32,212,137,0.3)]">
+                        <!-- Simulated QR Progress ring -->
+                        <div class="absolute -inset-3 border-2 border-slate-700 rounded-2xl">
+                            <div class="absolute -inset-[2px] border-2 border-[#20D489] rounded-2xl shadow-[0_0_10px_#20D489]" style="clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 20% 0%);"></div>
+                        </div>
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=NonCashSecure01" alt="QR" class="w-48 h-48 relative z-10" />
+                    </div>
+                    
+                    <div class="text-center w-full">
+                        <p class="text-[32px] font-mono font-bold text-white tracking-widest mb-2">948 201 553</p>
+                        <p class="text-xs text-amber-400 font-semibold uppercase tracking-wider">Dynamic Code Active</p>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 w-full p-6 text-center text-sm text-gray-500">
+                    Direction 2: Neon Cyber
+                </div>
+            </div>
+
+            <!-- Direction 3: Glassmorphism -->
+            <div class="relative mx-auto border-[8px] border-gray-800 rounded-[3rem] h-[700px] w-[350px] overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-emerald-400 shadow-2xl">
+                <!-- Top Bar -->
+                <div class="p-6 pb-2 text-white">
+                    <div class="flex justify-between items-center mb-6">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        <span class="font-semibold text-lg drop-shadow">Highlands Coffee</span>
+                        <div class="w-6"></div>
+                    </div>
+                </div>
+                <!-- Content -->
+                <div class="px-6 flex flex-col items-center mt-4">
+                    
+                    <div class="glass-panel w-full rounded-3xl p-6 flex flex-col items-center shadow-xl">
+                        <h2 class="text-xl font-bold text-white mb-1 text-center">Giảm 50% Toàn menu</h2>
+                        <p class="text-white/80 mb-6 text-sm">HSD: 30/04/2026</p>
+
+                        <div class="bg-white/90 p-4 rounded-xl mb-6 relative">
+                            <!-- Circular SVG timer -->
+                            <svg class="absolute -inset-4 w-[232px] h-[232px] anim-spin-slow rotate-[-90deg]">
+                                <circle cx="116" cy="116" r="110" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4"></circle>
+                                <circle cx="116" cy="116" r="110" fill="none" stroke="white" stroke-width="4" stroke-dasharray="690" stroke-dashoffset="150" class="drop-shadow-lg" stroke-linecap="round"></circle>
+                            </svg>
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=NonCashSecure01" alt="QR" class="w-44 h-44 relative z-10 opacity-90" />
+                        </div>
+                        
+                        <p class="text-[28px] font-bold text-white tracking-[0.1em]">948 201 553</p>
+                    </div>
+
+                </div>
+                <div class="absolute bottom-0 w-full p-6 text-center text-sm text-white/50">
+                    Direction 3: Glassmorphism
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

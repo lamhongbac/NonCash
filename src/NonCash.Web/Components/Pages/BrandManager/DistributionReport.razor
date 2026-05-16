@@ -1,0 +1,318 @@
+@page "/brandmanager/reports/distribution"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Distribution Report</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Distribution Report</MudText>
+    <MudButton Color="Color.Secondary" Variant="Variant.Filled" OnClick="ExportCsv" Disabled="@_loading">
+        <MudIcon Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Class="mr-1" /> Export CSV
+    </MudButton>
+</MudStack>
+
+<MudPaper Class="pa-3 mb-4" Elevation="1">
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+        <MudDatePicker Label="From" @bind-Date="_from" Clearable="true" />
+        <MudDatePicker Label="To" @bind-Date="_to" Clearable="true" />
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="LoadSummary">Apply</MudButton>
+        <MudButton Color="Color.Default" Variant="Variant.Outlined" OnClick="ClearDates">Reset</MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+}
+else if (_summary == null)
+{
+    <MudAlert Severity="Severity.Info">No data loaded.</MudAlert>
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Total Distributed</MudText>
+                    <MudText Typo="Typo.h4">@_summary.TotalDistributed</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Sale</MudText>
+                    <MudText Typo="Typo.h4">@_summary.TotalByMethod.Sale</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Promotion</MudText>
+                    <MudText Typo="Typo.h4">@_summary.TotalByMethod.Promotion</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Transfer</MudText>
+                    <MudText Typo="Typo.h4">@_summary.TotalByMethod.Transfer</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (!_summary.Plans.Any())
+    {
+        <MudAlert Severity="Severity.Info">No plans match the selected date range.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_summary.Plans" Dense="true" Hover="true" Bordered="true" Elevation="1">
+            <HeaderContent>
+                <MudTh>Plan Date</MudTh>
+                <MudTh>Voucher Type</MudTh>
+                <MudTh>Face Value</MudTh>
+                <MudTh>Target</MudTh>
+                <MudTh>Actual</MudTh>
+                <MudTh>%</MudTh>
+                <MudTh>Sale</MudTh>
+                <MudTh>Promotion</MudTh>
+                <MudTh>Transfer</MudTh>
+                <MudTh>Expiry</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.PlanDate.ToLocalTime().ToString("dd/MM/yyyy")</MudTd>
+                <MudTd>@context.VoucherType</MudTd>
+                <MudTd>@context.FaceValue.ToString("N0")</MudTd>
+                <MudTd>@context.TargetDistributed</MudTd>
+                <MudTd>@context.ActualDistributed</MudTd>
+                <MudTd>@context.Percentage.ToString("F1")%</MudTd>
+                <MudTd>@context.ByMethod.Sale</MudTd>
+                <MudTd>@context.ByMethod.Promotion</MudTd>
+                <MudTd>@context.ByMethod.Transfer</MudTd>
+                <MudTd>@context.ExpiryDate.ToLocalTime().ToString("dd/MM/yyyy")</MudTd>
+                <MudTd>
+                    @if (context.IsAtRisk)
+                    {
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small">At Risk</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">On Track</MudChip>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => OpenDetails(context))">Details</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+<MudDialog @bind-Visible="_detailsOpen" Options="_dlgOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Plan Distribution Details</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_detailsLoading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (!_details.Any())
+        {
+            <MudAlert Severity="Severity.Info">No distribution records for this plan.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_details" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Serial No</MudTh>
+                    <MudTh>Method</MudTh>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Recipient Phone</MudTh>
+                    <MudTh>Recipient Name</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.SerialNo</MudTd>
+                    <MudTd>@context.Method</MudTd>
+                    <MudTd>@context.DistributionDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                    <MudTd>@context.RecipientPhone</MudTd>
+                    <MudTd>@context.RecipientName</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _detailsOpen = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private DistributionSummaryDto? _summary;
+    private List<DistributionDetailDto> _details = new();
+    private bool _loading;
+    private bool _detailsLoading;
+    private bool _detailsOpen;
+    private DateTime? _from;
+    private DateTime? _to;
+    private DialogOptions _dlgOptions = new() { MaxWidth = MaxWidth.Large, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSummary();
+    }
+
+    private async Task LoadSummary()
+    {
+        _loading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var url = "api/v1/reports/distribution" + BuildQuery();
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _summary = await response.Content.ReadFromJsonAsync<DistributionSummaryDto>();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to load report: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenDetails(PlanDistributionRowDto plan)
+    {
+        _detailsOpen = true;
+        _detailsLoading = true;
+        _details = new();
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var url = $"api/v1/reports/distribution/{plan.PlanId}/details" + BuildQuery();
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _details = await response.Content.ReadFromJsonAsync<List<DistributionDetailDto>>() ?? new();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to load details: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _detailsLoading = false;
+        }
+    }
+
+    private async Task ExportCsv()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var url = "api/v1/reports/distribution/export" + BuildQuery();
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Failed to export: {response.StatusCode}", Severity.Error);
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"distribution-report-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+            await JS.InvokeVoidAsync("downloadFromBase64", fileName, "text/csv", base64);
+            Snackbar.Add("Export ready", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ClearDates()
+    {
+        _from = null;
+        _to = null;
+        await LoadSummary();
+    }
+
+    private string BuildQuery()
+    {
+        var parts = new List<string>();
+        if (_from.HasValue) parts.Add($"from={_from.Value:yyyy-MM-dd}");
+        if (_to.HasValue) parts.Add($"to={_to.Value:yyyy-MM-dd}");
+        return parts.Count == 0 ? string.Empty : "?" + string.Join("&", parts);
+    }
+
+    public class DistributionSummaryDto
+    {
+        public int TotalDistributed { get; set; }
+        public MethodBreakdownDto TotalByMethod { get; set; } = new();
+        public List<PlanDistributionRowDto> Plans { get; set; } = new();
+    }
+
+    public class MethodBreakdownDto
+    {
+        public int Sale { get; set; }
+        public int Promotion { get; set; }
+        public int Transfer { get; set; }
+    }
+
+    public class PlanDistributionRowDto
+    {
+        public Guid PlanId { get; set; }
+        public DateTime PlanDate { get; set; }
+        public string VoucherType { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public int TargetDistributed { get; set; }
+        public int ActualDistributed { get; set; }
+        public double Percentage { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public bool IsAtRisk { get; set; }
+        public MethodBreakdownDto ByMethod { get; set; } = new();
+    }
+
+    public class DistributionDetailDto
+    {
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string Method { get; set; } = "";
+        public DateTime DistributionDate { get; set; }
+        public string? RecipientPhone { get; set; }
+        public string? RecipientName { get; set; }
+    }
+}

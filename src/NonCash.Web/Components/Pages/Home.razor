@@ -1,0 +1,57 @@
+﻿@page "/"
+
+<PageTitle>NonCash Dashboard</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Welcome to NonCash</MudText>
+
+<MudText Typo="Typo.body1" Class="mb-6">
+    NonCash is a SaaS voucher platform enabling brands to create, distribute, and redeem digital vouchers securely.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudIcon Icon="@Icons.Material.Filled.AppRegistration" Color="Color.Primary" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Class="mt-2">Business Registration</MudText>
+                <MudText Typo="Typo.body2">Register your company to start creating vouchers.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/register" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true">Get Started</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudIcon Icon="@Icons.Material.Filled.Login" Color="Color.Secondary" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Class="mt-2">Account Login</MudText>
+                <MudText Typo="Typo.body2">Sign in to manage your brand, outlets, and customers.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true">Sign In</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Info" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Class="mt-2">Admin Portal</MudText>
+                <MudText Typo="Typo.body2">Manage brands, users, and platform settings.</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/admin/brands" Variant="Variant.Filled" Color="Color.Info" FullWidth="true">Admin Panel</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-6">
+    <MudText Typo="Typo.h5" GutterBottom="true">Platform Status</MudText>
+    <MudList T="string">
+        <MudListItem Text="Core services: Online" Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success" />
+        <MudListItem Text="Database: PostgreSQL Connected" Icon="@Icons.Material.Filled.Storage" IconColor="Color.Info" />
+        <MudListItem Text="Authentication: JWT Enabled" Icon="@Icons.Material.Filled.Security" IconColor="Color.Success" />
+    </MudList>
+</MudPaper>

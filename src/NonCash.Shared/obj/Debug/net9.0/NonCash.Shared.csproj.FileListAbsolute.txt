@@ -1,0 +1,12 @@
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.deps.json
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.pdb
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.GeneratedMSBuildEditorConfig.editorconfig
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.AssemblyInfoInputs.cache
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.AssemblyInfo.cs
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.csproj.CoreCompileInputs.cache
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.sourcelink.json
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\refint\NonCash.Shared.dll
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.pdb
+D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\ref\NonCash.Shared.dll

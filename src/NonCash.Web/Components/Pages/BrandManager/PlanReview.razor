@@ -1,0 +1,384 @@
+@page "/brandmanager/plans/{PlanId:guid}/review"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Plan Review</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Plan Review</MudText>
+    <MudButton Color="Color.Default" Variant="Variant.Text" Href="/brandmanager/plans">
+        <MudIcon Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Class="mr-1" /> Back to Plans
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+}
+else if (_plan == null)
+{
+    <MudAlert Severity="Severity.Error">Plan not found.</MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">@_plan.VoucherType Voucher</MudText>
+            <MudChip T="string" Color="@(_plan.ApprovalStatus == "Pending" ? Color.Warning : _plan.ApprovalStatus == "Approved" ? Color.Success : Color.Error)">
+                @_plan.ApprovalStatus
+            </MudChip>
+        </MudStack>
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><b>Face Value:</b> @_plan.FaceValue.ToString("N0") VND</MudText>
+                <MudText Typo="Typo.body2"><b>Net Value:</b> @_plan.NetValue.ToString("N0") VND</MudText>
+                <MudText Typo="Typo.body2"><b>Target Quantity:</b> @_plan.TargetQuantity</MudText>
+                <MudText Typo="Typo.body2"><b>Budget:</b> @_plan.Budget.ToString("N0") VND</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.body2"><b>Plan Date:</b> @_plan.PlanDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                <MudText Typo="Typo.body2"><b>Publish Date:</b> @_plan.PublishDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                <MudText Typo="Typo.body2"><b>Expiry Date:</b> @_plan.ExpiryDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                <MudText Typo="Typo.body2"><b>Outlets:</b> @_plan.OutletIds.Count</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_plan.ApprovalStatus == "Pending")
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudText Typo="Typo.h6" GutterBottom="true">Approval Decision</MudText>
+
+            <MudDatePicker @bind-Date="_publishDateOverride" Label="Adjust Publish Date (optional)" Class="mb-3" />
+
+            <MudTextField @bind-Value="_reviewNotes" Label="Review Notes (required when rejecting, min 10 chars)" Lines="3" Variant="Variant.Outlined" Class="mb-3" />
+
+            <MudStack Row="true" Spacing="2">
+                <MudButton Color="Color.Success" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.CheckCircle" OnClick="ApprovePlan" Disabled="@_processing">
+                    Approve
+                </MudButton>
+                <MudButton Color="Color.Error" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Cancel" OnClick="RejectPlan" Disabled="@_processing">
+                    Reject
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (_plan.ApprovalStatus == "Rejected")
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudText Typo="Typo.h6" GutterBottom="true">Revise & Resubmit</MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">
+                This plan was rejected. You can clone it as a new version (v@(_plan.VersionNumber + 1)) to adjust and resubmit for approval.
+                The original rejection record will be preserved as audit history.
+            </MudText>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="ClonePlan" Disabled="@_processing">
+                Create New Version
+            </MudButton>
+        </MudPaper>
+    }
+
+    @if (_versions.Count > 1)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudText Typo="Typo.h6" GutterBottom="true">Version History (@_versions.Count versions)</MudText>
+            <MudTable Items="@_versions" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Version</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Plan Date</MudTh>
+                    <MudTh>Budget</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <strong>v@(context.VersionNumber)</strong>
+                        @if (context.IsCurrent)
+                        {
+                            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="ml-2">Current</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@(context.ApprovalStatus == "Pending" ? Color.Warning : context.ApprovalStatus == "Approved" ? Color.Success : Color.Error)" Size="Size.Small">
+                            @context.ApprovalStatus
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>@context.PlanDate.ToLocalTime().ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd>@context.Budget.ToString("N0") VND</MudTd>
+                    <MudTd>
+                        @if (!context.IsCurrent)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@($"/brandmanager/plans/{context.Id}/review")">Open</MudButton>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">Review History</MudText>
+        @if (!_reviews.Any())
+        {
+            <MudAlert Severity="Severity.Info">No review actions recorded yet.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_reviews" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Decision</MudTh>
+                    <MudTh>Reviewer</MudTh>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Notes</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <MudChip T="string" Color="@(context.Decision == "Approved" ? Color.Success : Color.Error)" Size="Size.Small">
+                            @context.Decision
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>@context.ApproverName</MudTd>
+                    <MudTd>@context.ReviewDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                    <MudTd>@(string.IsNullOrEmpty(context.ReviewNotes) ? "-" : context.ReviewNotes)</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid PlanId { get; set; }
+
+    private PlanDetail? _plan;
+    private List<ReviewItem> _reviews = new();
+    private List<VersionItem> _versions = new();
+    private bool _loading = true;
+    private bool _processing = false;
+    private string _reviewNotes = "";
+    private DateTime? _publishDateOverride;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        _loading = true;
+        try
+        {
+            await Task.WhenAll(LoadPlan(), LoadReviews(), LoadVersions());
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadPlan()
+    {
+        var token = await AuthState.GetTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}");
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            _plan = await response.Content.ReadFromJsonAsync<PlanDetail>();
+        }
+    }
+
+    private async Task LoadReviews()
+    {
+        var token = await AuthState.GetTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}/reviews");
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<List<ReviewItem>>();
+            _reviews = result ?? new();
+        }
+    }
+
+    private async Task LoadVersions()
+    {
+        var token = await AuthState.GetTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}/versions");
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<List<VersionItem>>();
+            _versions = result ?? new();
+        }
+    }
+
+    private async Task ClonePlan()
+    {
+        _processing = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/clone");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CloneResponse>();
+                Snackbar.Add($"New version v{result?.VersionNumber} created. You can now edit and resubmit.", Severity.Success);
+                if (result != null)
+                    Navigation.NavigateTo($"/brandmanager/plans/{result.NewPlanId}/edit");
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Clone failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private async Task ApprovePlan()
+    {
+        _processing = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/approve")
+            {
+                Content = JsonContent.Create(new { PublishDate = _publishDateOverride })
+            };
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Plan approved successfully!", Severity.Success);
+                await LoadAll();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Approval failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private async Task RejectPlan()
+    {
+        if (string.IsNullOrWhiteSpace(_reviewNotes) || _reviewNotes.Trim().Length < 10)
+        {
+            Snackbar.Add("Review notes (min 10 characters) are required when rejecting.", Severity.Warning);
+            return;
+        }
+
+        _processing = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/reject")
+            {
+                Content = JsonContent.Create(new { ReviewNotes = _reviewNotes.Trim() })
+            };
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Plan rejected.", Severity.Success);
+                _reviewNotes = "";
+                await LoadAll();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Rejection failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    public class PlanDetail
+    {
+        public Guid Id { get; set; }
+        public DateTime PlanDate { get; set; }
+        public string VoucherType { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public decimal NetValue { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public DateTime PublishDate { get; set; }
+        public int TargetQuantity { get; set; }
+        public decimal Budget { get; set; }
+        public string ApprovalStatus { get; set; } = "";
+        public List<Guid> OutletIds { get; set; } = new();
+        public int VersionNumber { get; set; } = 1;
+        public Guid? PreviousVersionId { get; set; }
+    }
+
+    public class VersionItem
+    {
+        public Guid Id { get; set; }
+        public int VersionNumber { get; set; }
+        public Guid? PreviousVersionId { get; set; }
+        public string ApprovalStatus { get; set; } = "";
+        public DateTime PlanDate { get; set; }
+        public DateTime PublishDate { get; set; }
+        public decimal FaceValue { get; set; }
+        public int TargetQuantity { get; set; }
+        public decimal Budget { get; set; }
+        public bool IsCurrent { get; set; }
+    }
+
+    public class CloneResponse
+    {
+        public Guid NewPlanId { get; set; }
+        public int VersionNumber { get; set; }
+    }
+
+    public class ReviewItem
+    {
+        public Guid Id { get; set; }
+        public Guid PlanId { get; set; }
+        public Guid ApproverId { get; set; }
+        public string ApproverName { get; set; } = "";
+        public DateTime ReviewDate { get; set; }
+        public string? ReviewNotes { get; set; }
+        public string Decision { get; set; } = "";
+        public DateTime? PublishDate { get; set; }
+    }
+}

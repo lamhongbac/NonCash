@@ -1,0 +1,184 @@
+@page "/admin/registration-requests"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Registration Requests</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Business Registration Requests</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Review and approve or reject business registration applications.</MudText>
+
+<MudStack Row="true" Spacing="2" Class="mb-4">
+    <MudButton Variant="@( _filter == "pending" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending"))">Pending Only</MudButton>
+    <MudButton Variant="@( _filter == "all" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("all"))">All Requests</MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+}
+else if (!_requests.Any())
+{
+    <MudAlert Severity="Severity.Info">No registration requests found.</MudAlert>
+}
+else
+{
+    foreach (var req in _requests)
+    {
+        <MudCard Class="mb-4" Elevation="2">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.h6">@req.CompanyName</MudText>
+                        <MudText Typo="Typo.body2">Tax Code: @req.TaxCode | Email: @req.ContactEmail</MudText>
+                        <MudText Typo="Typo.body2">Representative: @req.RepresentativeName (@req.Username)</MudText>
+                        <MudText Typo="Typo.body2">Submitted: @req.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
+                    </div>
+                    <div>
+                        @if (req.Status == "Submitted")
+                        {
+                            <MudAlert Severity="Severity.Warning" Class="mb-2">Pending Review</MudAlert>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => HandleReview(req, true))">
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
+                                </MudButton>
+                                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => HandleReview(req, false))">
+                                    <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Class="mr-1" /> Reject
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else if (req.Status == "Approved")
+                        {
+                            <MudAlert Severity="Severity.Success">Approved by @req.ReviewedByName</MudAlert>
+                        }
+                        else if (req.Status == "Rejected")
+                        {
+                            <MudAlert Severity="Severity.Error">Rejected by @req.ReviewedByName</MudAlert>
+                        }
+                        @if (!string.IsNullOrEmpty(req.ReviewNotes))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1"><em>Notes: "@req.ReviewNotes"</em></MudText>
+                        }
+                    </div>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+}
+
+@code {
+    private List<RegistrationRequestItem> _requests = new();
+    private bool _loading = true;
+    private string _filter = "pending";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+
+    private async Task FilterChanged(string value)
+    {
+        _filter = value;
+        await LoadRequests();
+    }
+
+    private async Task LoadRequests()
+    {
+        _loading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                _filter == "pending"
+                    ? "api/v1/admin/registration-requests/pending"
+                    : "api/v1/admin/registration-requests");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<RegistrationRequestItem>>();
+                _requests = result ?? new();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to load requests: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleReview(RegistrationRequestItem item, bool approve)
+    {
+        var notes = "";
+        var confirmed = await ShowReviewDialog(item, approve, notes);
+        // Simple confirmation - review notes handled inline
+    }
+
+    private async Task<bool> ShowReviewDialog(RegistrationRequestItem item, bool approve, string notes)
+    {
+        var action = approve ? "approve" : "reject";
+        var token = await AuthState.GetTokenAsync();
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post,
+                $"api/v1/admin/registration-requests/{item.RequestId}/{action}");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            request.Content = JsonContent.Create(new { ReviewNotes = notes });
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(
+                    approve ? $"Approved: {item.CompanyName}" : $"Rejected: {item.CompanyName}",
+                    approve ? Severity.Success : Severity.Warning);
+                await LoadRequests();
+                return true;
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                Snackbar.Add(error?.error ?? "Action failed.", Severity.Error);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            return false;
+        }
+    }
+
+    public class RegistrationRequestItem
+    {
+        public Guid RequestId { get; set; }
+        public string CompanyName { get; set; } = "";
+        public string TaxCode { get; set; } = "";
+        public string ContactEmail { get; set; } = "";
+        public string RepresentativeName { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string Status { get; set; } = "";
+        public DateTime SubmittedAt { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+        public string? ReviewNotes { get; set; }
+        public string? ReviewedByName { get; set; }
+    }
+
+    private class ErrorResponse
+    {
+        public string? error { get; set; }
+    }
+}

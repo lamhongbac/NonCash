@@ -1,0 +1,131 @@
+@page "/register"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Business Registration</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Register Your Business</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-6">Join NonCash to create and manage digital vouchers</MudText>
+
+        <MudForm @ref="_form" Model="_model">
+            <MudTextField @bind-Value="_model.CompanyName" Label="Company Name" Required="true" RequiredError="Company name is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.TaxCode" Label="Tax Code" Required="true" RequiredError="Tax code is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.ContactEmail" Label="Contact Email" Required="true" RequiredError="Email is required" Variant="Variant.Outlined" InputType="InputType.Email" Class="mb-3" />
+            <MudTextField @bind-Value="_model.PhoneNumber" Label="Phone Number" Required="true" RequiredError="Phone number is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Address" Label="Business Address" Required="true" RequiredError="Address is required" Variant="Variant.Outlined" Lines="2" Class="mb-3" />
+            <MudTextField @bind-Value="_model.RepresentativeName" Label="Representative Full Name" Required="true" RequiredError="Representative name is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudDivider Class="my-4" />
+            <MudTextField @bind-Value="_model.Username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Password" Label="Password" Required="true" RequiredError="Password must be at least 8 characters" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
+        </MudForm>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="HandleSubmit" Disabled="_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Submit Registration
+        </MudButton>
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">
+                <strong>Registration failed:</strong> @_errorMessage
+            </MudAlert>
+        }
+
+        @if (_success)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-4">
+                Registration submitted successfully! Your request ID is <strong>@_requestId</strong>. 
+                You can <MudLink Href="@($"/registration-status/{_requestId}")">check your status here</MudLink>.
+            </MudAlert>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private RegistrationModel _model = new();
+    private bool _loading = false;
+    private bool _success = false;
+    private string? _errorMessage = null;
+    private string _requestId = "";
+
+    private async Task HandleSubmit()
+    {
+        _errorMessage = null;
+        _success = false;
+
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/v1/public/register", _model);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<RegistrationResponse>();
+                if (result is not null)
+                {
+                    _requestId = result.requestId.ToString();
+                    _success = true;
+                    _model = new RegistrationModel();
+                    Snackbar.Add("Registration submitted!", Severity.Success);
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.message ?? error?.error ?? "Registration failed. Please check your input and try again.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+            else
+            {
+                _errorMessage = "An unexpected error occurred. Please try again later.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Network error: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public class RegistrationModel
+    {
+        public string CompanyName { get; set; } = "";
+        public string TaxCode { get; set; } = "";
+        public string ContactEmail { get; set; } = "";
+        public string PhoneNumber { get; set; } = "";
+        public string Address { get; set; } = "";
+        public string RepresentativeName { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+
+    private class RegistrationResponse
+    {
+        public Guid requestId { get; set; }
+        public Guid brandId { get; set; }
+        public string status { get; set; } = "";
+    }
+
+    private class ErrorResponse
+    {
+        public string? error { get; set; }
+        public string? message { get; set; }
+    }
+}

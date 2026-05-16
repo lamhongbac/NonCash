@@ -26,8 +26,8 @@ Plan Header:
 +BrandID: Voucher phát hành bởi bên nào
 +Loại voucher:complimentary voucher (cho / tặng) và Gift voucher(bán)
 Hình thức hiển thị:
-+Image 
-+Icon
++ImageURL: link ảnh lớn dùng để hiển thị chi tiết 1 voucher
++IconURL: link ảnh nhỏ / Logo dùng để hiển thị dạng icon khi cần trên view dạng lưới
 +TOC: Term and condition/ điều khoản sử dụng
 +Hình thức giá trị: Value vs Percentage
 +Mệnh giá: giá trị sử dụng của VC
@@ -35,7 +35,7 @@ Hình thức hiển thị:
 Có nghĩa khách hàng bỏ ra 90K có đc 100K su dung, va cty co 10K margin
 +Ngày hết hạn: là ngày không được sử dụng, ngày này nếu lớn hơn ngày trong định nghĩa phạm vi thời gian sử dụng ở dưới, sẽ bị phạm vi sử dụng phủ quyết, ngày hết hạn có thể là tĩnh hoặc theo quy tắc logic
 +Publish Date: là ngày chính thức được phép phân phát đi ( trước ngày trong phạm vi sử dụng)
-+Phạm vi bán hàng: là danh sách các thương hiệu & điểm bán chấp nhận sử dụng
++Phạm vi bán hàng: là danh sách các Điểm bán (Outlets / Stores) chấp nhận sử dụng voucher (trực thuộc Brand).
 +Phạm vi thời gian:Từ-> Đến: nếu để trống là không định nghĩa hay không có giới hạn, nếu để rõ từ A->B thì chỉ sử dụng trong phạm vi ngày chỉ ra
 +So Luong: so luong vc du kien xuat ban
 +Ngân sách: tổng chi phí dự kiến cho dự án

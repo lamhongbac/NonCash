@@ -1,0 +1,116 @@
+@page "/registration-status/{RequestId}"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Registration Status</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Registration Status</MudText>
+
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="d-flex mx-auto mt-6" />
+        }
+        else if (_notFound)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">
+                Registration request not found. Please check your request ID.
+            </MudAlert>
+        }
+        else if (_status is not null)
+        {
+            <MudStack Spacing="2" Class="mt-4">
+                <MudText><strong>Status:</strong> <MudChip T="string" Color="@GetStatusColor(_status.Status)" Size="Size.Small">@_status.Status</MudChip></MudText>
+                <MudText><strong>Submitted:</strong> @_status.SubmittedAt.ToLocalTime().ToString("g")</MudText>
+                @if (_status.ReviewedAt.HasValue)
+                {
+                    <MudText><strong>Reviewed:</strong> @_status.ReviewedAt.Value.ToLocalTime().ToString("g")</MudText>
+                }
+                @if (!string.IsNullOrEmpty(_status.ReviewNotes))
+                {
+                    <MudText><strong>Notes:</strong> @_status.ReviewNotes</MudText>
+                }
+            </MudStack>
+
+            @if (_status.Status == "Submitted")
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">Your application has been submitted and is awaiting review.</MudAlert>
+            }
+            else if (_status.Status == "UnderReview")
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">Your application is currently under review.</MudAlert>
+            }
+            else if (_status.Status == "Approved")
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-4">Congratulations! Your application has been approved. You can now log in.</MudAlert>
+            }
+            else if (_status.Status == "Rejected")
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4">
+                    Unfortunately, your application was rejected.
+                    @if (!string.IsNullOrEmpty(_status.ReviewNotes))
+                    {
+                        <span>Reason: @_status.ReviewNotes</span>
+                    }
+                </MudAlert>
+            }
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter] public string RequestId { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _notFound = false;
+    private StatusResponse? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Guid.TryParse(RequestId, out var requestId))
+        {
+            _notFound = true;
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetAsync($"api/v1/public/register/{requestId}/status");
+            if (response.IsSuccessStatusCode)
+            {
+                _status = await response.Content.ReadFromJsonAsync<StatusResponse>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _notFound = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading status: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Submitted" => Color.Info,
+        "UnderReview" => Color.Warning,
+        "Approved" => Color.Success,
+        "Rejected" => Color.Error,
+        _ => Color.Default
+    };
+
+    private class StatusResponse
+    {
+        public string Status { get; set; } = "";
+        public DateTime SubmittedAt { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+        public string? ReviewNotes { get; set; }
+    }
+}
