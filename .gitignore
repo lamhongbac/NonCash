@@ -4,3 +4,9 @@
 .gemini/
 .qwen/
 .vscode/
+.vs/
+bin/
+obj/
+TestResults/
+*.user
+*.suo
