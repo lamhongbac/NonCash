@@ -1,0 +1,309 @@
+@page "/member/transfers"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>My Transfers</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">My Transfers</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mt-4">
+    <MudTabPanel Text="Inbox" Icon="@Icons.Material.Filled.Inbox">
+        @if (_loadingInbox)
+        {
+            <MudProgressLinear Indeterminate="true" Class="my-4" />
+        }
+        else if (!_inbox.Any())
+        {
+            <MudAlert Severity="Severity.Info">No pending inbound transfers.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_inbox" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>From</MudTh>
+                    <MudTh>Voucher</MudTh>
+                    <MudTh>Note</MudTh>
+                    <MudTh>Expires</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.SenderDisplayName</MudTd>
+                    <MudTd>@context.BrandName - @context.FaceValue.ToString("N0") @(context.ValueType == "Percentage" ? "%" : "VND")</MudTd>
+                    <MudTd>@(context.Note ?? "-")</MudTd>
+                    <MudTd>@context.ExpiresAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                    <MudTd><MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                    <MudTd>
+                        @if (context.Status == "PendingAcceptance")
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" OnClick="() => Accept(context.TransferId)" Class="mr-2">Accept</MudButton>
+                            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" OnClick="() => Reject(context.TransferId)">Reject</MudButton>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
+        <MudStack Row="true" Class="mb-4">
+            <MudSelect T="string" Label="Status" @bind-Value="_historyStatus" Clearable="true" AdornmentIcon="@Icons.Material.Filled.FilterList">
+                <MudSelectItem Value="@((string?)null)">All</MudSelectItem>
+                <MudSelectItem Value="@("PendingAcceptance")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("Accepted")">Accepted</MudSelectItem>
+                <MudSelectItem Value="@("Rejected")">Rejected</MudSelectItem>
+                <MudSelectItem Value="@("Expired")">Expired</MudSelectItem>
+                <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+            </MudSelect>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="LoadHistory" Disabled="_loadingHistory">Refresh</MudButton>
+        </MudStack>
+
+        @if (_loadingHistory)
+        {
+            <MudProgressLinear Indeterminate="true" Class="my-4" />
+        }
+        else if (!_history.Any())
+        {
+            <MudAlert Severity="Severity.Info">No transfer history.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_history" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Direction</MudTh>
+                    <MudTh>Counterparty</MudTh>
+                    <MudTh>Voucher</MudTh>
+                    <MudTh>Note</MudTh>
+                    <MudTh>Initiated</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@(context.IsOutgoing ? "Sent" : "Received")</MudTd>
+                    <MudTd>@(context.IsOutgoing ? context.CounterpartyDisplayName : context.CounterpartyDisplayName)</MudTd>
+                    <MudTd>@context.BrandName - @context.FaceValue.ToString("N0") @(context.ValueType == "Percentage" ? "%" : "VND")</MudTd>
+                    <MudTd>@(context.Note ?? "-")</MudTd>
+                    <MudTd>@context.InitiatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                    <MudTd><MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                    <MudTd>
+                        @if (context.IsOutgoing && context.Status == "PendingAcceptance")
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" OnClick="() => Cancel(context.TransferId)">Cancel</MudButton>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private bool _loadingInbox;
+    private bool _loadingHistory;
+    private List<TransferItem> _inbox = new();
+    private List<TransferItem> _history = new();
+    private string? _historyStatus;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInbox();
+        await LoadHistory();
+    }
+
+    private async Task LoadInbox()
+    {
+        _loadingInbox = true;
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, "api/v1/member/transfers/inbox");
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var items = await response.Content.ReadFromJsonAsync<List<TransferItem>>() ?? new();
+                _inbox = items;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load inbox: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingInbox = false;
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        _loadingHistory = true;
+        try
+        {
+            var statusQuery = string.IsNullOrWhiteSpace(_historyStatus) ? string.Empty : $"?status={Uri.EscapeDataString(_historyStatus)}";
+            var inboxTask = CreateAuthRequestAsync(HttpMethod.Get, $"api/v1/member/transfers/inbox{statusQuery}");
+            var outboxTask = CreateAuthRequestAsync(HttpMethod.Get, $"api/v1/member/transfers/outbox{statusQuery}");
+
+            var inboxRequest = await inboxTask;
+            var outboxRequest = await outboxTask;
+
+            var inboxResponse = await Http.SendAsync(inboxRequest);
+            var outboxResponse = await Http.SendAsync(outboxRequest);
+
+            var inboxItems = inboxResponse.IsSuccessStatusCode
+                ? await inboxResponse.Content.ReadFromJsonAsync<List<TransferItem>>() ?? new()
+                : new List<TransferItem>();
+
+            var outboxItems = outboxResponse.IsSuccessStatusCode
+                ? await outboxResponse.Content.ReadFromJsonAsync<List<TransferItem>>() ?? new()
+                : new List<TransferItem>();
+
+            if (!inboxResponse.IsSuccessStatusCode)
+            {
+                var error = await inboxResponse.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load history inbox: {error}", Severity.Warning);
+            }
+            if (!outboxResponse.IsSuccessStatusCode)
+            {
+                var error = await outboxResponse.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load history outbox: {error}", Severity.Warning);
+            }
+
+            foreach (var item in outboxItems)
+                item.IsOutgoing = true;
+
+            _history = outboxItems.Concat(inboxItems)
+                .OrderByDescending(x => x.InitiatedAt)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingHistory = false;
+        }
+    }
+
+    private async Task Accept(Guid transferId)
+    {
+        var result = await PostActionAsync($"api/v1/member/transfers/{transferId}/accept", null);
+        if (result)
+        {
+            Snackbar.Add("Transfer accepted.", Severity.Success);
+            await LoadInbox();
+            await LoadHistory();
+        }
+    }
+
+    private async Task Reject(Guid transferId)
+    {
+        var confirmed = await ConfirmAsync("Reject Transfer", "Are you sure you want to reject this voucher transfer?");
+        if (!confirmed) return;
+
+        var result = await PostActionAsync($"api/v1/member/transfers/{transferId}/reject", new { Reason = (string?)null });
+        if (result)
+        {
+            Snackbar.Add("Transfer rejected.", Severity.Success);
+            await LoadInbox();
+            await LoadHistory();
+        }
+    }
+
+    private async Task Cancel(Guid transferId)
+    {
+        var confirmed = await ConfirmAsync("Cancel Transfer", "Are you sure you want to cancel this pending transfer?");
+        if (!confirmed) return;
+
+        var result = await PostActionAsync($"api/v1/member/transfers/{transferId}/cancel", null);
+        if (result)
+        {
+            Snackbar.Add("Transfer cancelled.", Severity.Success);
+            await LoadInbox();
+            await LoadHistory();
+        }
+    }
+
+    private async Task<bool> PostActionAsync(string url, object? body)
+    {
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Post, url);
+            if (body != null)
+                request.Content = JsonContent.Create(body);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+                return true;
+
+            var error = await response.Content.ReadAsStringAsync();
+            Snackbar.Add($"Action failed: {error}", Severity.Error);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            return false;
+        }
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Message, message }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.ExtraSmall };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    private Color StatusColor(string status) => status switch
+    {
+        "PendingAcceptance" => Color.Warning,
+        "Accepted" => Color.Success,
+        "Rejected" => Color.Error,
+        "Cancelled" => Color.Default,
+        "Expired" => Color.Default,
+        _ => Color.Default
+    };
+
+    public class TransferItem
+    {
+        public Guid TransferId { get; set; }
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string BrandName { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public string? ValueType { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public Guid SenderId { get; set; }
+        public string SenderDisplayName { get; set; } = "";
+        public Guid RecipientId { get; set; }
+        public string RecipientDisplayName { get; set; } = "";
+        public string? Note { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime InitiatedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? RespondedAt { get; set; }
+        public bool IsOutgoing { get; set; }
+
+        public string CounterpartyDisplayName => IsOutgoing ? RecipientDisplayName : SenderDisplayName;
+    }
+}

@@ -1,49 +1,46 @@
 {
   "format": 1,
   "restore": {
-    "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API\\NonCash.API.csproj": {}
+    "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API\\NonCash.API.csproj": {}
   },
   "projects": {
-    "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API\\NonCash.API.csproj": {
+    "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API\\NonCash.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API\\NonCash.API.csproj",
+        "projectUniqueName": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API\\NonCash.API.csproj",
         "projectName": "NonCash.API",
-        "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API\\NonCash.API.csproj",
-        "packagesPath": "C:\\Users\\lamhong.bac\\.nuget\\packages\\",
-        "outputPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API\\obj\\",
+        "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API\\NonCash.API.csproj",
+        "packagesPath": "C:\\Users\\dev\\.nuget\\packages\\",
+        "outputPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
-          "C:\\Program Files (x86)\\Progress\\ToolboxNuGetPackages"
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "D:\\NuGet.Config",
-          "C:\\Users\\lamhong.bac\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\dev\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Telerik UI for WPF.config"
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net9.0": {
+            "framework": "net9.0",
             "targetAlias": "net9.0",
             "projectReferences": {
-              "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj": {
-                "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj"
+              "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj": {
+                "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj"
               },
-              "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj": {
-                "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj"
+              "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj": {
+                "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj"
               },
-              "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\NonCash.Shared.csproj": {
-                "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\NonCash.Shared.csproj"
+              "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj": {
+                "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj"
               }
             }
           }
@@ -58,10 +55,11 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.300"
       },
       "frameworks": {
         "net9.0": {
+          "framework": "net9.0",
           "targetAlias": "net9.0",
           "dependencies": {
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
@@ -94,6 +92,24 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.win-x64",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -102,42 +118,43 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj": {
+    "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj",
+        "projectUniqueName": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj",
         "projectName": "NonCash.Core",
-        "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj",
-        "packagesPath": "C:\\Users\\lamhong.bac\\.nuget\\packages\\",
-        "outputPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\obj\\",
+        "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj",
+        "packagesPath": "C:\\Users\\dev\\.nuget\\packages\\",
+        "outputPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
-          "C:\\Program Files (x86)\\Progress\\ToolboxNuGetPackages"
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "D:\\NuGet.Config",
-          "C:\\Users\\lamhong.bac\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\dev\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Telerik UI for WPF.config"
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net9.0": {
+            "framework": "net9.0",
             "targetAlias": "net9.0",
-            "projectReferences": {}
+            "projectReferences": {
+              "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj": {
+                "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj"
+              }
+            }
           }
         },
         "warningProperties": {
@@ -150,10 +167,11 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.300"
       },
       "frameworks": {
         "net9.0": {
+          "framework": "net9.0",
           "targetAlias": "net9.0",
           "dependencies": {
             "BCrypt.Net-Next": {
@@ -176,49 +194,60 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj": {
+    "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj",
+        "projectUniqueName": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj",
         "projectName": "NonCash.Infrastructure",
-        "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj",
-        "packagesPath": "C:\\Users\\lamhong.bac\\.nuget\\packages\\",
-        "outputPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure\\obj\\",
+        "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\NonCash.Infrastructure.csproj",
+        "packagesPath": "C:\\Users\\dev\\.nuget\\packages\\",
+        "outputPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
-          "C:\\Program Files (x86)\\Progress\\ToolboxNuGetPackages"
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "D:\\NuGet.Config",
-          "C:\\Users\\lamhong.bac\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\dev\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Telerik UI for WPF.config"
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net9.0": {
+            "framework": "net9.0",
             "targetAlias": "net9.0",
             "projectReferences": {
-              "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj": {
-                "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core\\NonCash.Core.csproj"
+              "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj": {
+                "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core\\NonCash.Core.csproj"
               }
             }
           }
@@ -233,10 +262,11 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.300"
       },
       "frameworks": {
         "net9.0": {
+          "framework": "net9.0",
           "targetAlias": "net9.0",
           "dependencies": {
             "CsvHelper": {
@@ -265,45 +295,56 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\NonCash.Shared.csproj": {
+    "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\NonCash.Shared.csproj",
+        "projectUniqueName": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj",
         "projectName": "NonCash.Shared",
-        "projectPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\NonCash.Shared.csproj",
-        "packagesPath": "C:\\Users\\lamhong.bac\\.nuget\\packages\\",
-        "outputPath": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared\\obj\\",
+        "projectPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj",
+        "packagesPath": "C:\\Users\\dev\\.nuget\\packages\\",
+        "outputPath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
-          "C:\\Program Files (x86)\\Progress\\ToolboxNuGetPackages"
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "D:\\NuGet.Config",
-          "C:\\Users\\lamhong.bac\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\dev\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Telerik UI for WPF.config"
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net9.0": {
+            "framework": "net9.0",
             "targetAlias": "net9.0",
             "projectReferences": {}
           }
@@ -318,10 +359,11 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.300"
       },
       "frameworks": {
         "net9.0": {
+          "framework": "net9.0",
           "targetAlias": "net9.0",
           "imports": [
             "net461",
@@ -334,12 +376,26 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[9.0.16, 9.0.16]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

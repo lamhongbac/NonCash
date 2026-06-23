@@ -18,6 +18,7 @@ public enum UserStatus
 public class UserAccount : BaseEntity
 {
     public Guid? BrandId { get; set; }
+    public Guid? CustomerId { get; set; }  // Link to customer profile (for members)
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
@@ -25,4 +26,5 @@ public class UserAccount : BaseEntity
     public UserStatus Status { get; set; } = UserStatus.Active;
 
     public Brand? Brand { get; set; }
+    public Customer? Customer { get; set; }
 }

@@ -357,6 +357,10 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -394,6 +398,8 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BrandId");
+
+                    b.HasIndex("CustomerId");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -487,6 +493,14 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("serial_no");
 
+                    b.Property<Guid?>("TransferLockId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_lock_id");
+
+                    b.Property<DateTime?>("TransferLockedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transfer_locked_at");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -521,6 +535,9 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("SerialNo")
                         .IsUnique()
                         .HasDatabaseName("IX_voucher_plan_details_serial_no");
+
+                    b.HasIndex("TransferLockId")
+                        .HasDatabaseName("IX_voucher_plan_details_transfer_lock_id");
 
                     b.ToTable("voucher_plan_details", "public");
                 });
@@ -702,6 +719,87 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("voucher_reviews", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.VoucherTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTime>("InitiatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("initiated_at");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_id");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reject_reason");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("responded_at");
+
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sender_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TransferType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("transfer_type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("VoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voucher_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_voucher_transfers_expires_at");
+
+                    b.HasIndex("RecipientId")
+                        .HasDatabaseName("IX_voucher_transfers_recipient_id");
+
+                    b.HasIndex("SenderId")
+                        .HasDatabaseName("IX_voucher_transfers_sender_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_voucher_transfers_status");
+
+                    b.HasIndex("VoucherId")
+                        .HasDatabaseName("IX_voucher_transfers_voucher_id");
+
+                    b.ToTable("voucher_transfers", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.VoucherUsage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -847,7 +945,14 @@ namespace NonCash.Infrastructure.Migrations
                         .HasForeignKey("BrandId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("NonCash.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Brand");
+
+                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherDistribution", b =>
@@ -930,6 +1035,33 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Approver");
 
                     b.Navigation("Plan");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.VoucherTransfer", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.UserAccount", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.UserAccount", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.VoucherPlanDetail", "Voucher")
+                        .WithMany()
+                        .HasForeignKey("VoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
+
+                    b.Navigation("Voucher");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherUsage", b =>

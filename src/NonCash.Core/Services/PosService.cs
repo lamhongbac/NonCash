@@ -198,6 +198,13 @@ public class PosService : IPosService
             // proceed enough to load plan/brand for response info
         }
 
+        // Story 5-1: reject vouchers that are pending a peer-to-peer transfer
+        if (IsTransferLocked(detail))
+        {
+            ctx.Failure = "TransferPending";
+            return ctx;
+        }
+
         var plan = await _planRepository.GetByIdWithOutletsAsync(detail.ParentId, cancellationToken);
         if (plan == null)
         {
@@ -234,6 +241,15 @@ public class PosService : IPosService
         ctx.BrandName = brand?.Name ?? string.Empty;
         // Preserve "AlreadyUsed" failure if it was set above
         return ctx;
+    }
+
+    private static bool IsTransferLocked(VoucherPlanDetail detail)
+    {
+        if (detail.TransferLockId == null || detail.TransferLockedAt == null)
+            return false;
+
+        // Transfer locks expire after 7 days (matching VoucherTransferService.TransferExpiryDays)
+        return detail.TransferLockedAt.Value.AddDays(VoucherTransferService.TransferExpiryDays) > DateTime.UtcNow;
     }
 
     private static PosVoucherInfo BuildInfo(ValidationContext ctx)

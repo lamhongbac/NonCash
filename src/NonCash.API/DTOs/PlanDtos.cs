@@ -54,5 +54,7 @@ public record PlanResponse(
     string? IconUrl,
     List<Guid> OutletIds,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    int? VersionNumber = null,
+    Guid? PreviousVersionId = null
 );

@@ -17,6 +17,9 @@ public class VoucherPlanDetailConfiguration : IEntityTypeConfiguration<VoucherPl
         // Story 4-2: lock columns
         builder.Property(v => v.BillNumber).HasMaxLength(100);
 
+        // Story 5-1: transfer lock columns
+        builder.HasIndex(v => v.TransferLockId).HasDatabaseName("IX_voucher_plan_details_transfer_lock_id");
+
         builder.HasIndex(v => v.ParentId).HasDatabaseName("IX_voucher_plan_details_parent_id");
         builder.HasIndex(v => v.SerialNo).IsUnique().HasDatabaseName("IX_voucher_plan_details_serial_no");
         builder.HasIndex(v => v.MemberId).HasDatabaseName("IX_voucher_plan_details_member_id");

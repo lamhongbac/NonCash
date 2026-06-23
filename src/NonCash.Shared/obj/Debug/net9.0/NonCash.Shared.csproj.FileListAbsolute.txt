@@ -10,3 +10,15 @@ D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\refint\NonCash.Shared.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.pdb
 D:\GIT PROJECT\NonCash\src\NonCash.Shared\obj\Debug\net9.0\ref\NonCash.Shared.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.deps.json
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\bin\Debug\net9.0\NonCash.Shared.pdb
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.GeneratedMSBuildEditorConfig.editorconfig
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.AssemblyInfoInputs.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.AssemblyInfo.cs
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.csproj.CoreCompileInputs.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.sourcelink.json
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\refint\NonCash.Shared.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\NonCash.Shared.pdb
+c:\MSA\Sources\NonCashSol\src\NonCash.Shared\obj\Debug\net9.0\ref\NonCash.Shared.dll

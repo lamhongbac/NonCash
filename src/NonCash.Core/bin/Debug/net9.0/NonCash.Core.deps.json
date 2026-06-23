@@ -9,7 +9,8 @@
       "NonCash.Core/1.0.0": {
         "dependencies": {
           "BCrypt.Net-Next": "4.1.0",
-          "FluentValidation": "12.1.1"
+          "FluentValidation": "12.1.1",
+          "NonCash.Shared": "1.0.0"
         },
         "runtime": {
           "NonCash.Core.dll": {}
@@ -28,6 +29,14 @@
           "lib/net8.0/FluentValidation.dll": {
             "assemblyVersion": "12.0.0.0",
             "fileVersion": "12.1.1.0"
+          }
+        }
+      },
+      "NonCash.Shared/1.0.0": {
+        "runtime": {
+          "NonCash.Shared.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
           }
         }
       }
@@ -52,6 +61,11 @@
       "sha512": "sha512-EPpkIe1yh1a0OXyC100oOA8WMbZvqUu5plwhvYcb7oSELfyUZzfxV48BLhvs3kKo4NwG7MGLNgy1RJiYtT8Dpw==",
       "path": "fluentvalidation/12.1.1",
       "hashPath": "fluentvalidation.12.1.1.nupkg.sha512"
+    },
+    "NonCash.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     }
   }
 }

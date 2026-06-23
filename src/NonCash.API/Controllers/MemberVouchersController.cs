@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NonCash.Core.Interfaces;
@@ -10,10 +11,61 @@ namespace NonCash.API.Controllers;
 public class MemberVouchersController : ControllerBase
 {
     private readonly ITransferService _transferService;
+    private readonly IVoucherTransferService _voucherTransferService;
 
-    public MemberVouchersController(ITransferService transferService)
+    public MemberVouchersController(
+        ITransferService transferService,
+        IVoucherTransferService voucherTransferService)
     {
         _transferService = transferService;
+        _voucherTransferService = voucherTransferService;
+    }
+
+    private Guid GetCurrentMemberId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        return claim != null && Guid.TryParse(claim.Value, out var id) ? id : Guid.Empty;
+    }
+
+    // Story 5-1: Initiate peer-to-peer voucher transfer
+    [HttpPost("{voucherId:guid}/initiate-transfer")]
+    public async Task<ActionResult<InitiateTransferResponse>> InitiateTransfer(
+        Guid voucherId,
+        [FromBody] InitiateTransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        var senderId = GetCurrentMemberId();
+        if (senderId == Guid.Empty)
+            return Unauthorized(new { error = "Unauthorized", message = "Member identity is required." });
+
+        if (request == null)
+            return BadRequest(new { error = "Validation", message = "Request body is required." });
+
+        if (string.IsNullOrWhiteSpace(request.RecipientPhone) && string.IsNullOrWhiteSpace(request.RecipientMemberId))
+        {
+            return BadRequest(new { error = "Validation", message = "RecipientPhone or RecipientMemberId is required." });
+        }
+
+        var result = await _voucherTransferService.InitiateAsync(
+            senderId,
+            voucherId,
+            request.RecipientPhone,
+            request.RecipientMemberId,
+            request.Note,
+            cancellationToken);
+
+        if (!result.Success)
+        {
+            return result.ErrorCode switch
+            {
+                "VoucherNotFound" => NotFound(new { error = result.ErrorCode, message = result.ErrorMessage }),
+                "NotOwned" => StatusCode(StatusCodes.Status403Forbidden, new { error = result.ErrorCode, message = result.ErrorMessage }),
+                "TransferAlreadyPending" => Conflict(new { error = result.ErrorCode, message = result.ErrorMessage }),
+                _ => BadRequest(new { error = result.ErrorCode ?? "Validation", message = result.ErrorMessage })
+            };
+        }
+
+        return Ok(new InitiateTransferResponse(result.TransferId!.Value, "PendingAcceptance"));
     }
 
     // AC1, AC3, AC4: Initiate batch transfer
@@ -70,3 +122,7 @@ public record TransferResponse(int TransferredCount, int SkippedCount, List<Tran
 public record TransferSkippedDto(string PhoneNumber, Guid VoucherId, string Reason);
 
 public record TransferHistoryDto(Guid VoucherId, string SerialNo, string RecipientPhone, DateTime TransferredAt);
+
+public record InitiateTransferRequest(string? RecipientPhone, string? RecipientMemberId, string? Note);
+
+public record InitiateTransferResponse(Guid TransferId, string Status);

@@ -82,8 +82,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: Social Engagement & Gifting (FR5 - peer-to-peer transfer)
-  epic-5: in-progress
-  5-1-initiate-voucher-transfer: ready-for-dev
-  5-2-recipient-confirmation: ready-for-dev
-  5-3-sender-cancel-and-history: ready-for-dev
+  epic-5: done
+  5-1-initiate-voucher-transfer: done
+  5-2-recipient-confirmation: done
+  5-3-sender-cancel-and-history: done
   epic-5-retrospective: optional

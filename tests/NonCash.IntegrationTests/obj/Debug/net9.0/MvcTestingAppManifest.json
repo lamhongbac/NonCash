@@ -1,7 +1,7 @@
 {
-  "NonCash.API, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.API",
-  "NonCash.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Core",
-  "NonCash.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Infrastructure",
-  "NonCash.Shared, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Shared",
-  "NonCash.Web, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\GIT PROJECT\\NonCash\\src\\NonCash.Web"
+  "NonCash.API, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.API",
+  "NonCash.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Core",
+  "NonCash.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Infrastructure",
+  "NonCash.Shared, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared",
+  "NonCash.Web, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Web"
 }

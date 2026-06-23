@@ -20,6 +20,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<VoucherPlanHeader> VoucherPlanHeaders => Set<VoucherPlanHeader>();
     public DbSet<PlanOutlet> PlanOutlets => Set<PlanOutlet>();
     public DbSet<VoucherPlanDetail> VoucherPlanDetails => Set<VoucherPlanDetail>();
+    public DbSet<VoucherTransfer> VoucherTransfers => Set<VoucherTransfer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

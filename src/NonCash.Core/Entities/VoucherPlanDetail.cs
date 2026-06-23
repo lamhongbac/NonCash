@@ -22,6 +22,10 @@ public class VoucherPlanDetail : BaseEntity
     public string? BillNumber { get; set; }
     public Guid? LockedOutletId { get; set; }
 
+    // Story 5-1: Peer-to-peer transfer soft-lock fields
+    public Guid? TransferLockId { get; set; }
+    public DateTime? TransferLockedAt { get; set; }
+
     // Navigation properties
     public VoucherPlanHeader? Parent { get; set; }
 }

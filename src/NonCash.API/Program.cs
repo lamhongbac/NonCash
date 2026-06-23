@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NonCash.API.HostedServices;
 using NonCash.API.Middleware;
 using NonCash.API.Services;
 using NonCash.Core.Interfaces;
@@ -43,6 +44,8 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 builder.Services.AddScoped<IBrandRegistrationRequestRepository, BrandRegistrationRequestRepository>();
 builder.Services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
+builder.Services.AddScoped<IVoucherTransferRepository, VoucherTransferRepository>();
+builder.Services.AddScoped<IVoucherLockRepository, VoucherLockRepository>();
 
 // Business services
 builder.Services.AddScoped<BrandService>();
@@ -52,6 +55,9 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IVoucherPlanService, VoucherPlanService>();
 builder.Services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 builder.Services.AddScoped<IVoucherGenerationService, VoucherGenerationService>();
+builder.Services.AddScoped<IVoucherTransferService, VoucherTransferService>();
+builder.Services.AddScoped<ITransferService, TransferService>();
+builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 
 // Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -87,6 +93,10 @@ builder.Services.AddAuthentication("Bearer")
     });
 
 builder.Services.AddAuthorization();
+
+// Hosted services
+builder.Services.AddHostedService<LockCleanupService>();
+builder.Services.AddHostedService<TransferExpirySweepService>();
 
 // Health checks
 builder.Services.AddHealthChecks()
