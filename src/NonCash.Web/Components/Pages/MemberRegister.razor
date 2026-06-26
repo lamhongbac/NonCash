@@ -1,0 +1,142 @@
+@page "/member-register"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Member Registration</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Join NonCash</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-6">Create a member account to buy, manage, and gift vouchers</MudText>
+
+        <MudForm @ref="_form" Model="_model">
+            <MudTextField @bind-Value="_model.FullName" Label="Full Name" Required="true" RequiredError="Full name is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.PhoneNumber" Label="Phone Number" Required="true" RequiredError="Phone number is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Email" Label="Email (optional)" Variant="Variant.Outlined" InputType="InputType.Email" Class="mb-3" />
+            <MudDivider Class="my-4" />
+            <MudTextField @bind-Value="_model.Username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Password" Label="Password" Required="true" RequiredError="Password must be at least 8 characters" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
+        </MudForm>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="HandleSubmit" Disabled="_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Member Account
+        </MudButton>
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">
+                <strong>Registration failed:</strong> @_errorMessage
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
+            Already have an account? <MudLink Href="/member-login">Sign in</MudLink>
+        </MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+            Want to register a business? <MudLink Href="/register">Business registration</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private RegistrationModel _model = new();
+    private bool _loading = false;
+    private string? _errorMessage = null;
+
+    private async Task HandleSubmit()
+    {
+        _errorMessage = null;
+
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        if (_model.Password.Length < 8)
+        {
+            _errorMessage = "Password must be at least 8 characters.";
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/v1/members/register", _model);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<RegistrationResponse>();
+                if (result is not null)
+                {
+                    await AuthState.LoginAsync(
+                        result.Token,
+                        result.FullName,
+                        "Member",
+                        null,
+                        result.MemberAccountId,
+                        result.CustomerId);
+
+                    Snackbar.Add($"Welcome, {result.FullName}!", Severity.Success);
+                    Navigation.NavigateTo("/store", forceLoad: true);
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.error ?? "Username or phone number is already registered.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.error ?? "Invalid input. Please check your details and try again.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+            else
+            {
+                _errorMessage = "An unexpected error occurred. Please try again later.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Network error: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public class RegistrationModel
+    {
+        public string FullName { get; set; } = "";
+        public string PhoneNumber { get; set; } = "";
+        public string? Email { get; set; }
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+
+    private class RegistrationResponse
+    {
+        public Guid MemberAccountId { get; set; }
+        public Guid CustomerId { get; set; }
+        public string Username { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public string Token { get; set; } = "";
+        public DateTime ExpiresAt { get; set; }
+    }
+
+    private class ErrorResponse
+    {
+        public string? error { get; set; }
+    }
+}

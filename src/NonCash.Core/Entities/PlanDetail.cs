@@ -18,7 +18,7 @@ namespace NonCash.Core.Entities
         
         // Mã khách hàng/Organization sở hữu
         public Guid? MemberId { get; set; }
-        public Member? Member { get; set; }
+        public MemberAccount? Member { get; set; }
         
         // Trạng thái sử dụng (Pending, In-Use, Complete)
         public VoucherStatus Status { get; set; } = VoucherStatus.Pending;

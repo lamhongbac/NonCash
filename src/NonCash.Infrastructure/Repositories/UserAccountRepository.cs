@@ -33,11 +33,4 @@ public class UserAccountRepository : Repository<UserAccount>, IUserAccountReposi
             .Where(u => u.BrandId == brandId)
             .ToListAsync(cancellationToken);
     }
-
-    public async Task<UserAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default)
-    {
-        return await _context.UserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.CustomerId == customerId, cancellationToken);
-    }
 }

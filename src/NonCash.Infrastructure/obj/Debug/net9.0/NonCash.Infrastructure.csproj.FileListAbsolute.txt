@@ -16,9 +16,6 @@ D:\GIT PROJECT\NonCash\src\NonCash.Infrastructure\obj\Debug\net9.0\refint\NonCas
 D:\GIT PROJECT\NonCash\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.pdb
 D:\GIT PROJECT\NonCash\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.genruntimeconfig.cache
 D:\GIT PROJECT\NonCash\src\NonCash.Infrastructure\obj\Debug\net9.0\ref\NonCash.Infrastructure.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\refint\NonCash.Infrastructure.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\bin\Debug\net9.0\NonCash.Infrastructure.deps.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\bin\Debug\net9.0\NonCash.Infrastructure.runtimeconfig.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\bin\Debug\net9.0\NonCash.Infrastructure.dll
@@ -34,5 +31,8 @@ c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.In
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.csproj.CoreCompileInputs.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.sourcelink.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash..ADCE3C76.Up2Date
+c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\refint\NonCash.Infrastructure.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\NonCash.Infrastructure.genruntimeconfig.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Infrastructure\obj\Debug\net9.0\ref\NonCash.Infrastructure.dll

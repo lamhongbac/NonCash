@@ -7,7 +7,7 @@
 <PageTitle>Voucher Store</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Voucher Store</MudText>
-<MudText Typo="Typo.body2" Class="mb-4">Browse and purchase available gift vouchers. Member ID is required to place an order (Member auth is a future epic).</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Browse and purchase available gift vouchers.</MudText>
 
 @if (_loading)
 {
@@ -50,7 +50,6 @@ else
         @if (_selectedItem != null)
         {
             <MudText Typo="Typo.body2" Class="mb-2">FaceValue: <b>@_selectedItem.FaceValue.ToString("N0")</b> | Unit Price: <b>@_selectedItem.NetValue.ToString("N0") VND</b></MudText>
-            <MudTextField T="Guid" @bind-Value="_memberId" Label="Member ID (Customer GUID)" Required="true" Class="mb-3" />
             <MudNumericField T="int" @bind-Value="_quantity" Label="Quantity" Min="1" Max="500" Class="mb-3" />
             <MudTextField T="string" @bind-Value="_invoiceCompany" Label="Invoice Company Name (optional)" Class="mb-3" />
             <MudTextField T="string" @bind-Value="_invoiceTaxCode" Label="Invoice Tax Code (optional)" Class="mb-3" />
@@ -75,7 +74,6 @@ else
     private bool _showCheckout;
     private bool _submitting;
     private CatalogItem? _selectedItem;
-    private Guid _memberId;
     private int _quantity = 1;
     private string? _invoiceCompany;
     private string? _invoiceTaxCode;
@@ -113,8 +111,16 @@ else
         }
     }
 
-    private void OpenCheckout(CatalogItem item)
+    private async Task OpenCheckout(CatalogItem item)
     {
+        var token = await AuthState.GetTokenAsync();
+        if (string.IsNullOrEmpty(token) || !AuthState.IsMember || AuthState.UserId == null || AuthState.UserId == Guid.Empty)
+        {
+            Snackbar.Add("Please sign in as a member to purchase vouchers.", Severity.Warning);
+            Navigation.NavigateTo("/member-login");
+            return;
+        }
+
         _selectedItem = item;
         _quantity = 1;
         _invoiceCompany = null;
@@ -124,9 +130,9 @@ else
 
     private async Task PlaceOrder()
     {
-        if (_selectedItem == null || _memberId == Guid.Empty)
+        if (_selectedItem == null || !AuthState.IsMember || AuthState.UserId == null || AuthState.UserId == Guid.Empty)
         {
-            Snackbar.Add("Member ID is required.", Severity.Warning);
+            Snackbar.Add("Member identity is required. Please sign in.", Severity.Warning);
             return;
         }
 
@@ -136,7 +142,7 @@ else
             var token = await AuthState.GetTokenAsync();
             var body = new
             {
-                MemberId = _memberId,
+                MemberId = AuthState.UserId.Value,
                 PlanId = _selectedItem.PlanId,
                 Quantity = _quantity,
                 Invoice = (string.IsNullOrWhiteSpace(_invoiceCompany) && string.IsNullOrWhiteSpace(_invoiceTaxCode))
@@ -151,7 +157,36 @@ else
             if (response.IsSuccessStatusCode)
             {
                 var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
-                Snackbar.Add($"Order created. ID: {order?.Id}. Total: {order?.TotalAmount:N0} VND. Awaiting payment confirmation.", Severity.Success);
+                if (order == null)
+                {
+                    Snackbar.Add("Order created but response was empty.", Severity.Error);
+                    return;
+                }
+
+                // Initiate ZaloPay payment session
+                var paymentRequest = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"api/v1/payments/{order.Id}/create")
+                {
+                    Content = JsonContent.Create(new { returnUrl = (string?)null })
+                };
+                if (!string.IsNullOrEmpty(token))
+                    paymentRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var paymentResponse = await Http.SendAsync(paymentRequest);
+                if (paymentResponse.IsSuccessStatusCode)
+                {
+                    var payment = await paymentResponse.Content.ReadFromJsonAsync<PaymentCreateResponse>();
+                    if (!string.IsNullOrWhiteSpace(payment?.PaymentUrl))
+                    {
+                        Snackbar.Add("Redirecting to ZaloPay...", Severity.Info);
+                        Navigation.NavigateTo(payment.PaymentUrl, forceLoad: true);
+                        return;
+                    }
+                }
+
+                var paymentError = await paymentResponse.Content.ReadAsStringAsync();
+                Snackbar.Add($"Order created but payment session failed: {paymentError}", Severity.Warning);
                 _showCheckout = false;
             }
             else
@@ -188,5 +223,12 @@ else
         public Guid Id { get; set; }
         public string Status { get; set; } = "";
         public decimal TotalAmount { get; set; }
+    }
+
+    public class PaymentCreateResponse
+    {
+        public string PaymentUrl { get; set; } = "";
+        public Guid TransactionId { get; set; }
+        public string GatewayTransactionId { get; set; } = "";
     }
 }

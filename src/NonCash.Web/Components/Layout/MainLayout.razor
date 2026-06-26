@@ -4,6 +4,7 @@
 <MudThemeProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+<MudPopoverProvider />
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -19,8 +20,8 @@
         }
         else
         {
-            <MudButton Href="/register" Color="Color.Inherit" Variant="Variant.Text">Register</MudButton>
-            <MudButton Href="/login" Color="Color.Inherit" Variant="Variant.Text">Login</MudButton>
+            <MudButton Href="/member-login" Color="Color.Inherit" Variant="Variant.Text">Member Login</MudButton>
+            <MudButton Href="/login" Color="Color.Inherit" Variant="Variant.Text">Staff Login</MudButton>
         }
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -30,6 +31,7 @@
             @if (!AuthState.IsLoggedIn)
             {
                 <MudText Typo="Typo.caption" Class="px-4">Public</MudText>
+                <MudNavLink Href="/member-register" Icon="@Icons.Material.Filled.PersonAdd">Member Registration</MudNavLink>
                 <MudNavLink Href="/register" Icon="@Icons.Material.Filled.AppRegistration">Business Registration</MudNavLink>
                 <MudDivider Class="my-2" />
             }
@@ -41,12 +43,21 @@
                 <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
                 <MudDivider Class="my-2" />
             }
-            @if (AuthState.IsLoggedIn && AuthState.Role == "BrandManager")
+            @if (AuthState.IsLoggedIn && (AuthState.Role == "BrandManager" || AuthState.Role == "Admin"))
             {
                 <MudText Typo="Typo.caption" Class="px-4">Brand Manager</MudText>
                 <MudNavLink Href="/brandmanager/plans" Icon="@Icons.Material.Filled.Assignment">Voucher Plans</MudNavLink>
                 <MudNavLink Href="/brandmanager/outlets" Icon="@Icons.Material.Filled.Store">Outlets</MudNavLink>
                 <MudNavLink Href="/brandmanager/customers" Icon="@Icons.Material.Filled.Contacts">Customers</MudNavLink>
+                <MudNavLink Href="/pos/redeem" Icon="@Icons.Material.Filled.PointOfSale">POS Redemption</MudNavLink>
+                <MudDivider Class="my-2" />
+            }
+            @if (AuthState.IsLoggedIn && AuthState.IsMember)
+            {
+                <MudText Typo="Typo.caption" Class="px-4">Member</MudText>
+                <MudNavLink Href="/store" Icon="@Icons.Material.Filled.Storefront">Voucher Store</MudNavLink>
+                <MudNavLink Href="/my-vouchers" Icon="@Icons.Material.Filled.CardGiftcard">My Vouchers</MudNavLink>
+                <MudNavLink Href="/transfers" Icon="@Icons.Material.Filled.SwapHoriz">Transfers</MudNavLink>
                 <MudDivider Class="my-2" />
             }
         </MudNavMenu>

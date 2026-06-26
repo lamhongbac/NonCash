@@ -1,16 +1,17 @@
 @page "/my-vouchers"
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>My Vouchers</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-2">My Vouchers</MudText>
-<MudText Typo="Typo.body2" Class="mb-4">View vouchers allocated to a Member ID. Provide your Member ID (Customer GUID) below — Member auth is a future epic.</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">View vouchers allocated to your member account.</MudText>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
-        <MudTextField T="Guid" @bind-Value="_memberId" Label="Member ID (Customer GUID)" Required="true" Style="max-width: 400px;" />
+        <MudTextField T="Guid" @bind-Value="_memberId" Label="Member Account ID" Required="true" Style="max-width: 400px;" Disabled="true" />
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="LoadVouchers" Disabled="@_loading" StartIcon="@Icons.Material.Filled.Search">
             @if (_loading)
             {
@@ -26,7 +27,7 @@
 
 @if (_searched && !_vouchers.Any())
 {
-    <MudAlert Severity="Severity.Info">No vouchers found for this Member ID.</MudAlert>
+    <MudAlert Severity="Severity.Info">No vouchers found for this member account.</MudAlert>
 }
 else if (_vouchers.Any())
 {
@@ -34,10 +35,10 @@ else if (_vouchers.Any())
         @foreach (var v in _vouchers)
         {
             <MudItem xs="12" sm="6" md="4">
-                <MudCard Elevation="2" Outlined="@(_selectedIds.Contains(v.Id))">
+                <MudCard Elevation="2" Outlined="@(_selectedVoucher?.Id == v.Id)" Class="cursor-pointer" @onclick="() => SelectVoucher(v)">
                     @if (v.UsageStatus == "Pending")
                     {
-                        <MudCardActions Class="pa-2">
+                        <MudCardActions Class="pa-2" @onclick:stopPropagation="true">
                             <MudCheckBox T="bool" Value="@(_selectedIds.Contains(v.Id))" ValueChanged="@((bool b) => ToggleSelection(v.Id, b))" Label="Select for transfer" />
                         </MudCardActions>
                     }
@@ -59,16 +60,59 @@ else if (_vouchers.Any())
                         {
                             <MudText Typo="Typo.caption">Used on: @v.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
                         }
-                        <MudDivider Class="my-2" />
-                        <MudText Typo="Typo.body2">Code (refresh every 2 min):</MudText>
-                        <MudPaper Class="pa-2 mt-1" Elevation="0" Style="background: #f5f5f5; font-family: monospace; word-break: break-all;">
-                            @v.VoucherCode
-                        </MudPaper>
                     </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Visibility" @onclick="() => SelectVoucher(v)">View</MudButton>
+                    </MudCardActions>
                 </MudCard>
             </MudItem>
         }
     </MudGrid>
+}
+
+@if (_selectedVoucher != null)
+{
+    <MudPaper Class="pa-4 mt-6" Elevation="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h5">Voucher Details</MudText>
+            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => _selectedVoucher = null">Close</MudButton>
+        </MudStack>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2">Barcode</MudText>
+                <svg id="voucher-barcode" style="width: 100%; height: 130px;"></svg>
+                <MudText Typo="Typo.caption" Class="d-block mt-1" Style="font-family: monospace;">@_selectedVoucher.VoucherCode</MudText>
+
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.subtitle2">Value</MudText>
+                <MudText Typo="Typo.h6" Class="mb-2">@_selectedVoucher.FaceValue.ToString("N0") @(_selectedVoucher.ValueType == "Percentage" ? "%" : "VND")</MudText>
+
+                <MudText Typo="Typo.subtitle2">Terms &amp; Conditions</MudText>
+                <MudLink Href="@($"/terms/{_selectedVoucher.Id}")" Target="_blank">Open Terms &amp; Conditions</MudLink>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-3">Expiration Date</MudText>
+                <MudText Typo="Typo.body1">@(_selectedVoucher.ExpiryDate?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "No expiration")</MudText>
+
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(_selectedVoucher.UsageStatus)" Class="mt-3">@_selectedVoucher.UsageStatus</MudChip>
+                @if (_selectedVoucher.UsedDate.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Class="d-block mt-1">Used on @_selectedVoucher.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
+                }
+            </MudItem>
+            <MudItem xs="12" md="6">
+                @if (!string.IsNullOrEmpty(_selectedVoucher.ImageUrl))
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Image</MudText>
+                    <MudImage Src="@_selectedVoucher.ImageUrl" Alt="Voucher image" ObjectFit="ObjectFit.Contain" Style="width: 100%; max-height: 300px;" />
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">No voucher image available.</MudAlert>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 }
 
 @if (_history.Any())
@@ -116,6 +160,8 @@ else if (_vouchers.Any())
     private bool _loading;
     private bool _searched;
     private List<MemberVoucher> _vouchers = new();
+    private MemberVoucher? _selectedVoucher;
+    private bool _barcodeRendered;
 
     // Transfer state
     private HashSet<Guid> _selectedIds = new();
@@ -125,15 +171,49 @@ else if (_vouchers.Any())
     private List<TransferHistory> _history = new();
     private DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
 
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.GetTokenAsync();
+        if (AuthState.UserId.HasValue && AuthState.UserId.Value != Guid.Empty)
+        {
+            _memberId = AuthState.UserId.Value;
+            await LoadVouchers();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_selectedVoucher != null && !_barcodeRendered)
+        {
+            _barcodeRendered = true;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("renderBarcode", "voucher-barcode", _selectedVoucher.VoucherCode);
+            }
+            catch
+            {
+                // JS interop may not be available during prerender
+            }
+        }
+    }
+
+    private void SelectVoucher(MemberVoucher voucher)
+    {
+        _selectedVoucher = voucher;
+        _barcodeRendered = false;
+    }
+
     private async Task LoadVouchers()
     {
         if (_memberId == Guid.Empty)
         {
-            Snackbar.Add("Please enter a Member ID.", Severity.Warning);
+            Snackbar.Add("Please sign in as a member.", Severity.Warning);
             return;
         }
 
         _loading = true;
+        _selectedVoucher = null;
+        _barcodeRendered = false;
         try
         {
             var token = await AuthState.GetTokenAsync();

@@ -1,0 +1,49 @@
+@page "/terms/{voucherId:guid?}"
+
+<PageTitle>Terms &amp; Conditions</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Terms &amp; Conditions</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    @if (VoucherId.HasValue)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            These terms apply to voucher <b>@VoucherId.Value</b>.
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.h6" GutterBottom="true">1. General</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        By redeeming this voucher, you agree to the following terms. The voucher is issued by the participating brand and managed through the NonCash platform.
+    </MudText>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">2. Eligibility</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Vouchers can only be used by the registered member to whom the voucher was allocated or by a recipient who has accepted a valid transfer. Vouchers are non-exchangeable for cash unless otherwise stated.
+    </MudText>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">3. Validity</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Each voucher is valid until the expiration date shown in the voucher details. Expired vouchers cannot be redeemed, transferred, or refunded.
+    </MudText>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">4. Redemption</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Present the voucher barcode or code to an authorized outlet staff member at the point of sale. The staff member will scan and confirm the redemption. Once a voucher is marked as used, it cannot be reused or refunded.
+    </MudText>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">5. Transfers</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Vouchers marked as transferable may be sent to another member via the transfer feature. The sender is responsible for entering the correct recipient details. Transfers are final once accepted.
+    </MudText>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">6. Support</MudText>
+    <MudText Typo="Typo.body2">
+        For questions or disputes, contact the brand that issued the voucher or reach out to NonCash support through your app profile.
+    </MudText>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public Guid? VoucherId { get; set; }
+}

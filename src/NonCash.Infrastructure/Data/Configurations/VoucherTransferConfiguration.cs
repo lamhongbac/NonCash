@@ -37,7 +37,7 @@ public class VoucherTransferConfiguration : IEntityTypeConfiguration<VoucherTran
             .HasForeignKey(t => t.VoucherId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Sender and Recipient are UserAccounts (from JWT), not Customers
+        // Sender and Recipient are MemberAccounts (from JWT), not Customers
         builder.HasOne(t => t.Sender)
             .WithMany()
             .HasForeignKey(t => t.SenderId)

@@ -4,12 +4,12 @@
 @inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
-<PageTitle>Login</PageTitle>
+<PageTitle>Staff Login</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
     <MudPaper Class="pa-8">
         <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">NonCash</MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Sign in to your account</MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Staff Sign In</MudText>
 
         <MudForm @ref="_form">
             <MudTextField @bind-Value="_username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" FullWidth="true" Class="mb-4" />
@@ -32,7 +32,13 @@
         </MudButton>
 
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
+            Are you a member? <MudLink Href="/member-login">Member Login</MudLink>
+        </MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
             Don't have an account? <MudLink Href="/register">Register your business</MudLink>
+        </MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+            Want to buy vouchers? <MudLink Href="/member-register">Create a member account</MudLink>
         </MudText>
     </MudPaper>
 </MudContainer>
@@ -68,7 +74,8 @@
                         result.User?.FullName ?? _username,
                         result.User?.Role ?? "",
                         result.User?.BrandId,
-                        result.User?.UserId ?? Guid.Empty);
+                        result.User?.UserId ?? Guid.Empty,
+                        result.User?.CustomerId);
 
                     Snackbar.Add($"Welcome, {AuthState.FullName}!", Severity.Success);
                     Navigation.NavigateTo("/", forceLoad: true);
@@ -116,6 +123,7 @@
         public string FullName { get; set; } = "";
         public string Role { get; set; } = "";
         public Guid? BrandId { get; set; }
+        public Guid? CustomerId { get; set; }
     }
 
     private class ErrorResponse

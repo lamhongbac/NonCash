@@ -10,6 +10,7 @@ public class PurchaseService : IPurchaseService
     private readonly IRepository<PurchaseOrder> _orderRepository;
     private readonly IRepository<OrderDetail> _orderDetailRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
+    private readonly IMemberAccountRepository _memberRepository;
     private readonly ICustomerRepository _customerRepository;
 
     public PurchaseService(
@@ -18,6 +19,7 @@ public class PurchaseService : IPurchaseService
         IRepository<PurchaseOrder> orderRepository,
         IRepository<OrderDetail> orderDetailRepository,
         IRepository<VoucherDistribution> distributionRepository,
+        IMemberAccountRepository memberRepository,
         ICustomerRepository customerRepository)
     {
         _planRepository = planRepository;
@@ -25,6 +27,7 @@ public class PurchaseService : IPurchaseService
         _orderRepository = orderRepository;
         _orderDetailRepository = orderDetailRepository;
         _distributionRepository = distributionRepository;
+        _memberRepository = memberRepository;
         _customerRepository = customerRepository;
     }
 
@@ -47,12 +50,20 @@ public class PurchaseService : IPurchaseService
         if (input.Quantity <= 0)
             return new OrderResult(false, ErrorCode: "InvalidQuantity", ErrorMessage: "Quantity must be greater than 0.");
 
-        // Validate member
-        var member = await _customerRepository.GetByIdAsync(input.MemberId, cancellationToken);
+        // Validate member account
+        var member = await _memberRepository.GetByIdAsync(input.MemberId, cancellationToken);
         if (member == null)
             return new OrderResult(false, ErrorCode: "MemberNotFound", ErrorMessage: "Member not found.");
-        if (member.Status == CustomerStatus.Blacklisted)
+
+        var customer = await _customerRepository.GetByIdAsync(member.CustomerId, cancellationToken);
+        if (customer == null)
+            return new OrderResult(false, ErrorCode: "MemberNotFound", ErrorMessage: "Member profile not found.");
+
+        if (customer.Status == CustomerStatus.Blacklisted)
             return new OrderResult(false, ErrorCode: "MemberBlacklisted", ErrorMessage: "Blacklisted members cannot purchase.");
+
+        if (member.Status == MemberAccountStatus.Locked)
+            return new OrderResult(false, ErrorCode: "MemberAccountLocked", ErrorMessage: "Member account is locked.");
 
         // Validate plan eligibility
         var plan = await _planRepository.GetByIdAsync(input.PlanId, cancellationToken);
@@ -76,7 +87,7 @@ public class PurchaseService : IPurchaseService
         var unitPrice = plan.NetValue;
         var order = new PurchaseOrder
         {
-            MemberId = input.MemberId,
+            MemberId = member.Id,
             Status = OrderStatus.PendingPayment,
             InvoiceCompanyName = input.InvoiceCompanyName?.Trim(),
             InvoiceTaxCode = input.InvoiceTaxCode?.Trim(),

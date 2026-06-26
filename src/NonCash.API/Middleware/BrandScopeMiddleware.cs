@@ -18,9 +18,13 @@ public class BrandScopeMiddleware
             var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
             var brandIdClaim = context.User.FindFirst("brand_id")?.Value;
 
-            // Admin users can operate across brands
-            // Non-admin users must have a brand_id in their token
-            if (!string.IsNullOrEmpty(roleClaim) && roleClaim != "Admin" && string.IsNullOrEmpty(brandIdClaim))
+            // Admin users can operate across brands.
+            // Members do not need a brand assignment.
+            // Other non-admin users must have a brand_id in their token.
+            if (!string.IsNullOrEmpty(roleClaim)
+                && roleClaim != "Admin"
+                && roleClaim != "Member"
+                && string.IsNullOrEmpty(brandIdClaim))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsync("Non-admin users must be assigned to a brand.");

@@ -28,7 +28,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Act
         var result = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -41,8 +41,8 @@ public class VoucherTransferServiceAcceptanceTests
         var transfer = await _fixture.Context.VoucherTransfers.FindAsync(result.TransferId);
         transfer.Should().NotBeNull();
         transfer!.Status.Should().Be(VoucherTransferStatus.PendingAcceptance);
-        transfer.SenderId.Should().Be(_fixture.AliceUserId);
-        transfer.RecipientId.Should().Be(_fixture.BobUserId);
+        transfer.SenderId.Should().Be(_fixture.AliceMemberId);
+        transfer.RecipientId.Should().Be(_fixture.BobMemberId);
         transfer.VoucherId.Should().Be(_fixture.AliceVoucherId);
 
         var voucher = await _fixture.Context.VoucherPlanDetails.FindAsync(_fixture.AliceVoucherId);
@@ -57,7 +57,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Act - Alice tries to transfer Bob's voucher
         var result = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.BobVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -71,24 +71,24 @@ public class VoucherTransferServiceAcceptanceTests
     [Fact]
     [Trait("Category", "UAT")]
     [Trait("Story", "5-1")]
-    public async Task InitiateTransfer_WithRecipientNotFound_CreatesPlaceholderUserAndTransfer()
+    public async Task InitiateTransfer_WithRecipientNotFound_CreatesPlaceholderMemberAndTransfer()
     {
         // Act
         var result = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0999999999",
             recipientMemberId: null,
             note: "Unknown recipient");
 
-        // Assert - system creates placeholder customer/user for new phone
+        // Assert - system creates placeholder customer/member for new phone
         result.Success.Should().BeTrue();
         result.TransferId.Should().NotBeNull();
 
         var transfer = await _fixture.Context.VoucherTransfers.FindAsync(result.TransferId);
         transfer.Should().NotBeNull();
-        transfer!.SenderId.Should().Be(_fixture.AliceUserId);
-        transfer.RecipientId.Should().NotBe(_fixture.AliceUserId);
+        transfer!.SenderId.Should().Be(_fixture.AliceMemberId);
+        transfer.RecipientId.Should().NotBe(_fixture.AliceMemberId);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -106,7 +106,7 @@ public class VoucherTransferServiceAcceptanceTests
 
         // Act
         var result = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -124,7 +124,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Act - Alice tries to send to her own phone
         var result = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909111111",
             recipientMemberId: null,
@@ -146,7 +146,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -155,7 +155,7 @@ public class VoucherTransferServiceAcceptanceTests
         // Act
         var acceptResult = await _fixture.TransferService.AcceptAsync(
             initiateResult.TransferId!.Value,
-            _fixture.BobUserId);
+            _fixture.BobMemberId);
 
         // Assert
         acceptResult.Success.Should().BeTrue();
@@ -164,7 +164,7 @@ public class VoucherTransferServiceAcceptanceTests
 
         var voucher = await _fixture.Context.VoucherPlanDetails.FindAsync(_fixture.AliceVoucherId);
         await _fixture.Context.Entry(voucher!).ReloadAsync();
-        voucher!.MemberId.Should().Be(_fixture.BobUserId);
+        voucher!.MemberId.Should().Be(_fixture.BobMemberId);
         voucher.TransferLockId.Should().BeNull();
         voucher.TransferLockedAt.Should().BeNull();
 
@@ -181,7 +181,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -190,7 +190,7 @@ public class VoucherTransferServiceAcceptanceTests
         // Act
         var rejectResult = await _fixture.TransferService.RejectAsync(
             initiateResult.TransferId!.Value,
-            _fixture.BobUserId,
+            _fixture.BobMemberId,
             reason: "Changed my mind");
 
         // Assert
@@ -199,7 +199,7 @@ public class VoucherTransferServiceAcceptanceTests
 
         var voucher = await _fixture.Context.VoucherPlanDetails.FindAsync(_fixture.AliceVoucherId);
         await _fixture.Context.Entry(voucher!).ReloadAsync();
-        voucher!.MemberId.Should().Be(_fixture.AliceUserId); // ownership unchanged
+        voucher!.MemberId.Should().Be(_fixture.AliceMemberId); // ownership unchanged
         voucher.TransferLockId.Should().BeNull();
         voucher.TransferLockedAt.Should().BeNull();
 
@@ -216,7 +216,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -225,7 +225,7 @@ public class VoucherTransferServiceAcceptanceTests
         // Act - Alice tries to accept her own transfer
         var acceptResult = await _fixture.TransferService.AcceptAsync(
             initiateResult.TransferId!.Value,
-            _fixture.AliceUserId);
+            _fixture.AliceMemberId);
 
         // Assert
         acceptResult.Success.Should().BeFalse();
@@ -239,18 +239,18 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
             note: "Accept me");
 
-        await _fixture.TransferService.AcceptAsync(initiateResult.TransferId!.Value, _fixture.BobUserId);
+        await _fixture.TransferService.AcceptAsync(initiateResult.TransferId!.Value, _fixture.BobMemberId);
 
         // Act - second accept
         var acceptResult = await _fixture.TransferService.AcceptAsync(
             initiateResult.TransferId.Value,
-            _fixture.BobUserId);
+            _fixture.BobMemberId);
 
         // Assert
         acceptResult.Success.Should().BeFalse();
@@ -268,7 +268,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -277,7 +277,7 @@ public class VoucherTransferServiceAcceptanceTests
         // Act
         var cancelResult = await _fixture.TransferService.CancelAsync(
             initiateResult.TransferId!.Value,
-            _fixture.AliceUserId);
+            _fixture.AliceMemberId);
 
         // Assert
         cancelResult.Success.Should().BeTrue();
@@ -285,7 +285,7 @@ public class VoucherTransferServiceAcceptanceTests
 
         var voucher = await _fixture.Context.VoucherPlanDetails.FindAsync(_fixture.AliceVoucherId);
         await _fixture.Context.Entry(voucher!).ReloadAsync();
-        voucher!.MemberId.Should().Be(_fixture.AliceUserId);
+        voucher!.MemberId.Should().Be(_fixture.AliceMemberId);
         voucher.TransferLockId.Should().BeNull();
 
         var transfer = await _fixture.Context.VoucherTransfers.FindAsync(initiateResult.TransferId.Value);
@@ -300,7 +300,7 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         var initiateResult = await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
@@ -309,7 +309,7 @@ public class VoucherTransferServiceAcceptanceTests
         // Act - Bob tries to cancel Alice's transfer
         var cancelResult = await _fixture.TransferService.CancelAsync(
             initiateResult.TransferId!.Value,
-            _fixture.BobUserId);
+            _fixture.BobMemberId);
 
         // Assert
         cancelResult.Success.Should().BeFalse();
@@ -323,18 +323,18 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
             note: "Inbox test");
 
         // Act
-        var inbox = await _fixture.TransferService.GetInboxAsync(_fixture.BobUserId);
+        var inbox = await _fixture.TransferService.GetInboxAsync(_fixture.BobMemberId);
 
         // Assert
         inbox.Should().ContainSingle();
-        inbox[0].SenderId.Should().Be(_fixture.AliceUserId);
+        inbox[0].SenderId.Should().Be(_fixture.AliceMemberId);
         inbox[0].Status.Should().Be(VoucherTransferStatus.PendingAcceptance);
     }
 
@@ -345,18 +345,18 @@ public class VoucherTransferServiceAcceptanceTests
     {
         // Arrange
         await _fixture.TransferService.InitiateAsync(
-            _fixture.AliceUserId,
+            _fixture.AliceMemberId,
             _fixture.AliceVoucherId,
             recipientPhone: "0909222222",
             recipientMemberId: null,
             note: "Outbox test");
 
         // Act
-        var outbox = await _fixture.TransferService.GetOutboxAsync(_fixture.AliceUserId);
+        var outbox = await _fixture.TransferService.GetOutboxAsync(_fixture.AliceMemberId);
 
         // Assert
         outbox.Should().ContainSingle();
-        outbox[0].RecipientId.Should().Be(_fixture.BobUserId);
+        outbox[0].RecipientId.Should().Be(_fixture.BobMemberId);
         outbox[0].Status.Should().Be(VoucherTransferStatus.PendingAcceptance);
     }
 

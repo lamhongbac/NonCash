@@ -61,6 +61,29 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<UserResponse>> UpdateUser(Guid id, UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<UserRole>(request.Role, true, out var role))
+        {
+            return BadRequest(new { error = $"Invalid role '{request.Role}'. Valid roles: Admin, BrandManager, Planner, Approver" });
+        }
+
+        try
+        {
+            var user = await _userService.UpdateAsync(id, request.FullName, role, request.BrandId, request.Password, cancellationToken);
+            return Ok(MapToResponse(user));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
     [HttpPut("{id:guid}/lock")]
     public async Task<ActionResult<UserResponse>> LockUser(Guid id, CancellationToken cancellationToken)
     {

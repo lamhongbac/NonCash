@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "XctKmDUlRHg=",
+  "dgSpecHash": "hhVjDpklx5Q=",
   "success": true,
   "projectFilePath": "C:\\MSA\\Sources\\NonCashSol\\src\\NonCash.Shared\\NonCash.Shared.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\9.0.16\\microsoft.windowsdesktop.app.ref.9.0.16.nupkg.sha512",
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.netcore.app.ref\\9.0.16\\microsoft.netcore.app.ref.9.0.16.nupkg.sha512",
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\9.0.16\\microsoft.aspnetcore.app.ref.9.0.16.nupkg.sha512"
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.netcore.app.ref\\9.0.17\\microsoft.netcore.app.ref.9.0.17.nupkg.sha512",
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\9.0.17\\microsoft.windowsdesktop.app.ref.9.0.17.nupkg.sha512",
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\9.0.17\\microsoft.aspnetcore.app.ref.9.0.17.nupkg.sha512"
   ],
   "logs": []
 }

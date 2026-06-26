@@ -165,7 +165,7 @@
           "Microsoft.Extensions.FileSystemGlobbing.Reference": "9.0.0.0",
           "Microsoft.Extensions.Hosting.Abstractions.Reference": "9.0.0.0",
           "Microsoft.Extensions.Hosting.Reference": "9.0.0.0",
-          "Microsoft.Extensions.Http": "9.0.0.0",
+          "Microsoft.Extensions.Http.Reference": "9.0.0.0",
           "Microsoft.Extensions.Identity.Core": "9.0.0.0",
           "Microsoft.Extensions.Identity.Stores": "9.0.0.0",
           "Microsoft.Extensions.Localization.Abstractions.Reference": "9.0.0.0",
@@ -917,6 +917,22 @@
         },
         "runtime": {
           "lib/net9.0/Microsoft.Extensions.Hosting.Abstractions.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.425.16305"
+          }
+        }
+      },
+      "Microsoft.Extensions.Http/9.0.4": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "9.0.4",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "9.0.4",
+          "Microsoft.Extensions.Diagnostics": "9.0.4",
+          "Microsoft.Extensions.Logging": "9.0.4",
+          "Microsoft.Extensions.Logging.Abstractions": "9.0.4",
+          "Microsoft.Extensions.Options": "9.0.4"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.Extensions.Http.dll": {
             "assemblyVersion": "9.0.0.0",
             "fileVersion": "9.0.425.16305"
           }
@@ -1838,6 +1854,7 @@
       "NonCash.Infrastructure/1.0.0": {
         "dependencies": {
           "CsvHelper": "33.0.1",
+          "Microsoft.Extensions.Http": "9.0.4",
           "NonCash.Core": "1.0.0",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "9.0.4"
         },
@@ -2569,7 +2586,7 @@
         },
         "compileOnly": true
       },
-      "Microsoft.Extensions.Http/9.0.0.0": {
+      "Microsoft.Extensions.Http.Reference/9.0.0.0": {
         "compile": {
           "Microsoft.Extensions.Http.dll": {}
         },
@@ -4027,6 +4044,13 @@
       "path": "microsoft.extensions.hosting.abstractions/9.0.4",
       "hashPath": "microsoft.extensions.hosting.abstractions.9.0.4.nupkg.sha512"
     },
+    "Microsoft.Extensions.Http/9.0.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ezelU6HJgmq4862YoWuEbHGSV+JnfnonTSbNSJVh6n6wDehyiJn4hBtcK7rGbf2KO3QeSvK5y8E7uzn1oaRH5w==",
+      "path": "microsoft.extensions.http/9.0.4",
+      "hashPath": "microsoft.extensions.http.9.0.4.nupkg.sha512"
+    },
     "Microsoft.Extensions.Localization/9.0.1": {
       "type": "package",
       "serviceable": true,
@@ -4928,7 +4952,7 @@
       "serviceable": false,
       "sha512": ""
     },
-    "Microsoft.Extensions.Http/9.0.0.0": {
+    "Microsoft.Extensions.Http.Reference/9.0.0.0": {
       "type": "referenceassembly",
       "serviceable": false,
       "sha512": ""

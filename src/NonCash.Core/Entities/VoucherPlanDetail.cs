@@ -28,4 +28,5 @@ public class VoucherPlanDetail : BaseEntity
 
     // Navigation properties
     public VoucherPlanHeader? Parent { get; set; }
+    public MemberAccount? Member { get; set; }
 }

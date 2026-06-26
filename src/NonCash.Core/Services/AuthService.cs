@@ -6,11 +6,16 @@ namespace NonCash.Core.Services;
 public class AuthService : IAuthService
 {
     private readonly IUserAccountRepository _userRepository;
+    private readonly IMemberAccountRepository _memberRepository;
     private readonly IJwtTokenService _jwtTokenService;
 
-    public AuthService(IUserAccountRepository userRepository, IJwtTokenService jwtTokenService)
+    public AuthService(
+        IUserAccountRepository userRepository,
+        IMemberAccountRepository memberRepository,
+        IJwtTokenService jwtTokenService)
     {
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+        _memberRepository = memberRepository ?? throw new ArgumentNullException(nameof(memberRepository));
         _jwtTokenService = jwtTokenService ?? throw new ArgumentNullException(nameof(jwtTokenService));
     }
 
@@ -36,6 +41,30 @@ public class AuthService : IAuthService
         var expiresAt = _jwtTokenService.GetTokenExpiry();
 
         return new AuthResult(true, token, expiresAt, user);
+    }
+
+    public async Task<MemberAuthResult> LoginMemberAsync(string username, string password, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            return new MemberAuthResult(false, ErrorMessage: "Username and password are required.");
+
+        var member = await _memberRepository.GetByUsernameAsync(username, cancellationToken);
+        if (member == null)
+            return new MemberAuthResult(false, ErrorMessage: "Invalid username or password.");
+
+        if (member.Status == MemberAccountStatus.PendingActivation)
+            return new MemberAuthResult(false, ErrorMessage: "Account is pending activation.");
+
+        if (member.Status == MemberAccountStatus.Locked)
+            return new MemberAuthResult(false, ErrorMessage: "Account is locked.");
+
+        if (!VerifyPassword(password, member.PasswordHash))
+            return new MemberAuthResult(false, ErrorMessage: "Invalid username or password.");
+
+        var token = _jwtTokenService.GenerateToken(member);
+        var expiresAt = _jwtTokenService.GetTokenExpiry();
+
+        return new MemberAuthResult(true, token, expiresAt, member);
     }
 
     public string HashPassword(string password)

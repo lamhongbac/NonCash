@@ -9,18 +9,18 @@ public class VoucherTransferService : IVoucherTransferService
 
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
     private readonly ICustomerRepository _customerRepository;
-    private readonly IUserAccountRepository _userAccountRepository;
+    private readonly IMemberAccountRepository _memberRepository;
     private readonly IVoucherTransferRepository _transferRepository;
 
     public VoucherTransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
-        IUserAccountRepository userAccountRepository,
+        IMemberAccountRepository memberRepository,
         IVoucherTransferRepository transferRepository)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
-        _userAccountRepository = userAccountRepository;
+        _memberRepository = memberRepository;
         _transferRepository = transferRepository;
     }
 
@@ -164,12 +164,12 @@ public class VoucherTransferService : IVoucherTransferService
     }
 
     /// <summary>
-    /// Resolves the recipient to a UserAccount. The transfer feature uses
-    /// UserAccount.Id for both SenderId and RecipientId (JWT subject).
-    /// If the recipient is found by phone but has no user account, a placeholder
-    /// user account is created and linked to the customer profile.
+    /// Resolves the recipient to a MemberAccount. The transfer feature uses
+    /// MemberAccount.Id for both SenderId and RecipientId (JWT subject).
+    /// If the recipient is found by phone but has no member account, a placeholder
+    /// member account is created and linked to the customer profile.
     /// </summary>
-    private async Task<UserAccount?> ResolveRecipientAsync(
+    private async Task<MemberAccount?> ResolveRecipientAsync(
         string? recipientPhone,
         string? recipientMemberId,
         CancellationToken cancellationToken)
@@ -181,50 +181,49 @@ public class VoucherTransferService : IVoucherTransferService
                 return null;
 
             var customer = await _customerRepository.GetByPhoneNumberAsync(normalized, cancellationToken);
-            if (customer != null)
+            if (customer == null)
             {
-                var existingUser = await _userAccountRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
-                if (existingUser != null)
-                    return existingUser;
+                // Create placeholder customer + member account
+                var placeholderCustomer = new Customer
+                {
+                    PhoneNumber = normalized,
+                    FullName = normalized,
+                    Status = CustomerStatus.Active
+                };
+                await _customerRepository.AddAsync(placeholderCustomer, cancellationToken);
+                await _customerRepository.SaveChangesAsync(cancellationToken);
 
-                // Create placeholder user account linked to existing customer
-                var placeholderUser = new UserAccount
+                var newMember = new MemberAccount
                 {
                     Username = normalized,
                     PasswordHash = string.Empty, // Not usable for login until registered
-                    FullName = customer.FullName,
-                    CustomerId = customer.Id,
-                    Role = UserRole.BrandManager,
-                    Status = UserStatus.Active
+                    FullName = normalized,
+                    CustomerId = placeholderCustomer.Id,
+                    Status = MemberAccountStatus.Active
                 };
-                return await _userAccountRepository.AddAsync(placeholderUser, cancellationToken);
+                return await _memberRepository.AddAsync(newMember, cancellationToken);
             }
 
-            // No customer yet - create placeholder customer + user account
-            var placeholderCustomer = new Customer
-            {
-                PhoneNumber = normalized,
-                FullName = normalized,
-                Status = CustomerStatus.Active
-            };
-            await _customerRepository.AddAsync(placeholderCustomer, cancellationToken);
+            var existingMember = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
+            if (existingMember != null)
+                return existingMember;
 
-            var newUser = new UserAccount
+            // Create placeholder member account linked to existing customer
+            var placeholderMember = new MemberAccount
             {
                 Username = normalized,
-                PasswordHash = string.Empty,
-                FullName = normalized,
-                CustomerId = placeholderCustomer.Id,
-                Role = UserRole.BrandManager,
-                Status = UserStatus.Active
+                PasswordHash = string.Empty, // Not usable for login until registered
+                FullName = customer.FullName,
+                CustomerId = customer.Id,
+                Status = MemberAccountStatus.Active
             };
-            return await _userAccountRepository.AddAsync(newUser, cancellationToken);
+            return await _memberRepository.AddAsync(placeholderMember, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(recipientMemberId)
             && Guid.TryParse(recipientMemberId, out var memberId))
         {
-            return await _userAccountRepository.GetByIdAsync(memberId, cancellationToken);
+            return await _memberRepository.GetByIdAsync(memberId, cancellationToken);
         }
 
         return null;

@@ -24,6 +24,7 @@ services.AddScoped<IBrandRepository, BrandRepository>();
 services.AddScoped<IOutletRepository, OutletRepository>();
 services.AddScoped<ICustomerRepository, CustomerRepository>();
 services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
 services.AddScoped<IAuthService, AuthService>();
 services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
@@ -133,58 +134,81 @@ foreach (var (id, phone, name, email) in members)
 await context.SaveChangesAsync();
 
 // =============================================================================
-// 4. Create User Accounts for Members
+// 4. Create Member Accounts for Customers
 // =============================================================================
-Console.WriteLine("Creating user accounts...");
+Console.WriteLine("Creating member accounts...");
 const string testPassword = "Test@123";
 var passwordHash = authService.HashPassword(testPassword);
 
-var aliceUserId = Guid.Parse("d0000000-0000-0000-0000-000000000001");
-var bobUserId = Guid.Parse("d0000000-0000-0000-0000-000000000002");
+var aliceMemberId = Guid.Parse("d0000000-0000-0000-0000-000000000001");
+var bobMemberId = Guid.Parse("d0000000-0000-0000-0000-000000000002");
 
-var users = new[]
+var memberAccounts = new[]
 {
-    (aliceUserId, "alice", "Alice Sender", aliceId),
-    (bobUserId, "bob", "Bob Receiver", bobId)
+    (aliceMemberId, "alice", "Alice Sender", aliceId),
+    (bobMemberId, "bob", "Bob Receiver", bobId)
 };
 
-foreach (var (id, username, fullName, customerId) in users)
+foreach (var (id, username, fullName, customerId) in memberAccounts)
 {
-    var user = await context.UserAccounts.FindAsync(id);
-    if (user == null)
+    var member = await context.MemberAccounts.FindAsync(id);
+    if (member == null)
     {
-        user = new UserAccount
+        member = new MemberAccount
         {
             Id = id,
-            BrandId = brandId,
             CustomerId = customerId,
             Username = username,
             PasswordHash = passwordHash,
             FullName = fullName,
-            Role = UserRole.BrandManager,
-            Status = UserStatus.Active
+            Status = MemberAccountStatus.Active
         };
-        context.UserAccounts.Add(user);
-        Console.WriteLine($"  ✓ Created: {username} (password: {testPassword})");
-    }
-    else if (user.CustomerId != customerId)
-    {
-        user.CustomerId = customerId;
-        context.UserAccounts.Update(user);
-        Console.WriteLine($"  ✓ Updated: {username} linked to customer {customerId}");
+        context.MemberAccounts.Add(member);
+        Console.WriteLine($"  ✓ Created member account: {username} (password: {testPassword})");
     }
     else
     {
-        Console.WriteLine($"  - {username} already correct, skipping");
+        member.CustomerId = customerId;
+        member.Username = username;
+        member.FullName = fullName;
+        context.MemberAccounts.Update(member);
+        Console.WriteLine($"  - {username} already exists, updated link");
     }
 }
 await context.SaveChangesAsync();
 
 // =============================================================================
-// 5. Create Approved Voucher Plan
+// 5. Create a Staff User Account (plan creator)
+// =============================================================================
+Console.WriteLine("Creating staff user account...");
+var staffUserId = Guid.Parse("e0000000-0000-0000-0000-000000000001");
+var staffUser = await context.UserAccounts.FindAsync(staffUserId);
+if (staffUser == null)
+{
+    staffUser = new UserAccount
+    {
+        Id = staffUserId,
+        BrandId = brandId,
+        Username = "brandmanager",
+        PasswordHash = passwordHash,
+        FullName = "Brand Manager",
+        Role = UserRole.BrandManager,
+        Status = UserStatus.Active
+    };
+    context.UserAccounts.Add(staffUser);
+    await context.SaveChangesAsync();
+    Console.WriteLine($"  ✓ Created staff user: brandmanager (password: {testPassword})");
+}
+else
+{
+    Console.WriteLine("  - Staff user already exists, skipping");
+}
+
+// =============================================================================
+// 6. Create Approved Voucher Plan
 // =============================================================================
 Console.WriteLine("Creating voucher plan...");
-var planId = Guid.Parse("e0000000-0000-0000-0000-000000000001");
+var planId = Guid.Parse("f0000000-0000-0000-0000-000000000001");
 var plan = await context.VoucherPlanHeaders.FindAsync(planId);
 if (plan == null)
 {
@@ -192,7 +216,7 @@ if (plan == null)
     {
         Id = planId,
         PlanDate = DateTime.UtcNow,
-        CreatorId = aliceUserId,
+        CreatorId = staffUserId,
         BrandId = brandId,
         VoucherType = VoucherType.Complimentary,
         ValueType = VoucherValueType.Value,
@@ -219,20 +243,40 @@ else
 }
 
 // =============================================================================
-// 6. Create Vouchers (distributed to users)
+// 7. Create Vouchers (distributed to member accounts)
 // =============================================================================
 Console.WriteLine("Creating vouchers...");
 
+// Compute the next available test serial number so re-runs do not collide
+// with serials already in the database.
+var serialPrefix = "VC-TEST-2026-";
+var existingSerials = await context.VoucherPlanDetails
+    .Where(v => v.SerialNo.StartsWith(serialPrefix))
+    .Select(v => v.SerialNo)
+    .ToListAsync();
+
+int nextSerialNumber = 1;
+foreach (var serial in existingSerials)
+{
+    if (serial.Length > serialPrefix.Length &&
+        int.TryParse(serial.Substring(serialPrefix.Length), out var parsedNumber) &&
+        parsedNumber >= nextSerialNumber)
+    {
+        nextSerialNumber = parsedNumber + 1;
+    }
+}
+
 var vouchers = new[]
 {
-    // MemberId is UserAccount.Id (from JWT)
-    (Guid.Parse("f0000000-0000-0000-0000-000000000001"), "VC-TEST-2026-00000001", aliceUserId, "Alice"),
-    (Guid.Parse("f0000000-0000-0000-0000-000000000002"), "VC-TEST-2026-00000002", aliceUserId, "Alice"),
-    (Guid.Parse("f0000000-0000-0000-0000-000000000003"), "VC-TEST-2026-00000003", bobUserId, "Bob")
+    // MemberId is MemberAccount.Id (from JWT)
+    (Guid.Parse("f1000000-0000-0000-0000-000000000001"), aliceMemberId, "Alice"),
+    (Guid.Parse("f1000000-0000-0000-0000-000000000002"), aliceMemberId, "Alice"),
+    (Guid.Parse("f1000000-0000-0000-0000-000000000003"), bobMemberId, "Bob")
 };
 
-foreach (var (id, serialNo, memberId, ownerName) in vouchers)
+foreach (var (id, memberId, ownerName) in vouchers)
 {
+    var serialNo = $"{serialPrefix}{nextSerialNumber++.ToString("D8")}";
     var detail = await context.VoucherPlanDetails.FindAsync(id);
     if (detail == null)
     {
@@ -269,17 +313,19 @@ Console.WriteLine($"\nBrands:             {await context.Brands.CountAsync()}");
 Console.WriteLine($"Outlets:            {await context.Outlets.CountAsync()}");
 Console.WriteLine($"Customers:          {await context.Customers.CountAsync()}");
 Console.WriteLine($"UserAccounts:       {await context.UserAccounts.CountAsync()}");
+Console.WriteLine($"MemberAccounts:     {await context.MemberAccounts.CountAsync()}");
 Console.WriteLine($"VoucherPlanHeaders: {await context.VoucherPlanHeaders.CountAsync()}");
 Console.WriteLine($"VoucherPlanDetails: {await context.VoucherPlanDetails.CountAsync()}");
 
 Console.WriteLine("\n=== Test Credentials ===");
-Console.WriteLine("Alice: username=alice, password=Test@123 (has 2 vouchers)");
-Console.WriteLine("Bob:   username=bob,   password=Test@123 (has 1 voucher)");
-Console.WriteLine("Admin: username=admin, password=Admin@123");
+Console.WriteLine("Alice member: username=alice, password=Test@123 (has 2 vouchers)");
+Console.WriteLine("Bob member:   username=bob,   password=Test@123 (has 1 voucher)");
+Console.WriteLine("Staff:        username=brandmanager, password=Test@123");
+Console.WriteLine("Admin:        username=admin, password=Admin@123");
 
 Console.WriteLine("\n=== Voucher Summary ===");
-var aliceVouchers = await context.VoucherPlanDetails.CountAsync(v => v.MemberId == aliceUserId);
-var bobVouchers = await context.VoucherPlanDetails.CountAsync(v => v.MemberId == bobUserId);
+var aliceVouchers = await context.VoucherPlanDetails.CountAsync(v => v.MemberId == aliceMemberId);
+var bobVouchers = await context.VoucherPlanDetails.CountAsync(v => v.MemberId == bobMemberId);
 Console.WriteLine($"Alice owns: {aliceVouchers} voucher(s)");
 Console.WriteLine($"Bob owns:   {bobVouchers} voucher(s)");
 
@@ -289,5 +335,6 @@ Console.WriteLine("\nDone! You can now test the transfer flow.");
 class StubJwtTokenService : IJwtTokenService
 {
     public string GenerateToken(UserAccount user) => "stub-token";
+    public string GenerateToken(MemberAccount member) => "stub-token";
     public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(8);
 }

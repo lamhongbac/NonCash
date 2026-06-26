@@ -29,5 +29,10 @@ public class VoucherPlanDetailConfiguration : IEntityTypeConfiguration<VoucherPl
             .WithMany()
             .HasForeignKey(v => v.ParentId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(v => v.Member)
+            .WithMany()
+            .HasForeignKey(v => v.MemberId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

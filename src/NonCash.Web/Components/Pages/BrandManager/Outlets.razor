@@ -1,8 +1,9 @@
-@page "/brand-manager/outlets"
+@page "/brandmanager/outlets"
 @attribute [StreamRendering]
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>Outlet Management</PageTitle>
 
@@ -126,7 +127,14 @@ else if (_outlets is not null)
             if (!string.IsNullOrWhiteSpace(_searchName)) query += $"&name={Uri.EscapeDataString(_searchName)}";
             if (!string.IsNullOrWhiteSpace(_searchStatus)) query += $"&status={Uri.EscapeDataString(_searchStatus)}";
 
-            var result = await Http.GetFromJsonAsync<PagedResult<OutletDto>>("api/v1/outlets" + query);
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/outlets" + query);
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<PagedResult<OutletDto>>();
             if (result is not null)
             {
                 _outlets = result.Items.ToList();
@@ -183,7 +191,11 @@ else if (_outlets is not null)
             if (_isEdit)
             {
                 var request = new { _model.Name, _model.Address };
-                var response = await Http.PutAsJsonAsync($"api/v1/outlets/{_model.Id}", request);
+                var token = await AuthState.GetTokenAsync();
+                var httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/outlets/{_model.Id}") { Content = JsonContent.Create(request) };
+                if (!string.IsNullOrEmpty(token))
+                    httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                var response = await Http.SendAsync(httpRequest);
                 if (response.IsSuccessStatusCode)
                 {
                     Snackbar.Add("Outlet updated successfully.", Severity.Success);
@@ -198,7 +210,11 @@ else if (_outlets is not null)
             else
             {
                 var request = new { _model.Name, _model.Address };
-                var response = await Http.PostAsJsonAsync("api/v1/outlets", request);
+                var token = await AuthState.GetTokenAsync();
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/outlets") { Content = JsonContent.Create(request) };
+                if (!string.IsNullOrEmpty(token))
+                    httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                var response = await Http.SendAsync(httpRequest);
                 if (response.IsSuccessStatusCode)
                 {
                     Snackbar.Add("Outlet created successfully.", Severity.Success);
@@ -235,7 +251,11 @@ else if (_outlets is not null)
 
         try
         {
-            var response = await Http.PutAsync($"api/v1/outlets/{_outletToClose.Id}/close", null);
+            var token = await AuthState.GetTokenAsync();
+            var httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/outlets/{_outletToClose.Id}/close");
+            if (!string.IsNullOrEmpty(token))
+                httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await Http.SendAsync(httpRequest);
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add("Outlet closed successfully.", Severity.Success);

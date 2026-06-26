@@ -68,6 +68,33 @@ public class UserService
         return user;
     }
 
+    public async Task<UserAccount> UpdateAsync(Guid id, string fullName, UserRole role, Guid? brandId, string? password = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new ArgumentException("Full name is required.", nameof(fullName));
+
+        if (role != UserRole.Admin && brandId == null)
+            throw new ArgumentException("Non-admin users must be assigned to a brand.", nameof(brandId));
+
+        var user = await _userRepository.GetByIdAsync(id, cancellationToken);
+        if (user == null)
+            throw new KeyNotFoundException($"User with ID '{id}' was not found.");
+
+        user.FullName = fullName.Trim();
+        user.Role = role;
+        user.BrandId = role == UserRole.Admin ? null : brandId;
+
+        if (!string.IsNullOrWhiteSpace(password))
+        {
+            if (password.Length < 8)
+                throw new ArgumentException("Password must be at least 8 characters.", nameof(password));
+            user.PasswordHash = _authService.HashPassword(password);
+        }
+
+        await _userRepository.SaveChangesAsync(cancellationToken);
+        return user;
+    }
+
     public async Task<IEnumerable<UserAccount>> ListAsync(Guid? brandId, CancellationToken cancellationToken = default)
     {
         if (brandId.HasValue)

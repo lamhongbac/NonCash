@@ -17,14 +17,6 @@ public class UserAccountConfiguration : IEntityTypeConfiguration<UserAccount>
             .HasForeignKey(u => u.BrandId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Link to customer profile (for members)
-        builder.Property(u => u.CustomerId);
-        builder.HasIndex(u => u.CustomerId);
-        builder.HasOne(u => u.Customer)
-            .WithMany()
-            .HasForeignKey(u => u.CustomerId)
-            .OnDelete(DeleteBehavior.Restrict);
-
         builder.Property(u => u.Username)
             .IsRequired()
             .HasMaxLength(100);

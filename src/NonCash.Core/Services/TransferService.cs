@@ -7,15 +7,18 @@ public class TransferService : ITransferService
 {
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
+        IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
+        _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
     }
 
@@ -61,7 +64,7 @@ public class TransferService : ITransferService
             .ToList();
 
         var skipped = new List<TransferSkipped>();
-        var transfers = new List<(VoucherPlanDetail Detail, Guid RecipientId, string Phone)>();
+        var transfers = new List<(VoucherPlanDetail Detail, Guid RecipientMemberId, string Phone)>();
 
         for (var i = 0; i < loaded.Count; i++)
         {
@@ -74,32 +77,27 @@ public class TransferService : ITransferService
                 continue;
             }
 
-            var existing = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
-            if (existing == null)
+            var member = await ResolveOrCreateMemberAccountByPhoneAsync(phone, cancellationToken);
+            if (member == null)
             {
-                // Create new customer (auto-onboarded recipient)
-                var newCustomer = new Customer
-                {
-                    PhoneNumber = phone,
-                    FullName = phone,
-                    Status = CustomerStatus.Active
-                };
-                await _customerRepository.AddAsync(newCustomer, cancellationToken);
-                transfers.Add((voucher, newCustomer.Id, phone));
+                skipped.Add(new TransferSkipped(phone, voucher.Id, "RecipientNotFound"));
+                continue;
             }
-            else if (existing.Status == CustomerStatus.Blacklisted)
+
+            var customer = await _customerRepository.GetByIdAsync(member.CustomerId, cancellationToken);
+            if (customer == null || customer.Status == CustomerStatus.Blacklisted)
             {
-                // AC4: skip blacklisted recipient
                 skipped.Add(new TransferSkipped(phone, voucher.Id, "Blacklisted"));
+                continue;
             }
-            else if (existing.Id == fromMemberId)
+
+            if (member.Id == fromMemberId)
             {
                 skipped.Add(new TransferSkipped(phone, voucher.Id, "SelfTransferNotAllowed"));
+                continue;
             }
-            else
-            {
-                transfers.Add((voucher, existing.Id, phone));
-            }
+
+            transfers.Add((voucher, member.Id, phone));
         }
 
         if (transfers.Count == 0)
@@ -113,15 +111,15 @@ public class TransferService : ITransferService
 
         // AC1 + AC2: Atomic update (single SaveChangesAsync wraps all changes in one tx)
         var now = DateTime.UtcNow;
-        foreach (var (detail, recipientId, _) in transfers)
+        foreach (var (detail, recipientMemberId, _) in transfers)
         {
-            detail.MemberId = recipientId;
+            detail.MemberId = recipientMemberId;
             _detailRepository.Update(detail);
 
             var distribution = new VoucherDistribution
             {
                 VoucherId = detail.Id,
-                MemberId = recipientId,
+                MemberId = recipientMemberId,
                 Method = DistributionMethod.Transfer,
                 DistributionDate = now
             };
@@ -138,10 +136,6 @@ public class TransferService : ITransferService
     }
 
     // AC5: outgoing transfer history — distributions where Method=Transfer for vouchers ever owned by fromMemberId
-    // Since VoucherDistribution stores recipient (MemberId), we infer outgoing by joining with detail history.
-    // Simplification for MVP: return all Transfer distributions whose voucher's previous owner was fromMemberId.
-    // Without a "from_member_id" column, we approximate: list Transfer distributions where the original creator/sender context is captured externally.
-    // For MVP we surface ALL transfer-method distributions for vouchers currently or formerly assigned, filtered later by UI scope.
     public async Task<IReadOnlyList<TransferHistoryItem>> GetOutgoingHistoryAsync(
         Guid fromMemberId,
         CancellationToken cancellationToken = default)
@@ -178,14 +172,48 @@ public class TransferService : ITransferService
         foreach (var d in outgoing)
         {
             var detail = await _detailRepository.GetByIdAsync(d.VoucherId, cancellationToken);
-            var recipient = await _customerRepository.GetByIdAsync(d.MemberId, cancellationToken);
+            var recipient = await _memberRepository.GetByIdAsync(d.MemberId, cancellationToken);
+            var recipientCustomer = recipient != null
+                ? await _customerRepository.GetByIdAsync(recipient.CustomerId, cancellationToken)
+                : null;
             result.Add(new TransferHistoryItem(
                 d.VoucherId,
                 detail?.SerialNo ?? string.Empty,
-                recipient?.PhoneNumber ?? string.Empty,
+                recipientCustomer?.PhoneNumber ?? string.Empty,
                 d.DistributionDate));
         }
 
         return result;
+    }
+
+    private async Task<MemberAccount?> ResolveOrCreateMemberAccountByPhoneAsync(string phone, CancellationToken cancellationToken)
+    {
+        var customer = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
+        if (customer == null)
+        {
+            // Auto-onboard new customer + placeholder member account
+            customer = new Customer
+            {
+                PhoneNumber = phone,
+                FullName = phone,
+                Status = CustomerStatus.Active
+            };
+            await _customerRepository.AddAsync(customer, cancellationToken);
+            await _customerRepository.SaveChangesAsync(cancellationToken);
+        }
+
+        var member = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
+        if (member != null)
+            return member;
+
+        var placeholder = new MemberAccount
+        {
+            CustomerId = customer.Id,
+            Username = phone,
+            PasswordHash = string.Empty, // Not usable for login until registered
+            FullName = customer.FullName,
+            Status = MemberAccountStatus.Active
+        };
+        return await _memberRepository.AddAsync(placeholder, cancellationToken);
     }
 }

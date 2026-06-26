@@ -153,18 +153,6 @@ D:\GIT PROJECT\NonCash\src\NonCash.API\bin\Debug\net9.0\zh-Hans\Microsoft.CodeAn
 D:\GIT PROJECT\NonCash\src\NonCash.API\bin\Debug\net9.0\zh-Hant\Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
 D:\GIT PROJECT\NonCash\src\NonCash.API\bin\Debug\net9.0\CsvHelper.dll
 D:\GIT PROJECT\NonCash\src\NonCash.API\bin\Debug\net9.0\BCrypt.Net-Next.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\refint\NonCash.API.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.pdb
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.csproj.AssemblyReference.cache
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\rpswa.dswa.cache.json
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.GeneratedMSBuildEditorConfig.editorconfig
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.AssemblyInfoInputs.cache
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.AssemblyInfo.cs
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.csproj.CoreCompileInputs.cache
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.MvcApplicationPartsAssemblyInfo.cs
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.MvcApplicationPartsAssemblyInfo.cache
-c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.sourcelink.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\appsettings.Development.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\appsettings.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\NonCash.API.staticwebassets.endpoints.json
@@ -297,6 +285,15 @@ c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\NonCash.Shared.dll
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\NonCash.Core.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\NonCash.Infrastructure.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\NonCash.Shared.pdb
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.csproj.AssemblyReference.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\rpswa.dswa.cache.json
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.GeneratedMSBuildEditorConfig.editorconfig
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.AssemblyInfoInputs.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.AssemblyInfo.cs
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.csproj.CoreCompileInputs.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.MvcApplicationPartsAssemblyInfo.cs
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.MvcApplicationPartsAssemblyInfo.cache
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.sourcelink.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\rjimswa.dswa.cache.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\rjsmrazor.dswa.cache.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\rjsmcshtml.dswa.cache.json
@@ -307,5 +304,13 @@ c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\staticwebassets.devel
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\staticwebassets.build.endpoints.json
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\swae.build.ex.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash..F59474C3.Up2Date
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\refint\NonCash.API.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\NonCash.API.genruntimeconfig.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.API\obj\Debug\net9.0\ref\NonCash.API.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\Microsoft.Extensions.Configuration.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\Microsoft.Extensions.Configuration.Binder.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\Microsoft.Extensions.Http.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.API\bin\Debug\net9.0\Microsoft.Extensions.Options.ConfigurationExtensions.dll

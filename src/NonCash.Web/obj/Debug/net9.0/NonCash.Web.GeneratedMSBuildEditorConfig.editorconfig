@@ -90,8 +90,20 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xMb2dpbi5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/MemberLogin.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNZW1iZXJMb2dpbi5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/MemberRegister.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNZW1iZXJSZWdpc3Rlci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Member/MyVouchers.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNZW1iZXJcTXlWb3VjaGVycy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Member/PaymentResult.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNZW1iZXJcUGF5bWVudFJlc3VsdC5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Member/Store.razor]
@@ -102,12 +114,20 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNZW1iZXJcVHJhbnNmZXJzLnJhem9y
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/POS/Redeem.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQT1NcUmVkZWVtLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Public/Register.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQdWJsaWNcUmVnaXN0ZXIucmF6b3I=
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Public/RegistrationStatus.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQdWJsaWNcUmVnaXN0cmF0aW9uU3RhdHVzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Public/Terms.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQdWJsaWNcVGVybXMucmF6b3I=
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/MSA/Sources/NonCashSol/src/NonCash.Web/Components/Pages/Weather.razor]

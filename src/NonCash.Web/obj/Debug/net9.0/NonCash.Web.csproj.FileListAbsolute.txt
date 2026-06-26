@@ -69,9 +69,6 @@ D:\GIT PROJECT\NonCash\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.genruntimeco
 D:\GIT PROJECT\NonCash\src\NonCash.Web\obj\Debug\net9.0\ref\NonCash.Web.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Web\bin\Debug\net9.0\CsvHelper.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Web\bin\Debug\net9.0\BCrypt.Net-Next.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\refint\NonCash.Web.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\appsettings.Development.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\appsettings.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\NonCash.Web.staticwebassets.runtime.json
@@ -132,7 +129,7 @@ c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\tzxjg6is5z
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\0wz98yz2xy-{0}-jolev99wdd-jolev99wdd.gz
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\o7k4cxtn0u-{0}-h82a7aihv0-h82a7aihv0.gz
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\7ledocq709-{0}-4kywy7iv6g-4kywy7iv6g.gz
-c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\s66tb37311-{0}-bgodqtanor-bgodqtanor.gz
+c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\s66tb37311-{0}-4f6mvttkwo-4f6mvttkwo.gz
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\z8iy114e3q-{0}-t1cqhe9u97-t1cqhe9u97.gz
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\gp5rh5zo6j-{0}-c2jlpeoesf-c2jlpeoesf.gz
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\compressed\6wxyitlvqk-{0}-sejl45xvog-sejl45xvog.gz
@@ -185,5 +182,14 @@ c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\staticwebassets.devel
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\staticwebassets.build.endpoints.json
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\swae.build.ex.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash..117A10D4.Up2Date
+c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\refint\NonCash.Web.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\NonCash.Web.genruntimeconfig.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Web\obj\Debug\net9.0\ref\NonCash.Web.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Configuration.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Configuration.Binder.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.Abstractions.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Http.dll
+C:\MSA\Sources\NonCashSol\src\NonCash.Web\bin\Debug\net9.0\Microsoft.Extensions.Options.ConfigurationExtensions.dll

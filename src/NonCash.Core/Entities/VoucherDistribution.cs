@@ -16,5 +16,5 @@ public class VoucherDistribution : BaseEntity
 
     // Navigation properties
     public VoucherPlanDetail? Voucher { get; set; }
-    public Customer? Member { get; set; }
+    public MemberAccount? Member { get; set; }
 }

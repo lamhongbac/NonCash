@@ -18,6 +18,7 @@ public class StoreController : ControllerBase
 
     // AC1: Catalog of approved + published gift vouchers
     [HttpGet("vouchers")]
+    [AllowAnonymous]
     public async Task<ActionResult<List<CatalogItemResponse>>> ListCatalog(CancellationToken cancellationToken)
     {
         var plans = await _purchaseService.ListCatalogAsync(cancellationToken);

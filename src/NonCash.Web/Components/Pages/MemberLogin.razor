@@ -1,0 +1,130 @@
+@page "/member-login"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Member Login</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">NonCash</MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Member Sign In</MudText>
+
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="_username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" FullWidth="true" Class="mb-4" />
+            <MudTextField @bind-Value="_password" Label="Password" Required="true" RequiredError="Password is required" Variant="Variant.Outlined" FullWidth="true" InputType="InputType.Password" Class="mb-4" />
+        </MudForm>
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">
+                @_errorMessage
+            </MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="HandleLogin" Disabled="_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Sign In
+        </MudButton>
+
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
+            Are you staff? <MudLink Href="/login">Staff Login</MudLink>
+        </MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+            Don't have an account? <MudLink Href="/member-register">Create a member account</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private string _username = "";
+    private string _password = "";
+    private bool _loading = false;
+    private string? _errorMessage = null;
+
+    private async Task HandleLogin()
+    {
+        _errorMessage = null;
+
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/v1/auth/member/login", new { Username = _username, Password = _password });
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<LoginResult>();
+                if (result != null)
+                {
+                    await AuthState.LoginAsync(
+                        result.Token,
+                        result.User?.FullName ?? _username,
+                        result.User?.Role ?? "Member",
+                        result.User?.BrandId,
+                        result.User?.UserId ?? Guid.Empty,
+                        result.User?.CustomerId);
+
+                    Snackbar.Add($"Welcome, {AuthState.FullName}!", Severity.Success);
+                    Navigation.NavigateTo("/store", forceLoad: true);
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.error switch
+                {
+                    "Account is pending activation." => "Your account is pending activation. Please contact support.",
+                    "Invalid username or password." => "Invalid username or password. Please try again.",
+                    _ => error?.error ?? "Invalid credentials."
+                };
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                _errorMessage = "Your account has been locked. Please contact an administrator.";
+            }
+            else
+            {
+                _errorMessage = "An unexpected error occurred. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Network error: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private class LoginResult
+    {
+        public string Token { get; set; } = "";
+        public DateTime ExpiresAt { get; set; }
+        public UserInfo? User { get; set; }
+    }
+
+    private class UserInfo
+    {
+        public Guid UserId { get; set; }
+        public string FullName { get; set; } = "";
+        public string Role { get; set; } = "";
+        public Guid? BrandId { get; set; }
+        public Guid? CustomerId { get; set; }
+    }
+
+    private class ErrorResponse
+    {
+        public string? error { get; set; }
+    }
+}

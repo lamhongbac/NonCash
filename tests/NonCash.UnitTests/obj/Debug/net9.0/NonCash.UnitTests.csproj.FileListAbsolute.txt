@@ -128,13 +128,10 @@ D:\GIT PROJECT\NonCash\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTest
 D:\GIT PROJECT\NonCash\tests\NonCash.UnitTests\obj\Debug\net9.0\ref\NonCash.UnitTests.dll
 D:\GIT PROJECT\NonCash\tests\NonCash.UnitTests\bin\Debug\net9.0\CsvHelper.dll
 D:\GIT PROJECT\NonCash\tests\NonCash.UnitTests\bin\Debug\net9.0\BCrypt.Net-Next.dll
-c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.dll
-c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\refint\NonCash.UnitTests.dll
-c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.pdb
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\.msCoverageSourceRootsMapping_NonCash.UnitTests
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\CoverletSourceRootsMapping_NonCash.UnitTests
-c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\testhost.exe
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\testhost.dll
+c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\testhost.exe
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\xunit.runner.visualstudio.testadapter.dll
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\xunit.runner.reporters.netcoreapp10.dll
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\xunit.runner.utility.netcoreapp10.dll
@@ -256,5 +253,14 @@ c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitT
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.csproj.CoreCompileInputs.cache
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.sourcelink.json
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash..9BC34AFA.Up2Date
+c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.dll
+c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\refint\NonCash.UnitTests.dll
+c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.pdb
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\NonCash.UnitTests.genruntimeconfig.cache
 c:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\obj\Debug\net9.0\ref\NonCash.UnitTests.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Configuration.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Configuration.Binder.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Diagnostics.Abstractions.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Http.dll
+C:\MSA\Sources\NonCashSol\tests\NonCash.UnitTests\bin\Debug\net9.0\Microsoft.Extensions.Options.ConfigurationExtensions.dll

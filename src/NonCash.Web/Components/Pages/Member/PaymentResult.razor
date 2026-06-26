@@ -1,0 +1,117 @@
+@page "/payment-result"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Payment Result</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Payment Result</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+    <MudText>Waiting for payment confirmation...</MudText>
+}
+else if (_transaction == null)
+{
+    <MudAlert Severity="Severity.Warning">Unable to locate payment details.</MudAlert>
+}
+else if (_transaction.Status == "Success")
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4">
+        Payment successful! Your vouchers are ready.
+    </MudAlert>
+    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GoToMyVouchers">View My Vouchers</MudButton>
+}
+else if (_transaction.Status == "Failed")
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        Payment failed. Please try again or contact support.
+    </MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="GoToStore">Back to Store</MudButton>
+}
+else if (_transaction.Status == "Cancelled")
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        Payment was cancelled.
+    </MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="GoToStore">Back to Store</MudButton>
+}
+else
+{
+    <MudProgressCircular Indeterminate="true" Class="ma-4" />
+    <MudText>Payment is still being processed. This page will update automatically.</MudText>
+}
+
+@code {
+    private bool _loading = true;
+    private PaymentTransaction? _transaction;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await PollStatusAsync();
+    }
+
+    private async Task PollStatusAsync()
+    {
+        var appTransId = GetQueryParam("appTransId");
+        if (string.IsNullOrWhiteSpace(appTransId))
+        {
+            _loading = false;
+            Snackbar.Add("Missing payment reference.", Severity.Warning);
+            return;
+        }
+
+        var token = await AuthState.GetTokenAsync();
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            try
+            {
+                var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"api/v1/payments/transactions/by-gateway/{Uri.EscapeDataString(appTransId)}");
+                if (!string.IsNullOrEmpty(token))
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var response = await Http.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    _transaction = await response.Content.ReadFromJsonAsync<PaymentTransaction>();
+                    if (_transaction?.Status is "Success" or "Failed" or "Cancelled")
+                    {
+                        _loading = false;
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Status check failed: {ex.Message}", Severity.Error);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+
+        _loading = false;
+    }
+
+    private string? GetQueryParam(string key)
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        return query[key];
+    }
+
+    private void GoToMyVouchers() => Navigation.NavigateTo("/my-vouchers");
+    private void GoToStore() => Navigation.NavigateTo("/store");
+
+    public class PaymentTransaction
+    {
+        public Guid Id { get; set; }
+        public Guid PurchaseOrderId { get; set; }
+        public string Status { get; set; } = "";
+        public decimal Amount { get; set; }
+        public string GatewayTransactionId { get; set; } = "";
+    }
+}

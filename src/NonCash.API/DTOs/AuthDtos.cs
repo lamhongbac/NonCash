@@ -12,7 +12,8 @@ public record UserDto(
     Guid UserId,
     string FullName,
     string Role,
-    Guid? BrandId
+    Guid? BrandId,
+    Guid? CustomerId
 );
 
 public record CreateUserRequest(
@@ -21,6 +22,13 @@ public record CreateUserRequest(
     string FullName,
     string Role,
     Guid? BrandId
+);
+
+public record UpdateUserRequest(
+    string FullName,
+    string Role,
+    Guid? BrandId,
+    string? Password
 );
 
 public record UserResponse(

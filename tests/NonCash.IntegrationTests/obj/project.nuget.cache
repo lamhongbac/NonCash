@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "3NQp/XmEQf0=",
+  "dgSpecHash": "fG5MKLUg0HY=",
   "success": true,
   "projectFilePath": "C:\\MSA\\Sources\\NonCashSol\\tests\\NonCash.IntegrationTests\\NonCash.IntegrationTests.csproj",
   "expectedPackageFiles": [
@@ -51,6 +51,7 @@
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.filesystemglobbing\\9.0.4\\microsoft.extensions.filesystemglobbing.9.0.4.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.hosting\\9.0.4\\microsoft.extensions.hosting.9.0.4.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.hosting.abstractions\\9.0.4\\microsoft.extensions.hosting.abstractions.9.0.4.nupkg.sha512",
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.http\\9.0.4\\microsoft.extensions.http.9.0.4.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.localization\\9.0.1\\microsoft.extensions.localization.9.0.1.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.localization.abstractions\\9.0.1\\microsoft.extensions.localization.abstractions.9.0.1.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\microsoft.extensions.logging\\9.0.4\\microsoft.extensions.logging.9.0.4.nupkg.sha512",
@@ -99,9 +100,9 @@
     "C:\\Users\\dev\\.nuget\\packages\\xunit.extensibility.core\\2.9.2\\xunit.extensibility.core.2.9.2.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\xunit.extensibility.execution\\2.9.2\\xunit.extensibility.execution.2.9.2.nupkg.sha512",
     "C:\\Users\\dev\\.nuget\\packages\\xunit.runner.visualstudio\\2.8.2\\xunit.runner.visualstudio.2.8.2.nupkg.sha512",
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\9.0.16\\microsoft.windowsdesktop.app.ref.9.0.16.nupkg.sha512",
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.netcore.app.ref\\9.0.16\\microsoft.netcore.app.ref.9.0.16.nupkg.sha512",
-    "C:\\Users\\dev\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\9.0.16\\microsoft.aspnetcore.app.ref.9.0.16.nupkg.sha512"
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\9.0.17\\microsoft.windowsdesktop.app.ref.9.0.17.nupkg.sha512",
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.netcore.app.ref\\9.0.17\\microsoft.netcore.app.ref.9.0.17.nupkg.sha512",
+    "C:\\Users\\dev\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\9.0.17\\microsoft.aspnetcore.app.ref.9.0.17.nupkg.sha512"
   ],
   "logs": []
 }

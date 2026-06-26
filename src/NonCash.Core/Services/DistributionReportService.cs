@@ -8,18 +8,18 @@ public class DistributionReportService : IDistributionReportService
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
-    private readonly ICustomerRepository _customerRepository;
+    private readonly IMemberAccountRepository _memberRepository;
 
     public DistributionReportService(
         IVoucherPlanRepository planRepository,
         IRepository<VoucherPlanDetail> detailRepository,
         IRepository<VoucherDistribution> distributionRepository,
-        ICustomerRepository customerRepository)
+        IMemberAccountRepository memberRepository)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
         _distributionRepository = distributionRepository;
-        _customerRepository = customerRepository;
+        _memberRepository = memberRepository;
     }
 
     public async Task<DistributionSummary> GetSummaryAsync(
@@ -134,13 +134,13 @@ public class DistributionReportService : IDistributionReportService
             .OrderByDescending(d => d.DistributionDate)
             .ToList();
 
-        // Resolve recipient info
+        // Resolve recipient info through MemberAccount.Customer
         var memberIds = distros.Select(d => d.MemberId).Distinct().ToList();
-        var memberMap = new Dictionary<Guid, Customer>();
+        var memberMap = new Dictionary<Guid, MemberAccount>();
         foreach (var mid in memberIds)
         {
-            var c = await _customerRepository.GetByIdAsync(mid, cancellationToken);
-            if (c != null) memberMap[mid] = c;
+            var member = await _memberRepository.GetByIdAsync(mid, cancellationToken);
+            if (member != null) memberMap[mid] = member;
         }
 
         return distros.Select(d =>
@@ -152,8 +152,8 @@ public class DistributionReportService : IDistributionReportService
                 detail?.SerialNo ?? string.Empty,
                 d.Method.ToString(),
                 d.DistributionDate,
-                member?.PhoneNumber,
-                member?.FullName);
+                member?.Customer?.PhoneNumber,
+                member?.Customer?.FullName ?? member?.FullName);
         }).ToList();
     }
 }

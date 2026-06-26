@@ -13,7 +13,7 @@ namespace NonCash.IntegrationTests.Fixtures;
 
 /// <summary>
 /// Shared fixture for voucher transfer acceptance tests.
-/// Seeds an SQLite in-memory database with a brand, two member users,
+/// Seeds an SQLite in-memory database with a brand, two member accounts,
 /// vouchers, and all required repositories/services.
 /// </summary>
 public class TransferAcceptanceTestFixture : IDisposable
@@ -27,16 +27,18 @@ public class TransferAcceptanceTestFixture : IDisposable
     public IVoucherTransferRepository TransferRepository { get; }
     public IRepository<VoucherPlanDetail> VoucherRepository { get; }
     public ICustomerRepository CustomerRepository { get; }
+    public IMemberAccountRepository MemberRepository { get; }
     public IUserAccountRepository UserRepository { get; }
 
     public Guid BrandId { get; } = Guid.Parse("10000000-0000-0000-0000-000000000001");
-    public Guid AliceUserId { get; } = Guid.Parse("20000000-0000-0000-0000-000000000001");
-    public Guid BobUserId { get; } = Guid.Parse("20000000-0000-0000-0000-000000000002");
-    public Guid AliceCustomerId { get; } = Guid.Parse("30000000-0000-0000-0000-000000000001");
-    public Guid BobCustomerId { get; } = Guid.Parse("30000000-0000-0000-0000-000000000002");
-    public Guid PlanId { get; } = Guid.Parse("40000000-0000-0000-0000-000000000001");
-    public Guid AliceVoucherId { get; } = Guid.Parse("50000000-0000-0000-0000-000000000001");
-    public Guid BobVoucherId { get; } = Guid.Parse("50000000-0000-0000-0000-000000000002");
+    public Guid StaffUserId { get; } = Guid.Parse("20000000-0000-0000-0000-000000000001");
+    public Guid AliceMemberId { get; } = Guid.Parse("30000000-0000-0000-0000-000000000001");
+    public Guid BobMemberId { get; } = Guid.Parse("30000000-0000-0000-0000-000000000002");
+    public Guid AliceCustomerId { get; } = Guid.Parse("40000000-0000-0000-0000-000000000001");
+    public Guid BobCustomerId { get; } = Guid.Parse("40000000-0000-0000-0000-000000000002");
+    public Guid PlanId { get; } = Guid.Parse("50000000-0000-0000-0000-000000000001");
+    public Guid AliceVoucherId { get; } = Guid.Parse("60000000-0000-0000-0000-000000000001");
+    public Guid BobVoucherId { get; } = Guid.Parse("60000000-0000-0000-0000-000000000002");
 
     public TransferAcceptanceTestFixture()
     {
@@ -51,18 +53,19 @@ public class TransferAcceptanceTestFixture : IDisposable
         Context.Database.EnsureCreated();
 
         UserRepository = new UserAccountRepository(Context);
+        MemberRepository = new MemberAccountRepository(Context);
         CustomerRepository = new CustomerRepository(Context);
         VoucherRepository = new Repository<VoucherPlanDetail>(Context);
         TransferRepository = new VoucherTransferRepository(Context);
 
         var jwtConfig = TestJwtConfig.Create();
         JwtTokenService = new JwtTokenService(jwtConfig);
-        AuthService = new AuthService(UserRepository, JwtTokenService);
+        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService);
 
         TransferService = new VoucherTransferService(
             VoucherRepository,
             CustomerRepository,
-            UserRepository,
+            MemberRepository,
             TransferRepository);
 
         SeedAsync().GetAwaiter().GetResult();
@@ -77,6 +80,18 @@ public class TransferAcceptanceTestFixture : IDisposable
             Name = "Test Coffee",
             TaxCode = "TAX-TEST",
             Status = BrandStatus.Active
+        });
+
+        // Staff user (plan creator)
+        Context.UserAccounts.Add(new UserAccount
+        {
+            Id = StaffUserId,
+            BrandId = BrandId,
+            Username = "brandmanager",
+            PasswordHash = AuthService.HashPassword("Test@123"),
+            FullName = "Brand Manager",
+            Role = UserRole.BrandManager,
+            Status = UserStatus.Active
         });
 
         // Customers (member profiles)
@@ -98,29 +113,25 @@ public class TransferAcceptanceTestFixture : IDisposable
                 Status = CustomerStatus.Active
             });
 
-        // User accounts linked to customers
-        Context.UserAccounts.AddRange(
-            new UserAccount
+        // Member accounts linked to customers (these are the JWT subjects)
+        Context.MemberAccounts.AddRange(
+            new MemberAccount
             {
-                Id = AliceUserId,
-                BrandId = BrandId,
+                Id = AliceMemberId,
                 CustomerId = AliceCustomerId,
                 Username = "alice",
                 PasswordHash = AuthService.HashPassword("Test@123"),
                 FullName = "Alice Sender",
-                Role = UserRole.BrandManager,
-                Status = UserStatus.Active
+                Status = MemberAccountStatus.Active
             },
-            new UserAccount
+            new MemberAccount
             {
-                Id = BobUserId,
-                BrandId = BrandId,
+                Id = BobMemberId,
                 CustomerId = BobCustomerId,
                 Username = "bob",
                 PasswordHash = AuthService.HashPassword("Test@123"),
                 FullName = "Bob Receiver",
-                Role = UserRole.BrandManager,
-                Status = UserStatus.Active
+                Status = MemberAccountStatus.Active
             });
 
         // Approved voucher plan
@@ -128,7 +139,7 @@ public class TransferAcceptanceTestFixture : IDisposable
         {
             Id = PlanId,
             PlanDate = DateTime.UtcNow,
-            CreatorId = AliceUserId,
+            CreatorId = StaffUserId,
             BrandId = BrandId,
             VoucherType = VoucherType.Complimentary,
             ValueType = VoucherValueType.Value,
@@ -144,7 +155,7 @@ public class TransferAcceptanceTestFixture : IDisposable
             VersionNumber = 1
         });
 
-        // Vouchers owned by users (MemberId = UserAccount.Id)
+        // Vouchers owned by member accounts (MemberId = MemberAccount.Id)
         Context.VoucherPlanDetails.AddRange(
             new VoucherPlanDetail
             {
@@ -152,7 +163,7 @@ public class TransferAcceptanceTestFixture : IDisposable
                 ParentId = PlanId,
                 SerialNo = "VC-TEST-00000001",
                 VoucherCodeSecret = "secret-1",
-                MemberId = AliceUserId,
+                MemberId = AliceMemberId,
                 UsageStatus = UsageStatus.Pending
             },
             new VoucherPlanDetail
@@ -161,17 +172,17 @@ public class TransferAcceptanceTestFixture : IDisposable
                 ParentId = PlanId,
                 SerialNo = "VC-TEST-00000002",
                 VoucherCodeSecret = "secret-2",
-                MemberId = BobUserId,
+                MemberId = BobMemberId,
                 UsageStatus = UsageStatus.Pending
             });
 
         await Context.SaveChangesAsync();
     }
 
-    public string GetTokenForUser(Guid userId)
+    public string GetTokenForMember(Guid memberId)
     {
-        var user = Context.UserAccounts.Find(userId)!;
-        return JwtTokenService.GenerateToken(user);
+        var member = Context.MemberAccounts.Find(memberId)!;
+        return JwtTokenService.GenerateToken(member);
     }
 
     public void Dispose()

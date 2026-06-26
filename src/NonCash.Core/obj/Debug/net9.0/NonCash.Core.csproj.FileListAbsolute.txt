@@ -11,19 +11,19 @@ D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\refint\NonCash.Core.dll
 D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.pdb
 D:\GIT PROJECT\NonCash\src\NonCash.Core\obj\Debug\net9.0\ref\NonCash.Core.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.deps.json
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.pdb
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Shared.dll
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Shared.pdb
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.csproj.AssemblyReference.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.GeneratedMSBuildEditorConfig.editorconfig
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.AssemblyInfoInputs.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.AssemblyInfo.cs
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.csproj.CoreCompileInputs.cache
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.sourcelink.json
+c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash..3605F305.Up2Date
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.dll
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\refint\NonCash.Core.dll
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash.Core.pdb
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.deps.json
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Core.pdb
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Shared.dll
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\bin\Debug\net9.0\NonCash.Shared.pdb
-c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\NonCash..3605F305.Up2Date
 c:\MSA\Sources\NonCashSol\src\NonCash.Core\obj\Debug\net9.0\ref\NonCash.Core.dll

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NonCash.API.Controllers;
@@ -26,8 +27,9 @@ public class PublicRegistrationControllerTests
 
         var brandRepo = new BrandRepository(_context);
         var userRepo = new UserAccountRepository(_context);
+        var memberRepo = new FakeMemberAccountRepository();
         var requestRepo = new BrandRegistrationRequestRepository(_context);
-        var authService = new AuthService(userRepo, new FakeJwtTokenService());
+        var authService = new AuthService(userRepo, memberRepo, new FakeJwtTokenService());
         var notificationService = new ConsoleNotificationService();
 
         var registrationService = new RegistrationService(
@@ -227,6 +229,7 @@ public class PublicRegistrationControllerTests
 
         var authController = new AuthController(new AuthService(
             new UserAccountRepository(_context),
+            new FakeMemberAccountRepository(),
             new FakeJwtTokenService()));
 
         // Act
@@ -242,6 +245,21 @@ public class PublicRegistrationControllerTests
     private class FakeJwtTokenService : IJwtTokenService
     {
         public string GenerateToken(UserAccount user) => "fake-token";
+        public string GenerateToken(MemberAccount member) => "fake-member-token";
         public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(1);
+    }
+
+    private class FakeMemberAccountRepository : IMemberAccountRepository
+    {
+        public Task<MemberAccount?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
+        public Task<bool> UsernameExistsAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<MemberAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
+        public Task<MemberAccount?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
+        public Task<IEnumerable<MemberAccount>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<MemberAccount>>(new List<MemberAccount>());
+        public Task<IEnumerable<MemberAccount>> FindAsync(Expression<Func<MemberAccount, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<MemberAccount>>(new List<MemberAccount>());
+        public Task<MemberAccount> AddAsync(MemberAccount entity, CancellationToken cancellationToken = default) => Task.FromResult(entity);
+        public void Update(MemberAccount entity) { }
+        public void Delete(MemberAccount entity) { }
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

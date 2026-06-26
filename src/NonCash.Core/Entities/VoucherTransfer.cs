@@ -27,8 +27,8 @@ public class VoucherTransfer : BaseEntity
     public string? RejectReason { get; set; }
     public DateTime? RespondedAt { get; set; }
 
-    // Navigation properties - point to UserAccount (JWT subject) not Customer
-    public UserAccount? Sender { get; set; }
-    public UserAccount? Recipient { get; set; }
+    // Navigation properties - point to MemberAccount (JWT subject) not Customer
+    public MemberAccount? Sender { get; set; }
+    public MemberAccount? Recipient { get; set; }
     public VoucherPlanDetail? Voucher { get; set; }
 }

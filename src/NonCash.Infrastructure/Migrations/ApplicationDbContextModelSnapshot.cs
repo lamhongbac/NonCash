@@ -178,6 +178,62 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("customers", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.MemberAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("password_hash");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("username");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_member_accounts_customer_id");
+
+                    b.HasIndex("Username")
+                        .IsUnique()
+                        .HasDatabaseName("IX_member_accounts_username");
+
+                    b.ToTable("member_accounts", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.OrderDetail", b =>
                 {
                     b.Property<Guid>("Id")
@@ -271,6 +327,88 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("outlets", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Gateway")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("gateway");
+
+                    b.Property<string>("GatewayResponseCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("gateway_response_code");
+
+                    b.Property<string>("GatewayTransactionId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("gateway_transaction_id");
+
+                    b.Property<Guid>("PurchaseOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchase_order_id");
+
+                    b.Property<string>("RequestPayload")
+                        .HasColumnType("text")
+                        .HasColumnName("request_payload");
+
+                    b.Property<string>("ResponsePayload")
+                        .HasColumnType("text")
+                        .HasColumnName("response_payload");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("WebhookPayload")
+                        .HasColumnType("text")
+                        .HasColumnName("webhook_payload");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GatewayTransactionId")
+                        .HasDatabaseName("IX_payment_transactions_gateway_transaction_id");
+
+                    b.HasIndex("PurchaseOrderId")
+                        .HasDatabaseName("IX_payment_transactions_purchase_order_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_payment_transactions_status");
+
+                    b.ToTable("payment_transactions", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.PlanOutlet", b =>
                 {
                     b.Property<Guid>("PlanId")
@@ -357,10 +495,6 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid?>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -398,8 +532,6 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BrandId");
-
-                    b.HasIndex("CustomerId");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -878,6 +1010,17 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("SubmittedBy");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.MemberAccount", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.OrderDetail", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.PurchaseOrder", "Order")
@@ -908,6 +1051,17 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Brand");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.PurchaseOrder", "PurchaseOrder")
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PurchaseOrder");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.PlanOutlet", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.Outlet", "Outlet")
@@ -929,7 +1083,7 @@ namespace NonCash.Infrastructure.Migrations
 
             modelBuilder.Entity("NonCash.Core.Entities.PurchaseOrder", b =>
                 {
-                    b.HasOne("NonCash.Core.Entities.Customer", "Member")
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Member")
                         .WithMany()
                         .HasForeignKey("MemberId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -945,19 +1099,12 @@ namespace NonCash.Infrastructure.Migrations
                         .HasForeignKey("BrandId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("NonCash.Core.Entities.Customer", "Customer")
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.Navigation("Brand");
-
-                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherDistribution", b =>
                 {
-                    b.HasOne("NonCash.Core.Entities.Customer", "Member")
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Member")
                         .WithMany()
                         .HasForeignKey("MemberId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -976,11 +1123,18 @@ namespace NonCash.Infrastructure.Migrations
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherPlanDetail", b =>
                 {
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("NonCash.Core.Entities.VoucherPlanHeader", "Parent")
                         .WithMany()
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Member");
 
                     b.Navigation("Parent");
                 });
@@ -1039,13 +1193,13 @@ namespace NonCash.Infrastructure.Migrations
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherTransfer", b =>
                 {
-                    b.HasOne("NonCash.Core.Entities.UserAccount", "Recipient")
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Recipient")
                         .WithMany()
                         .HasForeignKey("RecipientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("NonCash.Core.Entities.UserAccount", "Sender")
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Sender")
                         .WithMany()
                         .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Restrict)

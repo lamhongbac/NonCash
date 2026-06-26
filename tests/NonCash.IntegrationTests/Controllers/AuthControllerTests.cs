@@ -22,6 +22,7 @@ public class AuthControllerTests
     private readonly IAuthService _authService;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IUserAccountRepository _userRepository;
+    private readonly IMemberAccountRepository _memberRepository;
 
     public AuthControllerTests()
     {
@@ -31,6 +32,7 @@ public class AuthControllerTests
 
         _context = new ApplicationDbContext(options);
         _userRepository = new UserAccountRepository(_context);
+        _memberRepository = new MemberAccountRepository(_context);
 
         var inMemorySettings = new Dictionary<string, string?>
         {
@@ -44,7 +46,7 @@ public class AuthControllerTests
             .Build();
 
         _jwtTokenService = new JwtTokenService(configuration);
-        _authService = new AuthService(_userRepository, _jwtTokenService);
+        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService);
     }
 
     private AuthController CreateController()
@@ -76,6 +78,33 @@ public class AuthControllerTests
         return user;
     }
 
+    private async Task<MemberAccount> SeedMember(string username = "testmember", MemberAccountStatus status = MemberAccountStatus.Active)
+    {
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(),
+            PhoneNumber = "0909111111",
+            FullName = "Test Member",
+            Status = CustomerStatus.Active
+        };
+        await _context.Customers.AddAsync(customer);
+        await _context.SaveChangesAsync();
+
+        var member = new MemberAccount
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            Username = username,
+            PasswordHash = _authService.HashPassword("Password@123"),
+            FullName = "Test Member",
+            Status = status
+        };
+
+        await _memberRepository.AddAsync(member);
+        await _memberRepository.SaveChangesAsync();
+        return member;
+    }
+
     [Fact]
     public async Task Login_WithValidCredentials_ReturnsToken()
     {
@@ -94,6 +123,27 @@ public class AuthControllerTests
         response!.Token.Should().NotBeNullOrEmpty();
         response.User.UserId.Should().Be(user.Id);
         response.User.Role.Should().Be("BrandManager");
+    }
+
+    [Fact]
+    public async Task MemberLogin_WithValidCredentials_ReturnsToken()
+    {
+        // Arrange
+        var member = await SeedMember();
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.MemberLogin(new LoginRequest("testmember", "Password@123"), CancellationToken.None);
+
+        // Assert
+        var okResult = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
+        okResult.Should().NotBeNull();
+        var response = okResult!.Value as LoginResponse;
+        response.Should().NotBeNull();
+        response!.Token.Should().NotBeNullOrEmpty();
+        response.User.UserId.Should().Be(member.Id);
+        response.User.Role.Should().Be("Member");
+        response.User.CustomerId.Should().Be(member.CustomerId);
     }
 
     [Fact]
@@ -304,6 +354,23 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
+    public void GenerateToken_WithValidMember_ReturnsNonEmptyToken()
+    {
+        var service = CreateService();
+        var member = new MemberAccount
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            Username = "testmember",
+            FullName = "Test Member",
+            Status = MemberAccountStatus.Active
+        };
+
+        var token = service.GenerateToken(member);
+        token.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
     public void GenerateToken_ContainsCorrectClaims()
     {
         var service = CreateService();
@@ -328,6 +395,36 @@ public class JwtTokenServiceTests
         var brandIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "brand_id");
         brandIdClaim.Should().NotBeNull();
         brandIdClaim!.Value.Should().Be(user.BrandId.ToString());
+    }
+
+    [Fact]
+    public void GenerateToken_MemberContainsCorrectClaims()
+    {
+        var service = CreateService();
+        var member = new MemberAccount
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            Username = "testmember",
+            FullName = "Test Member",
+            Status = MemberAccountStatus.Active
+        };
+
+        var token = service.GenerateToken(member);
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(token);
+
+        var subClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "sub");
+        subClaim.Should().NotBeNull();
+        subClaim!.Value.Should().Be(member.Id.ToString());
+
+        var roleClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role);
+        roleClaim.Should().NotBeNull();
+        roleClaim!.Value.Should().Be("Member");
+
+        var customerIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "customer_id");
+        customerIdClaim.Should().NotBeNull();
+        customerIdClaim!.Value.Should().Be(member.CustomerId.ToString());
     }
 
     [Fact]

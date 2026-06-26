@@ -42,6 +42,7 @@ builder.Services.AddScoped<IBrandRepository, BrandRepository>();
 builder.Services.AddScoped<IOutletRepository, OutletRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+builder.Services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
 builder.Services.AddScoped<IBrandRegistrationRequestRepository, BrandRegistrationRequestRepository>();
 builder.Services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
 builder.Services.AddScoped<IVoucherTransferRepository, VoucherTransferRepository>();
@@ -57,6 +58,22 @@ builder.Services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 builder.Services.AddScoped<IVoucherGenerationService, VoucherGenerationService>();
 builder.Services.AddScoped<IVoucherTransferService, VoucherTransferService>();
 builder.Services.AddScoped<ITransferService, TransferService>();
+builder.Services.AddScoped<IApprovalService, ApprovalService>();
+builder.Services.AddScoped<IPlanCloneService, PlanCloneService>();
+builder.Services.AddScoped<IPurchaseService, PurchaseService>();
+
+// ZaloPay payment options
+builder.Services.Configure<ZaloPayOptions>(builder.Configuration.GetSection("ZaloPay"));
+builder.Services.AddHttpClient("ZaloPay", client =>
+{
+    client.BaseAddress = new Uri("https://sb-openapi.zalopay.vn");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IPaymentService, ZaloPayPaymentService>();
+
+builder.Services.AddScoped<IPosService, PosService>();
+builder.Services.AddScoped<IPromotionService, PromotionService>();
+builder.Services.AddScoped<IDistributionReportService, DistributionReportService>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 
 // Auth services

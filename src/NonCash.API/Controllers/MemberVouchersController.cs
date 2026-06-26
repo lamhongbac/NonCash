@@ -74,8 +74,15 @@ public class MemberVouchersController : ControllerBase
         [FromBody] TransferRequest request,
         CancellationToken cancellationToken)
     {
+        var currentMemberId = GetCurrentMemberId();
+        if (currentMemberId == Guid.Empty)
+            return Unauthorized(new { error = "Unauthorized", message = "Member identity is required." });
+
         if (request == null || request.FromMemberId == Guid.Empty)
             return BadRequest(new { error = "Validation", message = "FromMemberId is required." });
+
+        if (request.FromMemberId != currentMemberId)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Forbidden", message = "FromMemberId does not match the authenticated member." });
 
         if (request.VoucherIds == null || request.VoucherIds.Count == 0)
             return BadRequest(new { error = "Validation", message = "VoucherIds list is required." });
@@ -109,6 +116,13 @@ public class MemberVouchersController : ControllerBase
     [HttpGet("transfer-history/{memberId:guid}")]
     public async Task<ActionResult<IEnumerable<TransferHistoryDto>>> History(Guid memberId, CancellationToken cancellationToken)
     {
+        var currentMemberId = GetCurrentMemberId();
+        if (currentMemberId == Guid.Empty)
+            return Unauthorized(new { error = "Unauthorized", message = "Member identity is required." });
+
+        if (memberId != currentMemberId)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Forbidden", message = "You can only view your own transfer history." });
+
         var history = await _transferService.GetOutgoingHistoryAsync(memberId, cancellationToken);
         var dto = history.Select(h => new TransferHistoryDto(h.VoucherId, h.SerialNo, h.RecipientPhone, h.TransferredAt));
         return Ok(dto);

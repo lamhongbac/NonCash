@@ -1,0 +1,360 @@
+@page "/pos/redeem"
+@using System.Text.Json.Nodes
+@implements IAsyncDisposable
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>POS Voucher Redemption</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">POS Voucher Redemption</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">For outlets that cannot integrate directly with NonCash. Select an outlet, scan the voucher, then lock and commit.</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudSelect T="OutletDto" @bind-Value="_selectedOutlet" Label="Outlet" Required="true" RequiredError="Select an outlet" ToStringFunc="@((o) => o?.Name ?? "")">
+                @foreach (var outlet in _outlets)
+                {
+                    <MudSelectItem Value="@outlet">@outlet.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudTextField @bind-Value="_billNumber" Label="Bill Number" Required="true" RequiredError="Bill number is required" />
+        </MudItem>
+        <MudItem xs="12" md="8">
+            <MudTextField @bind-Value="_voucherCode" Label="Voucher Code" Required="true" RequiredError="Voucher code is required" />
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="VerifyAsync" Disabled="_processing || !CanAct">Verify</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudStack Row="true" Class="mb-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.QrCodeScanner" OnClick="StartScannerAsync" Disabled="_showScanner">Scan Voucher</MudButton>
+</MudStack>
+
+@if (_showScanner)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-2">Scan voucher with camera</MudText>
+        <div id="reader" style="width: 300px; max-width: 100%;"></div>
+        <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="CancelScannerAsync" Class="mt-2">Cancel scan</MudButton>
+    </MudPaper>
+}
+
+@if (_voucherInfo != null)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        <b>@_voucherInfo.BrandName</b> — Face value: <b>@_voucherInfo.FaceValue.ToString("N0")</b> @_voucherInfo.ValueType
+        <br />Serial: @_voucherInfo.SerialNo | Expires: @_voucherInfo.ExpiryDate.ToLocalTime().ToString("g")
+    </MudAlert>
+}
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudNumericField T="decimal" @bind-Value="_amountUsed" Label="Amount Used" Min="0" Step="1000" Format="N0" />
+        </MudItem>
+        <MudItem xs="12" md="8" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LockAsync" Disabled="_processing || !CanAct || string.IsNullOrWhiteSpace(_voucherCode)">Lock</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="CommitAsync" Disabled="_processing || _lockId == null">Commit</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="RollbackAsync" Disabled="_processing || _lockId == null">Rollback</MudButton>
+            <MudButton Variant="Variant.Text" OnClick="ResetForm">Reset</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (!string.IsNullOrWhiteSpace(_lastStatus))
+{
+    <MudAlert Severity="@_lastSeverity" Class="mb-4">
+        <b>@_lastStatus</b>@(_lastReason != null ? $" — {_lastReason}" : "")
+    </MudAlert>
+}
+
+@code {
+    private bool _processing = false;
+    private List<OutletDto> _outlets = new();
+    private OutletDto? _selectedOutlet;
+    private string _billNumber = "";
+    private string _voucherCode = "";
+    private decimal _amountUsed = 0;
+    private Guid? _lockId;
+    private PosVoucherInfoDto? _voucherInfo;
+
+    private string? _lastStatus;
+    private string? _lastReason;
+    private Severity _lastSeverity = Severity.Info;
+
+    private bool _showScanner = false;
+    private bool _scannerStarted = false;
+    private DotNetObjectReference<Redeem>? _dotNetRef;
+
+    private bool CanAct => _selectedOutlet != null && !string.IsNullOrWhiteSpace(_billNumber);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutletsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_showScanner && !_scannerStarted && _dotNetRef != null)
+        {
+            _scannerStarted = true;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("startScanner", "reader", _dotNetRef);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Could not start scanner: {ex.Message}", Severity.Error);
+                _showScanner = false;
+                _scannerStarted = false;
+            }
+        }
+    }
+
+    private async Task LoadOutletsAsync()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/outlets?pageSize=1000");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<PagedResult<OutletDto>>();
+                if (result != null)
+                {
+                    _outlets = result.Items.ToList();
+                    _selectedOutlet = _outlets.FirstOrDefault();
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load outlets: {response.StatusCode} - {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load outlets: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StartScannerAsync()
+    {
+        if (_selectedOutlet == null)
+        {
+            Snackbar.Add("Select an outlet before scanning.", Severity.Warning);
+            return;
+        }
+
+        _showScanner = true;
+        _scannerStarted = false;
+        _dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    private async Task CancelScannerAsync()
+    {
+        await StopScannerAsync();
+        _showScanner = false;
+        _scannerStarted = false;
+    }
+
+    private async Task StopScannerAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("stopScanner");
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
+
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+    }
+
+    [JSInvokable]
+    public async Task OnScanResult(string code)
+    {
+        _voucherCode = code;
+        _showScanner = false;
+        _scannerStarted = false;
+        await StopScannerAsync();
+        await VerifyAsync();
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (_selectedOutlet == null) return;
+        var root = await CallPosAsync("verify", new { VoucherCode = _voucherCode, OutletId = _selectedOutlet.Id });
+        if (root == null) return;
+
+        _voucherInfo = ReadVoucherInfo(root["voucherInfo"]);
+        _amountUsed = _voucherInfo?.FaceValue ?? 0;
+        var status = root["status"]?.GetValue<string>();
+        ShowStatus(status, root["reason"]?.GetValue<string>(), status == "Valid" ? Severity.Success : Severity.Warning);
+    }
+
+    private async Task LockAsync()
+    {
+        if (_selectedOutlet == null) return;
+        _lockId = null;
+        var root = await CallPosAsync("lock", new { VoucherCode = _voucherCode, OutletId = _selectedOutlet.Id, BillNumber = _billNumber });
+        if (root == null) return;
+
+        var lockIdText = root["lockId"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(lockIdText) && Guid.TryParse(lockIdText, out var lid))
+            _lockId = lid;
+
+        var info = ReadVoucherInfo(root["voucherInfo"]);
+        if (info != null)
+        {
+            _voucherInfo = info;
+            _amountUsed = info.FaceValue;
+        }
+
+        var status = root["status"]?.GetValue<string>();
+        ShowStatus(status, root["reason"]?.GetValue<string>(), status == "Locked" ? Severity.Success : Severity.Warning);
+    }
+
+    private async Task CommitAsync()
+    {
+        if (_lockId == null) return;
+        var transactionId = $"TXN-{_lockId:N}-{DateTime.UtcNow.Ticks}";
+        var root = await CallPosAsync("commit", new { LockId = _lockId.Value, TransactionId = transactionId, AmountUsed = _amountUsed });
+        if (root == null) return;
+
+        var status = root["status"]?.GetValue<string>();
+        ShowStatus(status, root["reason"]?.GetValue<string>(), status is "Success" or "AlreadyComplete" ? Severity.Success : Severity.Warning);
+    }
+
+    private async Task RollbackAsync()
+    {
+        if (_lockId == null) return;
+        var root = await CallPosAsync("rollback", new { LockId = _lockId.Value });
+        if (root == null) return;
+
+        var status = root["status"]?.GetValue<string>();
+        ShowStatus(status, root["reason"]?.GetValue<string>(), status is "Success" or "AlreadyReleased" ? Severity.Success : Severity.Warning);
+    }
+
+    private async Task<JsonNode?> CallPosAsync(string action, object body)
+    {
+        if (_selectedOutlet == null) return null;
+
+        _processing = true;
+        _lastStatus = null;
+        _lastReason = null;
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/pos/{action}")
+            {
+                Content = JsonContent.Create(body)
+            };
+            request.Headers.TryAddWithoutValidation("X-API-Key", _selectedOutlet.ApiKeyPrefix);
+
+            var response = await Http.SendAsync(request);
+            var json = await response.Content.ReadAsStringAsync();
+            var root = string.IsNullOrWhiteSpace(json) ? null : JsonNode.Parse(json);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return root;
+            }
+
+            ShowStatus(root?["status"]?.GetValue<string>(), root?["reason"]?.GetValue<string>() ?? $"HTTP {(int)response.StatusCode}", Severity.Error);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"POS call failed: {ex.Message}", Severity.Error);
+            return null;
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private static PosVoucherInfoDto? ReadVoucherInfo(JsonNode? node)
+    {
+        if (node == null) return null;
+
+        return new PosVoucherInfoDto(
+            node["faceValue"]?.GetValue<decimal>() ?? 0,
+            node["valueType"]?.GetValue<string>() ?? string.Empty,
+            node["expiryDate"]?.GetValue<DateTime>() ?? DateTime.MinValue,
+            node["brandName"]?.GetValue<string>() ?? string.Empty,
+            node["serialNo"]?.GetValue<string>() ?? string.Empty
+        );
+    }
+
+    private void ShowStatus(string? status, string? reason, Severity severity)
+    {
+        _lastStatus = status;
+        _lastReason = reason;
+        _lastSeverity = severity;
+    }
+
+    private void ResetForm()
+    {
+        _voucherCode = "";
+        _lockId = null;
+        _voucherInfo = null;
+        _amountUsed = 0;
+        _lastStatus = null;
+        _lastReason = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopScannerAsync();
+    }
+
+    public class OutletDto
+    {
+        public Guid Id { get; set; }
+        public Guid BrandId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Address { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? ApiKeyPrefix { get; set; }
+    }
+
+    public class PosVoucherInfoDto
+    {
+        public PosVoucherInfoDto(decimal faceValue, string valueType, DateTime expiryDate, string brandName, string serialNo)
+        {
+            FaceValue = faceValue;
+            ValueType = valueType;
+            ExpiryDate = expiryDate;
+            BrandName = brandName;
+            SerialNo = serialNo;
+        }
+
+        public decimal FaceValue { get; set; }
+        public string ValueType { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public string BrandName { get; set; }
+        public string SerialNo { get; set; }
+    }
+
+    public class PagedResult<T>
+    {
+        public IReadOnlyList<T> Items { get; set; } = Array.Empty<T>();
+        public int TotalCount { get; set; }
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
+    }
+}

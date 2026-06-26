@@ -28,6 +28,21 @@ public class CurrentUserService : ICurrentUserService
         return null;
     }
 
+    public Guid? GetCurrentCustomerId()
+    {
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user == null) return null;
+
+        var customerIdClaim = user.FindFirst("customer_id")?.Value;
+
+        if (Guid.TryParse(customerIdClaim, out var customerId))
+        {
+            return customerId;
+        }
+
+        return null;
+    }
+
     public string? GetCurrentUserId()
     {
         return _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);

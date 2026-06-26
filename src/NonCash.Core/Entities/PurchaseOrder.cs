@@ -17,7 +17,7 @@ public class PurchaseOrder : BaseEntity
     public DateTime? PaidAt { get; set; }
 
     // Navigation properties
-    public Customer? Member { get; set; }
+    public MemberAccount? Member { get; set; }
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
 }
 

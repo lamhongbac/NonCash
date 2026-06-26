@@ -16,11 +16,13 @@ public class ApplicationDbContext : DbContext
     public DbSet<Outlet> Outlets => Set<Outlet>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+    public DbSet<MemberAccount> MemberAccounts => Set<MemberAccount>();
     public DbSet<BrandRegistrationRequest> BrandRegistrationRequests => Set<BrandRegistrationRequest>();
     public DbSet<VoucherPlanHeader> VoucherPlanHeaders => Set<VoucherPlanHeader>();
     public DbSet<PlanOutlet> PlanOutlets => Set<PlanOutlet>();
     public DbSet<VoucherPlanDetail> VoucherPlanDetails => Set<VoucherPlanDetail>();
     public DbSet<VoucherTransfer> VoucherTransfers => Set<VoucherTransfer>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

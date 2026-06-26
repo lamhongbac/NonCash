@@ -168,5 +168,6 @@ public class OutletsControllerTests
         public string? GetCurrentUserId() => "test-user";
         public string? GetCurrentUserRole() => "Admin";
         public bool IsInRole(string role) => true;
+        public Guid? GetCurrentCustomerId() => null;
     }
 }

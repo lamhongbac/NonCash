@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NonCash.Core.Entities;
@@ -25,11 +26,24 @@ public class MembersController : ControllerBase
         _voucherCodeService = voucherCodeService;
     }
 
+    private Guid GetCurrentMemberId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        return claim != null && Guid.TryParse(claim.Value, out var id) ? id : Guid.Empty;
+    }
+
     // AC4: Member sees their owned vouchers (My Voucher).
     [HttpGet("{memberId:guid}/vouchers")]
     public async Task<ActionResult<IEnumerable<MemberVoucherResponse>>> GetMyVouchers(Guid memberId, CancellationToken cancellationToken)
     {
-        var details = await _detailRepository.FindAsync(d => d.MemberId == memberId, cancellationToken);
+        var currentMemberId = GetCurrentMemberId();
+        if (currentMemberId == Guid.Empty)
+            return Unauthorized(new { error = "Unauthorized", message = "Member identity is required." });
+
+        if (memberId != currentMemberId)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Forbidden", message = "You can only view your own vouchers." });
+
+        var details = await _detailRepository.FindAsync(d => d.MemberId == currentMemberId, cancellationToken);
         var detailList = details.ToList();
         if (detailList.Count == 0)
             return Ok(Array.Empty<MemberVoucherResponse>());

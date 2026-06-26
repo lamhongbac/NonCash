@@ -34,7 +34,31 @@ public class AuthController : ControllerBase
         var response = new LoginResponse(
             result.Token!,
             result.ExpiresAt!.Value,
-            new UserDto(user.Id, user.FullName, user.Role.ToString(), user.BrandId)
+            new UserDto(user.Id, user.FullName, user.Role.ToString(), user.BrandId, null)
+        );
+
+        return Ok(response);
+    }
+
+    [HttpPost("member/login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<LoginResponse>> MemberLogin(LoginRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _authService.LoginMemberAsync(request.Username, request.Password, cancellationToken);
+
+        if (!result.Success)
+        {
+            if (result.ErrorMessage == "Account is locked.")
+                return Forbid(result.ErrorMessage);
+
+            return Unauthorized(new { error = result.ErrorMessage });
+        }
+
+        var member = result.Member!;
+        var response = new LoginResponse(
+            result.Token!,
+            result.ExpiresAt!.Value,
+            new UserDto(member.Id, member.FullName, "Member", null, member.CustomerId)
         );
 
         return Ok(response);
