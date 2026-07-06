@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NonCash.API.HostedServices;
 using NonCash.API.Middleware;
 using NonCash.API.Services;
+using NonCash.Core.Configuration;
 using NonCash.Core.Interfaces;
 using NonCash.Core.Services;
 using NonCash.Infrastructure.Data;
@@ -18,8 +19,21 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "NonCash API", Version = "v1" });
 });
 
+// Environment configuration
+builder.Services.Configure<EnvironmentConfig>(builder.Configuration.GetSection(EnvironmentConfig.SectionName));
+var environmentName = builder.Configuration[$"{EnvironmentConfig.SectionName}:Name"] ?? "dev";
+
 // Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+var connectionStringKey = environmentName.ToLowerInvariant() switch
+{
+    "dev" or "development" => "DevConnection",
+    "pilot" => "PilotConnection",
+    "production" or "prod" => "ProductionConnection",
+    _ => "DefaultConnection"
+};
+
+var connectionString = builder.Configuration.GetConnectionString(connectionStringKey)
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? builder.Configuration["NONCASH_CONNECTION_STRING"]
     ?? "Host=localhost;Database=noncash;Username=postgres;Password=postgres";
 
@@ -84,7 +98,16 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRegistrationService, RegistrationService>();
 
 // Notification services
-builder.Services.AddScoped<INotificationService, ConsoleNotificationService>();
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
+var smtpHost = builder.Configuration["Smtp:Host"];
+if (!string.IsNullOrWhiteSpace(smtpHost))
+{
+    builder.Services.AddScoped<INotificationService, EmailNotificationService>();
+}
+else
+{
+    builder.Services.AddScoped<INotificationService, ConsoleNotificationService>();
+}
 
 // Import services
 builder.Services.AddScoped<ICustomerImportService, CsvCustomerImportService>();

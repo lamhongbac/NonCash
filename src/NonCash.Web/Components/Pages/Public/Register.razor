@@ -1,6 +1,7 @@
 @page "/register"
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject NavigationManager Navigation
 
 <PageTitle>Business Registration</PageTitle>
@@ -79,6 +80,7 @@
                     _success = true;
                     _model = new RegistrationModel();
                     Snackbar.Add("Registration submitted!", Severity.Success);
+                    await ShowStatusDialogAsync(true, _requestId);
                 }
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
@@ -86,11 +88,13 @@
                 var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
                 _errorMessage = error?.message ?? error?.error ?? "Registration failed. Please check your input and try again.";
                 Snackbar.Add(_errorMessage, Severity.Error);
+                await ShowStatusDialogAsync(false, _errorMessage);
             }
             else
             {
                 _errorMessage = "An unexpected error occurred. Please try again later.";
                 Snackbar.Add(_errorMessage, Severity.Error);
+                await ShowStatusDialogAsync(false, _errorMessage);
             }
         }
         catch (Exception ex)
@@ -121,6 +125,25 @@
         public Guid requestId { get; set; }
         public Guid brandId { get; set; }
         public string status { get; set; } = "";
+    }
+
+    private async Task ShowStatusDialogAsync(bool success, string message)
+    {
+        var title = success ? "Registration Submitted" : "Registration Failed";
+        var color = success ? Color.Success : Color.Error;
+        var icon = success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error;
+
+        var parameters = new DialogParameters
+        {
+            { "Title", title },
+            { "ContentText", message },
+            { "ButtonText", "OK" },
+            { "Color", color },
+            { "Icon", icon }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small };
+        await DialogService.ShowAsync<RegistrationStatusDialog>(title, parameters, options);
     }
 
     private class ErrorResponse

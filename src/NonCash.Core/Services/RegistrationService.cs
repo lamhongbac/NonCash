@@ -157,6 +157,13 @@ public class RegistrationService : IRegistrationService
         await _notificationService.NotifyAdminNewRegistrationAsync(
             registrationRequest.Id, brand.Name, cancellationToken);
 
+        // Send thank-you email to the applicant
+        if (!string.IsNullOrWhiteSpace(request.ContactEmail))
+        {
+            await _notificationService.NotifyApplicantRegistrationSubmittedAsync(
+                request.ContactEmail, brand.Name, registrationRequest.Id, cancellationToken);
+        }
+
         return new RegistrationResult(true, registrationRequest.Id, brand.Id, RegistrationStatus.Submitted);
     }
 

@@ -16,4 +16,10 @@ public class ConsoleNotificationService : INotificationService
         Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been {status}. User #{userId} notified.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Thank-you email sent to '{email}' for company '{companyName}'. Request #{requestId}.");
+        return Task.CompletedTask;
+    }
 }

@@ -1,8 +1,22 @@
 ﻿@page "/"
+@inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>NonCash Dashboard</PageTitle>
 
 <MudText Typo="Typo.h3" GutterBottom="true">Welcome to NonCash</MudText>
+
+@if (AuthState.IsLoggedIn)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        You are logged in as <strong>@AuthState.FullName</strong> <MudChip T="string" Size="Size.Small" Color="Color.Primary">@AuthState.Role</MudChip>
+    </MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        You are not logged in. Please sign in to access your account.
+    </MudAlert>
+}
 
 <MudText Typo="Typo.body1" Class="mb-6">
     NonCash is a SaaS voucher platform enabling brands to create, distribute, and redeem digital vouchers securely.

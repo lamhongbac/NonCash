@@ -17,6 +17,8 @@ Welcome to the **NonCash** voucher platform documentation. This repository serve
 
 ### 2. Technical Architecture
 - [System Architecture](./architecture.md) - Deep dive into 3-layer SaaS and Microservices.
+- [Implementation Guide](./implementation-guide.md) - End-to-end build, configure, and deploy instructions.
+- [Database Setup Guide](./database-setup-guide.md) - Provisioning PostgreSQL for DEV, Pilot, and Production environments.
 - [Data Models](./data-models.md) - Database schema, entities, and relationships.
 - [API Contracts](./api-contracts.md) - RESTful API definitions for POS and Member App.
 - [Source Tree Analysis](./source-tree-analysis.md) - Target directory structure and entry points.
