@@ -74,15 +74,47 @@ dotnet build src/NonCash.Web/NonCash.Web.csproj
 
 ## 5. Database Setup
 
-See the detailed [`Database Setup Guide`](./database-setup-guide.md) for PostgreSQL installation, user creation, SSL certificates, and firewall rules.
+### 5.1 DEV Database (shared across all developer machines)
 
-Summary for DEV:
+During the DEV phase, all developer machines connect to the same central PostgreSQL server so the source code and connection string stay identical.
 
-1. Install PostgreSQL.
-2. Create database `noncash`.
-3. Create user `noncash_app` with a strong password.
-4. Keep SSL disabled in DEV.
-5. Allow local connections in `pg_hba.conf`.
+> **WARNING:** Do not change `appsettings.Development.json` back to `Host=localhost`. DEV uses the shared remote database so every machine can run with the same source.
+
+Default DEV connection string (already set in `appsettings.Development.json`):
+
+```text
+Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=%9L@&r#wj!^oy5Gqc#DSHQ%%;SSL Mode=Require
+```
+
+Requirements for the shared DEV server:
+
+1. PostgreSQL is running on `45.119.87.247`.
+2. SSL is enabled (`ssl = on` in `postgresql.conf`) with valid certificate files (`server.crt`, `server.key`).
+3. `pg_hba.conf` allows connections from developer machine IPs, for example:
+   ```text
+   hostssl  noncash  noncash_app  0.0.0.0/0  scram-sha-256
+   ```
+4. Windows Firewall allows inbound TCP port `5432`.
+
+If you generated self-signed certificates, restart the PostgreSQL service so SSL takes effect.
+
+### 5.2 Apply Migrations and Seed Data
+
+Once the database is reachable:
+
+```bash
+dotnet ef database update --project src/NonCash.Infrastructure --startup-project src/NonCash.API
+```
+
+Seed test data:
+
+```bash
+dotnet run --project src/NonCash.SeedTool
+```
+
+### 5.3 Pilot / Production Database
+
+See the detailed [`Database Setup Guide`](./database-setup-guide.md) for SSL certificates, firewall rules, and remote access.
 
 ## 6. Configure Application Settings
 
@@ -318,11 +350,10 @@ WantedBy=multi-user.target
 ### DEV
 
 - [ ] .NET 9 SDK installed.
-- [ ] PostgreSQL installed locally.
-- [ ] Database `noncash` and user `noncash_app` created.
-- [ ] `appsettings.Development.json` configured.
-- [ ] Migrations applied.
-- [ ] Seed tool executed.
+- [ ] Shared PostgreSQL server (`45.119.87.247`) is running with SSL enabled and remote access allowed.
+- [ ] `appsettings.Development.json` points to the shared DEV database.
+- [ ] Migrations applied to the shared database.
+- [ ] Seed tool executed (optional, for test data).
 - [ ] API and Web start successfully.
 - [ ] `/health` returns healthy.
 
