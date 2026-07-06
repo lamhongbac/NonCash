@@ -17,13 +17,13 @@ public class MemberAccountRepository : Repository<MemberAccount>, IMemberAccount
     public async Task<MemberAccount?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
     {
         return await _context.MemberAccounts
-            .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Username.ToLower() == username.ToLower(), cancellationToken);
     }
 
     public async Task<bool> UsernameExistsAsync(string username, CancellationToken cancellationToken = default)
     {
         return await _context.MemberAccounts
-            .AnyAsync(u => u.Username == username, cancellationToken);
+            .AnyAsync(u => u.Username.ToLower() == username.ToLower(), cancellationToken);
     }
 
     public async Task<MemberAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default)

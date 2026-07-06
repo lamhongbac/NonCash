@@ -24,6 +24,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             return new AuthResult(false, ErrorMessage: "Username and password are required.");
 
+        username = username.Trim();
         var user = await _userRepository.GetByUsernameAsync(username, cancellationToken);
         if (user == null)
             return new AuthResult(false, ErrorMessage: "Invalid username or password.");
@@ -48,6 +49,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             return new MemberAuthResult(false, ErrorMessage: "Username and password are required.");
 
+        username = username.Trim();
         var member = await _memberRepository.GetByUsernameAsync(username, cancellationToken);
         if (member == null)
             return new MemberAuthResult(false, ErrorMessage: "Invalid username or password.");
