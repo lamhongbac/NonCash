@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>Registration Requests</PageTitle>
@@ -74,6 +75,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
         await LoadRequests();
     }
 

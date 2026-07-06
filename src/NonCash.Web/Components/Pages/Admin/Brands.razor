@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>Brand Management</PageTitle>
@@ -97,6 +98,13 @@ else if (_brands is not null)
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
         await LoadBrands();
     }
 

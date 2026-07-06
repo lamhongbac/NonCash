@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NonCash.API.DTOs;
 using NonCash.Core.Entities;
@@ -7,6 +8,7 @@ namespace NonCash.API.Controllers;
 
 [ApiController]
 [Route("api/v1/brands")]
+[Authorize(Roles = "Admin")]
 public class BrandsController : ControllerBase
 {
     private readonly BrandService _brandService;
