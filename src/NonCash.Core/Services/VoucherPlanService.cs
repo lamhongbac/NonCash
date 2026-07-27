@@ -25,7 +25,16 @@ public record CreatePlanDto(
     decimal Budget,
     string? ImageUrl,
     string? IconUrl,
-    List<Guid> OutletIds
+    List<Guid> OutletIds,
+    // Epic 7.1: Cross-tenant sponsorship
+    Guid? SponsorBrandId = null,
+    // Epic 8.1: Display data model
+    string? CoverImageUrl = null,
+    string? TermsAndConditions = null,
+    string? BrandColor = null,
+    string? DisplayName = null,
+    string? ShortDescription = null,
+    string? ValidDaysOfWeek = null
 );
 
 public record UpdatePlanDto(
@@ -42,7 +51,16 @@ public record UpdatePlanDto(
     decimal Budget,
     string? ImageUrl,
     string? IconUrl,
-    List<Guid> OutletIds
+    List<Guid> OutletIds,
+    // Epic 7.1: Cross-tenant sponsorship
+    Guid? SponsorBrandId = null,
+    // Epic 8.1: Display data model
+    string? CoverImageUrl = null,
+    string? TermsAndConditions = null,
+    string? BrandColor = null,
+    string? DisplayName = null,
+    string? ShortDescription = null,
+    string? ValidDaysOfWeek = null
 );
 
 public record PlanResult(bool Success, string? ErrorMessage = null, VoucherPlanHeader? Plan = null);
@@ -88,6 +106,13 @@ public class VoucherPlanService : IVoucherPlanService
             Budget = dto.Budget,
             ImageUrl = dto.ImageUrl,
             IconUrl = dto.IconUrl,
+            SponsorBrandId = dto.SponsorBrandId,
+            CoverImageUrl = dto.CoverImageUrl,
+            TermsAndConditions = dto.TermsAndConditions,
+            BrandColor = dto.BrandColor,
+            DisplayName = dto.DisplayName,
+            ShortDescription = dto.ShortDescription,
+            ValidDaysOfWeek = dto.ValidDaysOfWeek,
             ApprovalStatus = ApprovalStatus.Pending,
             TargetDistributed = 0,
             TargetUsed = 0
@@ -140,6 +165,13 @@ public class VoucherPlanService : IVoucherPlanService
         plan.Budget = dto.Budget;
         plan.ImageUrl = dto.ImageUrl;
         plan.IconUrl = dto.IconUrl;
+        plan.SponsorBrandId = dto.SponsorBrandId;
+        plan.CoverImageUrl = dto.CoverImageUrl;
+        plan.TermsAndConditions = dto.TermsAndConditions;
+        plan.BrandColor = dto.BrandColor;
+        plan.DisplayName = dto.DisplayName;
+        plan.ShortDescription = dto.ShortDescription;
+        plan.ValidDaysOfWeek = dto.ValidDaysOfWeek;
 
         // Update outlet associations
         plan.PlanOutlets.Clear();

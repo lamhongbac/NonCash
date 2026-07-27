@@ -13,6 +13,7 @@ public record BusinessRegistrationRequest(
 
 public record BusinessRegistrationResponse(
     Guid RequestId,
+    Guid BusinessId,
     Guid BrandId,
     string Status
 );
@@ -26,7 +27,8 @@ public record RegistrationStatusResponse(
 
 public record AdminRegistrationRequestDto(
     Guid RequestId,
-    string CompanyName,
+    string BusinessName,
+    string BrandName,
     string TaxCode,
     string ContactEmail,
     string RepresentativeName,

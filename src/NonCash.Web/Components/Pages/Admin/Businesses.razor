@@ -1,0 +1,230 @@
+@page "/admin/businesses"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Business Management</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Business Management</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Manage registered businesses (legal companies). Each business can own multiple brands.</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="8"></MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex justify-end align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="OpenCreateDialog">Add Business</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_businesses is not null)
+{
+    <MudTable Items="_businesses" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Business Name</MudTh>
+            <MudTh>Tax Code</MudTh>
+            <MudTh>Address</MudTh>
+            <MudTh>Contact Email</MudTh>
+            <MudTh>Phone</MudTh>
+            <MudTh>Brands</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Business Name">@context.BusinessName</MudTd>
+            <MudTd DataLabel="Tax Code">@context.TaxCode</MudTd>
+            <MudTd DataLabel="Address">@context.Address</MudTd>
+            <MudTd DataLabel="Contact Email">@context.ContactEmail</MudTd>
+            <MudTd DataLabel="Phone">@context.PhoneNumber</MudTd>
+            <MudTd DataLabel="Brands">@context.BrandCount</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="@GetStatusColor(context.IsActive)" Size="Size.Small">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => OpenEditDialog(context)" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<MudDialog @bind-Visible="_showDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Business" : "Create Business")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" Model="_model">
+            <MudTextField @bind-Value="_model.BusinessName" Label="Business Name" Required="true" RequiredError="Business name is required" />
+            <MudTextField @bind-Value="_model.TaxCode" Label="Tax Code" Required="true" RequiredError="Tax code is required" Disabled="_isEdit" />
+            <MudTextField @bind-Value="_model.Address" Label="Address" Required="true" RequiredError="Address is required" />
+            <MudTextField @bind-Value="_model.ContactEmail" Label="Contact Email" />
+            <MudTextField @bind-Value="_model.PhoneNumber" Label="Phone Number" />
+            @if (_isEdit)
+            {
+                <MudSwitch @bind-Value="_model.IsActive" Label="Active" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showDialog = false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="SaveBusiness">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _loading = false;
+    private List<BusinessDto>? _businesses;
+
+    private bool _showDialog = false;
+    private bool _isEdit = false;
+    private MudForm? _form;
+    private BusinessFormModel _model = new();
+    private readonly DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadBusinesses();
+    }
+
+    private async Task LoadBusinesses()
+    {
+        _loading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/businesses");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<BusinessDto>>();
+                _businesses = result ?? new();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to load businesses: {response.StatusCode} - {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load businesses: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEdit = false;
+        _model = new BusinessFormModel();
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(BusinessDto business)
+    {
+        _isEdit = true;
+        _model = new BusinessFormModel
+        {
+            Id = business.Id,
+            BusinessName = business.BusinessName,
+            TaxCode = business.TaxCode,
+            Address = business.Address,
+            ContactEmail = business.ContactEmail,
+            PhoneNumber = business.PhoneNumber,
+            IsActive = business.IsActive
+        };
+        _showDialog = true;
+    }
+
+    private async Task SaveBusiness()
+    {
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            HttpRequestMessage httpRequest;
+            if (_isEdit)
+            {
+                var request = new { _model.BusinessName, _model.Address, _model.ContactEmail, _model.PhoneNumber, _model.IsActive };
+                httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/businesses/{_model.Id}") { Content = JsonContent.Create(request) };
+            }
+            else
+            {
+                var request = new { _model.BusinessName, _model.TaxCode, _model.Address, _model.ContactEmail, _model.PhoneNumber };
+                httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/businesses") { Content = JsonContent.Create(request) };
+            }
+
+            if (!string.IsNullOrEmpty(token))
+                httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(httpRequest);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(_isEdit ? "Business updated successfully." : "Business created successfully.", Severity.Success);
+                _showDialog = false;
+                await LoadBusinesses();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Save failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static Color GetStatusColor(bool isActive) => isActive ? Color.Success : Color.Default;
+
+    public class BusinessDto
+    {
+        public Guid Id { get; set; }
+        public string BusinessName { get; set; } = string.Empty;
+        public string TaxCode { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public string? ContactEmail { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool IsActive { get; set; }
+        public int BrandCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class BusinessFormModel
+    {
+        public Guid Id { get; set; }
+        public string BusinessName { get; set; } = string.Empty;
+        public string TaxCode { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public string? ContactEmail { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

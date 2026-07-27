@@ -8,26 +8,30 @@ namespace NonCash.UnitTests.Services;
 
 public class BrandServiceTests
 {
+    private readonly IBusinessRepository _businessRepository = Substitute.For<IBusinessRepository>();
     private readonly IBrandRepository _brandRepository = Substitute.For<IBrandRepository>();
     private readonly BrandService _sut;
 
     public BrandServiceTests()
     {
-        _sut = new BrandService(_brandRepository);
+        _sut = new BrandService(_businessRepository, _brandRepository);
     }
 
     [Fact]
     public async Task CreateAsync_WithValidData_ReturnsBrand()
     {
         // Arrange
+        var businessId = Guid.NewGuid();
+        _businessRepository.GetByIdAsync(businessId, Arg.Any<CancellationToken>()).Returns(new Business { Id = businessId, BusinessName = "Test Business" });
         _brandRepository.TaxCodeExistsAsync("TAX123", Arg.Any<CancellationToken>()).Returns(false);
         _brandRepository.AddAsync(Arg.Any<Brand>(), Arg.Any<CancellationToken>()).Returns(x => x.Arg<Brand>());
 
         // Act
-        var result = await _sut.CreateAsync("Test Brand", "TAX123", "test@example.com");
+        var result = await _sut.CreateAsync(businessId, "Test Brand", "TAX123", "test@example.com");
 
         // Assert
         result.Should().NotBeNull();
+        result.BusinessId.Should().Be(businessId);
         result.Name.Should().Be("Test Brand");
         result.TaxCode.Should().Be("TAX123");
         result.ContactEmail.Should().Be("test@example.com");
@@ -39,7 +43,7 @@ public class BrandServiceTests
     public async Task CreateAsync_WithEmptyName_ThrowsArgumentException()
     {
         // Act
-        var act = () => _sut.CreateAsync("", "TAX123", null);
+        var act = () => _sut.CreateAsync(Guid.NewGuid(), "", "TAX123", null);
 
         // Assert
         await act.Should().ThrowAsync<ArgumentException>().WithParameterName("name");
@@ -49,10 +53,12 @@ public class BrandServiceTests
     public async Task CreateAsync_WithDuplicateTaxCode_ThrowsInvalidOperationException()
     {
         // Arrange
+        var businessId = Guid.NewGuid();
+        _businessRepository.GetByIdAsync(businessId, Arg.Any<CancellationToken>()).Returns(new Business { Id = businessId, BusinessName = "Test Business" });
         _brandRepository.TaxCodeExistsAsync("TAX123", Arg.Any<CancellationToken>()).Returns(true);
 
         // Act
-        var act = () => _sut.CreateAsync("Test Brand", "TAX123", null);
+        var act = () => _sut.CreateAsync(businessId, "Test Brand", "TAX123", null);
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*tax code*'TAX123'*already exists*");

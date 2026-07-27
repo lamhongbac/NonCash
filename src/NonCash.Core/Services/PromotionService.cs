@@ -175,4 +175,64 @@ public class PromotionService : IPromotionService
         };
         return await _memberRepository.AddAsync(placeholder, cancellationToken);
     }
+
+    // Epic 6.3: Wallet query for Integration API
+    public async Task<IReadOnlyList<MemberWalletVoucher>> GetMemberVouchersByPhoneAsync(
+        string phone, List<Guid> brandIds, CancellationToken cancellationToken = default)
+    {
+        var normalized = Customer.NormalizePhoneNumber(phone);
+        var customer = await _customerRepository.GetByPhoneNumberAsync(normalized, cancellationToken);
+        if (customer == null) return new List<MemberWalletVoucher>();
+
+        var member = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
+        if (member == null) return new List<MemberWalletVoucher>();
+
+        var vouchers = await _detailRepository.FindAsync(
+            d => d.MemberId == member.Id, cancellationToken);
+
+        return vouchers.Select(v =>
+        {
+            // Load plan info for display fields
+            return new MemberWalletVoucher(
+                v.Id,
+                v.SerialNo,
+                0, // FaceValue comes from plan
+                null,
+                null,
+                v.UsageStatus,
+                null, null, null, null, null, null, null, null);
+        }).ToList();
+    }
+
+    // Epic 6.3: Event history for Integration API
+    public async Task<IReadOnlyList<MemberEventRecord>> GetMemberEventsByPhoneAsync(
+        string phone, List<Guid> brandIds, int limit, CancellationToken cancellationToken = default)
+    {
+        // Stub: aggregate from VoucherDistribution + VoucherUsage + VoucherTransfer
+        return new List<MemberEventRecord>();
+    }
+
+    // Epic 6.5: Campaign performance
+    public async Task<CampaignPerformanceResult?> GetCampaignPerformanceAsync(
+        Guid planId, List<Guid> brandIds, CancellationToken cancellationToken = default)
+    {
+        var plan = await _planRepository.GetByIdAsync(planId, cancellationToken);
+        if (plan == null || !brandIds.Contains(plan.BrandId))
+            return null;
+
+        var allDetails = (await _detailRepository.FindAsync(d => d.ParentId == planId, cancellationToken)).ToList();
+        var total = allDetails.Count;
+        var distributed = allDetails.Count(d => d.MemberId != null);
+        var redeemed = allDetails.Count(d => d.UsageStatus == UsageStatus.Complete);
+        var rate = total > 0 ? (decimal)redeemed / total : 0;
+
+        return new CampaignPerformanceResult(
+            planId,
+            plan.DisplayName,
+            total,
+            distributed,
+            redeemed,
+            rate,
+            new List<OutletPerformance>());
+    }
 }

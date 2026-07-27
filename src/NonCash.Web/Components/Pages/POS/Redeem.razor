@@ -1,4 +1,5 @@
 @page "/pos/redeem"
+@attribute [Authorize(Roles = "BrandManager")]
 @using System.Text.Json.Nodes
 @implements IAsyncDisposable
 @inject HttpClient Http

@@ -1,4 +1,5 @@
 @page "/brandmanager/plans"
+@attribute [Authorize(Roles = "BrandManager")]
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation

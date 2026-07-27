@@ -27,6 +27,7 @@ public record RegistrationResult
 {
     public bool Success { get; init; }
     public Guid? RequestId { get; init; }
+    public Guid? BusinessId { get; init; }
     public Guid? BrandId { get; init; }
     public RegistrationStatus Status { get; init; }
     public string? ErrorMessage { get; init; }
@@ -38,10 +39,11 @@ public record RegistrationResult
         Status = RegistrationStatus.Submitted;
     }
 
-    public RegistrationResult(bool success, Guid requestId, Guid brandId, RegistrationStatus status)
+    public RegistrationResult(bool success, Guid requestId, Guid businessId, Guid brandId, RegistrationStatus status)
     {
         Success = success;
         RequestId = requestId;
+        BusinessId = businessId;
         BrandId = brandId;
         Status = status;
     }
@@ -56,7 +58,8 @@ public record RegistrationStatusInfo(
 
 public record RegistrationRequestSummary(
     Guid RequestId,
-    string CompanyName,
+    string BusinessName,
+    string BrandName,
     string TaxCode,
     string ContactEmail,
     string RepresentativeName,
@@ -72,6 +75,7 @@ public record ReviewResult(bool Success, string? ErrorMessage = null);
 
 public class RegistrationService : IRegistrationService
 {
+    private readonly IBusinessRepository _businessRepository;
     private readonly IBrandRepository _brandRepository;
     private readonly IUserAccountRepository _userAccountRepository;
     private readonly IBrandRegistrationRequestRepository _requestRepository;
@@ -79,12 +83,14 @@ public class RegistrationService : IRegistrationService
     private readonly INotificationService _notificationService;
 
     public RegistrationService(
+        IBusinessRepository businessRepository,
         IBrandRepository brandRepository,
         IUserAccountRepository userAccountRepository,
         IBrandRegistrationRequestRepository requestRepository,
         IAuthService authService,
         INotificationService notificationService)
     {
+        _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
         _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
         _userAccountRepository = userAccountRepository ?? throw new ArgumentNullException(nameof(userAccountRepository));
         _requestRepository = requestRepository ?? throw new ArgumentNullException(nameof(requestRepository));
@@ -105,9 +111,9 @@ public class RegistrationService : IRegistrationService
         if (string.IsNullOrWhiteSpace(request.RepresentativeName))
             return new RegistrationResult(false, "Representative name is required.");
 
-        // Check tax code uniqueness against Active or PendingActivation brands
-        var existingBrand = await _brandRepository.GetByTaxCodeAsync(request.TaxCode.Trim(), cancellationToken);
-        if (existingBrand != null && existingBrand.Status != BrandStatus.Suspended)
+        // Check tax code uniqueness against existing businesses
+        var existingBusiness = await _businessRepository.GetByTaxCodeAsync(request.TaxCode.Trim(), cancellationToken);
+        if (existingBusiness != null)
         {
             return new RegistrationResult(false, "DuplicateTaxCode");
         }
@@ -118,9 +124,23 @@ public class RegistrationService : IRegistrationService
             return new RegistrationResult(false, "Username already exists.");
         }
 
-        // Create Brand with PendingActivation status
+        // Create Business (the legal company)
+        var business = new Business
+        {
+            BusinessName = request.CompanyName.Trim(),
+            TaxCode = request.TaxCode.Trim(),
+            Address = request.Address?.Trim() ?? string.Empty,
+            ContactEmail = request.ContactEmail?.Trim(),
+            PhoneNumber = request.PhoneNumber?.Trim(),
+            IsActive = false
+        };
+        await _businessRepository.AddAsync(business, cancellationToken);
+        await _businessRepository.SaveChangesAsync(cancellationToken);
+
+        // Create the first Brand under the business with PendingActivation status
         var brand = new Brand
         {
+            BusinessId = business.Id,
             Name = request.CompanyName.Trim(),
             TaxCode = request.TaxCode.Trim(),
             ContactEmail = request.ContactEmail?.Trim(),
@@ -164,7 +184,7 @@ public class RegistrationService : IRegistrationService
                 request.ContactEmail, brand.Name, registrationRequest.Id, cancellationToken);
         }
 
-        return new RegistrationResult(true, registrationRequest.Id, brand.Id, RegistrationStatus.Submitted);
+        return new RegistrationResult(true, registrationRequest.Id, business.Id, brand.Id, RegistrationStatus.Submitted);
     }
 
     public async Task<RegistrationStatusInfo?> GetStatusAsync(Guid requestId, CancellationToken cancellationToken = default)
@@ -218,6 +238,15 @@ public class RegistrationService : IRegistrationService
             await _brandRepository.SaveChangesAsync(cancellationToken);
         }
 
+        // Update the associated Business
+        var business = await _businessRepository.GetByIdAsync(brand?.BusinessId ?? Guid.Empty, cancellationToken);
+        if (business != null)
+        {
+            business.IsActive = approve;
+            _businessRepository.Update(business);
+            await _businessRepository.SaveChangesAsync(cancellationToken);
+        }
+
         // Update the associated UserAccount
         var user = await _userAccountRepository.GetByIdAsync(request.SubmittedByUserId, cancellationToken);
         if (user != null)
@@ -241,6 +270,7 @@ public class RegistrationService : IRegistrationService
         foreach (var r in requests)
         {
             var brand = await _brandRepository.GetByIdAsync(r.BrandId, cancellationToken);
+            var business = brand != null ? await _businessRepository.GetByIdAsync(brand.BusinessId, cancellationToken) : null;
             var user = await _userAccountRepository.GetByIdAsync(r.SubmittedByUserId, cancellationToken);
             string? reviewedByName = null;
             if (r.ReviewedByUserId.HasValue)
@@ -251,9 +281,10 @@ public class RegistrationService : IRegistrationService
 
             summaries.Add(new RegistrationRequestSummary(
                 r.Id,
+                business?.BusinessName ?? "",
                 brand?.Name ?? "",
-                brand?.TaxCode ?? "",
-                brand?.ContactEmail ?? "",
+                business?.TaxCode ?? brand?.TaxCode ?? "",
+                business?.ContactEmail ?? brand?.ContactEmail ?? "",
                 user?.FullName ?? "",
                 user?.Username ?? "",
                 r.Status,

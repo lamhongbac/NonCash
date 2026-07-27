@@ -33,6 +33,13 @@ Hình thức hiển thị:
 +Mệnh giá: giá trị sử dụng của VC
 +NetValue: giá trị VC, giá trị này sẽ là giá trị tham khảo khi thực hiện bán voucher (ví dụ voucher có giá trị sử dụng là 100K, và NetValue =80K , Price là 90K)
 Có nghĩa khách hàng bỏ ra 90K có đc 100K su dung, va cty co 10K margin
+
+Monetization rule: Voucher margin and transaction fee are ALTERNATIVES, not cumulative.
+- Gift voucher (bán): Platform earns margin = Price - NetValue. No transaction fee charged.
+- Complimentary voucher (cho/tặng): No margin. SaaS subscription covers platform access.
+- Enterprise/B2B resale: Transaction fee (%) replaces margin, negotiated per contract.
+This prevents triple-dipping and keeps brand incentives aligned with the platform.
+
 +Ngày hết hạn: là ngày không được sử dụng, ngày này nếu lớn hơn ngày trong định nghĩa phạm vi thời gian sử dụng ở dưới, sẽ bị phạm vi sử dụng phủ quyết, ngày hết hạn có thể là tĩnh hoặc theo quy tắc logic
 +Publish Date: là ngày chính thức được phép phân phát đi ( trước ngày trong phạm vi sử dụng)
 +Phạm vi bán hàng: là danh sách các Điểm bán (Outlets / Stores) chấp nhận sử dụng voucher (trực thuộc Brand).

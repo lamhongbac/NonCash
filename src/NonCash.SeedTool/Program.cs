@@ -20,6 +20,7 @@ services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+services.AddScoped<IBusinessRepository, BusinessRepository>();
 services.AddScoped<IBrandRepository, BrandRepository>();
 services.AddScoped<IOutletRepository, OutletRepository>();
 services.AddScoped<ICustomerRepository, CustomerRepository>();
@@ -44,7 +45,34 @@ await context.Database.CanConnectAsync();
 Console.WriteLine("✓ Database connected\n");
 
 // =============================================================================
-// 1. Create Brand
+// 1. Create Business
+// =============================================================================
+Console.WriteLine("Creating business...");
+var businessId = Guid.Parse("90000000-0000-0000-0000-000000000001");
+var business = await context.Businesses.FindAsync(businessId);
+if (business == null)
+{
+    business = new Business
+    {
+        Id = businessId,
+        BusinessName = "Test Coffee Company",
+        TaxCode = "TAX-TEST-001",
+        Address = "123 Main Street, HCMC",
+        ContactEmail = "admin@testcoffee.com",
+        PhoneNumber = "0909000001",
+        IsActive = true
+    };
+    context.Businesses.Add(business);
+    await context.SaveChangesAsync();
+    Console.WriteLine("  ✓ Created: Test Coffee Company");
+}
+else
+{
+    Console.WriteLine("  - Business already exists, skipping");
+}
+
+// =============================================================================
+// 2. Create Brand
 // =============================================================================
 Console.WriteLine("Creating brand...");
 var brandId = Guid.Parse("a0000000-0000-0000-0000-000000000001");
@@ -54,6 +82,7 @@ if (brand == null)
     brand = new Brand
     {
         Id = brandId,
+        BusinessId = businessId,
         Name = "Test Coffee Shop",
         TaxCode = "TAX-TEST-001",
         ContactEmail = "admin@testcoffee.com",
@@ -65,11 +94,14 @@ if (brand == null)
 }
 else
 {
-    Console.WriteLine("  - Brand already exists, skipping");
+    brand.BusinessId = businessId;
+    context.Brands.Update(brand);
+    await context.SaveChangesAsync();
+    Console.WriteLine("  - Brand already exists, linked to business");
 }
 
 // =============================================================================
-// 2. Create Outlet
+// 3. Create Outlet
 // =============================================================================
 Console.WriteLine("Creating outlet...");
 var outletId = Guid.Parse("b0000000-0000-0000-0000-000000000001");
@@ -95,7 +127,7 @@ else
 }
 
 // =============================================================================
-// 3. Create Members (Customers)
+// 4. Create Members (Customers)
 // =============================================================================
 Console.WriteLine("Creating members...");
 
@@ -134,7 +166,7 @@ foreach (var (id, phone, name, email) in members)
 await context.SaveChangesAsync();
 
 // =============================================================================
-// 4. Create Member Accounts for Customers
+// 5. Create Member Accounts for Customers
 // =============================================================================
 Console.WriteLine("Creating member accounts...");
 const string testPassword = "Test@123";
@@ -178,7 +210,7 @@ foreach (var (id, username, fullName, customerId) in memberAccounts)
 await context.SaveChangesAsync();
 
 // =============================================================================
-// 5. Create a Staff User Account (plan creator)
+// 6. Create a Staff User Account (plan creator)
 // =============================================================================
 Console.WriteLine("Creating staff user account...");
 var staffUserId = Guid.Parse("e0000000-0000-0000-0000-000000000001");
@@ -205,7 +237,7 @@ else
 }
 
 // =============================================================================
-// 6. Create Approved Voucher Plan
+// 7. Create Approved Voucher Plan
 // =============================================================================
 Console.WriteLine("Creating voucher plan...");
 var planId = Guid.Parse("f0000000-0000-0000-0000-000000000001");
@@ -243,7 +275,7 @@ else
 }
 
 // =============================================================================
-// 7. Create Vouchers (distributed to member accounts)
+// 8. Create Vouchers (distributed to member accounts)
 // =============================================================================
 Console.WriteLine("Creating vouchers...");
 
@@ -309,7 +341,8 @@ await context.SaveChangesAsync();
 // Summary
 // =============================================================================
 Console.WriteLine("\n=== Seed Complete ===");
-Console.WriteLine($"\nBrands:             {await context.Brands.CountAsync()}");
+Console.WriteLine($"\nBusinesses:         {await context.Businesses.CountAsync()}");
+Console.WriteLine($"Brands:             {await context.Brands.CountAsync()}");
 Console.WriteLine($"Outlets:            {await context.Outlets.CountAsync()}");
 Console.WriteLine($"Customers:          {await context.Customers.CountAsync()}");
 Console.WriteLine($"UserAccounts:       {await context.UserAccounts.CountAsync()}");

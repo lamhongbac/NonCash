@@ -66,8 +66,9 @@ Create Plan → Generate Vouchers → Distribute → Transfer/Gift → Redeem at
 | **Redemption** | POS verify and commit with dynamic codes and outlet authorization. |
 | **Social Transfer** | Peer-to-peer voucher gifting with sender/recipient confirmation. |
 | **Reporting** | Real-time tracking of issuance, distribution, redemption, and expiry. |
+| **Loyalty App Integration** | Generic API layer for any brand Loyalty App to distribute to segments, query member wallets, receive webhook events, and pull campaign performance — without owning voucher logic. |
 
-**Speaker note:** Mention that the transfer module is already built and tested with 13 passing acceptance tests.
+**Speaker note:** Mention that the transfer module is already built and tested with 13 passing acceptance tests. The Loyalty App Integration API makes NonCash a plug-in voucher engine for any existing loyalty ecosystem — not just one partner.
 
 ---
 
@@ -203,12 +204,23 @@ Create Plan → Generate Vouchers → Distribute → Transfer/Gift → Redeem at
 
 **Title:** How We Make Money
 
-| Revenue Stream | Description |
-| --- | --- |
-| **SaaS subscription** | Monthly/annual tiers by brand size or voucher volume. |
-| **Transaction fee** | Percentage on self-purchase and B2B voucher sales. |
-| **Premium features** | Advanced analytics, white-label branding, API access, custom integrations. |
-| **Implementation services** | Onboarding, POS integration, and training for enterprise clients. |
+| Revenue Stream | Description | Applies To |
+| --- | --- | --- |
+| **SaaS subscription** | Monthly/annual tiers by brand size or voucher volume. | All brands (base platform access). |
+| **Voucher margin** | Spread between voucher NetValue (cost to brand) and sale Price. | Gift voucher campaigns (sold to customers/B2B). |
+| **Transaction fee** | Percentage on self-purchase and B2B voucher sales processed on-platform. | Enterprise / high-volume resale channels. |
+| **Premium features** | Advanced analytics, white-label branding, API access, custom integrations. | Opt-in add-ons for any tier. |
+| **Implementation services** | Onboarding, POS integration, and training for enterprise clients. | One-time, enterprise onboarding. |
+
+**Key monetization rule — no triple-dip:**
+
+Voucher margin and transaction fee are **alternatives, not cumulative**. A brand chooses one per campaign type:
+
+- **Gift voucher (sold):** Platform earns the NetValue-to-Price margin. No additional transaction fee.
+- **Complimentary voucher (given away):** No margin taken. SaaS subscription covers platform access.
+- **Enterprise / B2B resale:** Transaction fee model replaces margin, negotiated per contract.
+
+SaaS subscription is the base revenue for all brands. Premium features and implementation services are additive layers with no conflict.
 
 ---
 
@@ -289,7 +301,7 @@ Create Plan → Generate Vouchers → Distribute → Transfer/Gift → Redeem at
 ### Q: How do you make money?
 
 **Answer:**
-> "SaaS subscriptions based on brand size and volume, plus transaction fees on self-purchase and B2B sales. Premium tiers include advanced analytics, white-label branding, and API access."
+> "SaaS subscriptions are the base revenue — every brand pays a monthly tier for platform access. On top of that, we earn either a voucher margin or a transaction fee per campaign, but never both on the same sale. Gift voucher campaigns generate margin from the spread between cost and sale price. Enterprise B2B resale uses a negotiated transaction fee instead. Premium features and implementation services are additive, opt-in layers. This avoids triple-dipping and keeps brand incentives aligned with ours."
 
 ### Q: What is your initial target market?
 

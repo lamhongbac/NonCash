@@ -30,6 +30,10 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("BusinessId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("business_id");
+
                     b.Property<string>("ContactEmail")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -62,6 +66,8 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BusinessId");
 
                     b.HasIndex("Status");
 
@@ -130,6 +136,61 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("brand_registration_requests", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.Business", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("address");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("business_name");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("contact_email");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("phone_number");
+
+                    b.Property<string>("TaxCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tax_code");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaxCode")
+                        .IsUnique();
+
+                    b.ToTable("businesses", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -176,6 +237,73 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("customers", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.IntegrationPartner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApiKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("api_key_hash");
+
+                    b.Property<string>("ApiKeyPrefix")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("api_key_prefix");
+
+                    b.Property<string>("CallbackUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("callback_url");
+
+                    b.Property<string>("ContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("contact_email");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("WebhookSecret")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("webhook_secret");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyPrefix")
+                        .IsUnique()
+                        .HasDatabaseName("IX_integration_partners_api_key_prefix");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("IX_integration_partners_name");
+
+                    b.ToTable("integration_partners", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.MemberAccount", b =>
@@ -325,6 +453,24 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("outlets", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.PartnerBrand", b =>
+                {
+                    b.Property<Guid>("PartnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("partner_id");
+
+                    b.Property<Guid>("BrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("brand_id");
+
+                    b.HasKey("PartnerId", "BrandId");
+
+                    b.HasIndex("BrandId")
+                        .HasDatabaseName("IX_partner_brands_brand_id");
+
+                    b.ToTable("partner_brands", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.PaymentTransaction", b =>
@@ -480,6 +626,83 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("purchase_orders", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.SettlementEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("FaceValue")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("face_value");
+
+                    b.Property<Guid>("IssuingBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issuing_brand_id");
+
+                    b.Property<Guid?>("RedeemBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("redeem_brand_id");
+
+                    b.Property<Guid?>("RedeemOutletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("redeem_outlet_id");
+
+                    b.Property<DateTime?>("SettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settled_at");
+
+                    b.Property<Guid?>("SettledBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("settled_by");
+
+                    b.Property<Guid?>("SponsorBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sponsor_brand_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("VoucherUsageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voucher_usage_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_settlement_entries_created_at");
+
+                    b.HasIndex("IssuingBrandId")
+                        .HasDatabaseName("IX_settlement_entries_issuing_brand_id");
+
+                    b.HasIndex("RedeemBrandId")
+                        .HasDatabaseName("IX_settlement_entries_redeem_brand_id");
+
+                    b.HasIndex("RedeemOutletId");
+
+                    b.HasIndex("SponsorBrandId")
+                        .HasDatabaseName("IX_settlement_entries_sponsor_brand_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_settlement_entries_status");
+
+                    b.HasIndex("VoucherUsageId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_settlement_entries_voucher_usage_id");
+
+                    b.ToTable("settlement_entries", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.UserAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -554,6 +777,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("distribution_date");
 
+                    b.Property<string>("ExternalMemberId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("external_member_id");
+
                     b.Property<Guid>("MemberId")
                         .HasColumnType("uuid")
                         .HasColumnName("member_id");
@@ -581,6 +809,64 @@ namespace NonCash.Infrastructure.Migrations
                         .HasDatabaseName("IX_voucher_distributions_voucher_id");
 
                     b.ToTable("voucher_distributions", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("brand_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("MemberPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("member_phone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("VoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voucher_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BrandId")
+                        .HasDatabaseName("IX_voucher_events_brand_id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_voucher_events_created_at");
+
+                    b.HasIndex("EventType")
+                        .HasDatabaseName("IX_voucher_events_event_type");
+
+                    b.HasIndex("MemberPhone")
+                        .HasDatabaseName("IX_voucher_events_member_phone");
+
+                    b.HasIndex("VoucherId");
+
+                    b.ToTable("voucher_events", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherPlanDetail", b =>
@@ -691,6 +977,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approver_id");
 
+                    b.Property<string>("BrandColor")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("brand_color");
+
                     b.Property<Guid>("BrandId")
                         .HasColumnType("uuid")
                         .HasColumnName("brand_id");
@@ -699,6 +990,10 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("budget");
 
+                    b.Property<string>("CoverImageUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("cover_image_url");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -706,6 +1001,11 @@ namespace NonCash.Infrastructure.Migrations
                     b.Property<Guid>("CreatorId")
                         .HasColumnType("uuid")
                         .HasColumnName("creator_id");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
 
                     b.Property<DateTime>("ExpiryDate")
                         .HasColumnType("timestamp with time zone")
@@ -739,6 +1039,15 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("publish_date");
 
+                    b.Property<string>("ShortDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("short_description");
+
+                    b.Property<Guid?>("SponsorBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sponsor_brand_id");
+
                     b.Property<int>("TargetDistributed")
                         .HasColumnType("integer")
                         .HasColumnName("target_distributed");
@@ -751,9 +1060,18 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("target_used");
 
+                    b.Property<string>("TermsAndConditions")
+                        .HasColumnType("text")
+                        .HasColumnName("terms_and_conditions");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<string>("ValidDaysOfWeek")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("valid_days_of_week");
 
                     b.Property<DateTime?>("ValidFrom")
                         .HasColumnType("timestamp with time zone")
@@ -795,6 +1113,8 @@ namespace NonCash.Infrastructure.Migrations
 
                     b.HasIndex("PreviousVersionId")
                         .HasDatabaseName("IX_voucher_plan_headers_previous_version_id");
+
+                    b.HasIndex("SponsorBrandId");
 
                     b.ToTable("voucher_plan_headers", "public");
                 });
@@ -951,6 +1271,14 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pos_id");
 
+                    b.Property<Guid?>("RedeemBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("redeem_brand_id");
+
+                    b.Property<Guid?>("SponsorBrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sponsor_brand_id");
+
                     b.Property<string>("TransactionId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -974,6 +1302,12 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("PosId")
                         .HasDatabaseName("IX_voucher_usages_pos_id");
 
+                    b.HasIndex("RedeemBrandId")
+                        .HasDatabaseName("IX_voucher_usages_redeem_brand_id");
+
+                    b.HasIndex("SponsorBrandId")
+                        .HasDatabaseName("IX_voucher_usages_sponsor_brand_id");
+
                     b.HasIndex("TransactionId")
                         .IsUnique()
                         .HasDatabaseName("IX_voucher_usages_transaction_id");
@@ -982,6 +1316,79 @@ namespace NonCash.Infrastructure.Migrations
                         .HasDatabaseName("IX_voucher_usages_voucher_id");
 
                     b.ToTable("voucher_usages", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.WebhookDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<int?>("HttpStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("http_status");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_retry_at");
+
+                    b.Property<Guid>("PartnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("partner_id");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("retry_count");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveredAt")
+                        .HasDatabaseName("IX_webhook_deliveries_delivered_at");
+
+                    b.HasIndex("NextRetryAt")
+                        .HasDatabaseName("IX_webhook_deliveries_next_retry_at");
+
+                    b.HasIndex("PartnerId")
+                        .HasDatabaseName("IX_webhook_deliveries_partner_id");
+
+                    b.HasIndex("EventId", "PartnerId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_webhook_deliveries_event_partner");
+
+                    b.ToTable("webhook_deliveries", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.Brand", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Business", "Business")
+                        .WithMany("Brands")
+                        .HasForeignKey("BusinessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Business");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.BrandRegistrationRequest", b =>
@@ -1051,6 +1458,25 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Brand");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.PartnerBrand", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Brand", "Brand")
+                        .WithMany()
+                        .HasForeignKey("BrandId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.IntegrationPartner", "Partner")
+                        .WithMany("PartnerBrands")
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Brand");
+
+                    b.Navigation("Partner");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.PaymentTransaction", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.PurchaseOrder", "PurchaseOrder")
@@ -1092,6 +1518,46 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Member");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.SettlementEntry", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Brand", "IssuingBrand")
+                        .WithMany()
+                        .HasForeignKey("IssuingBrandId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.Brand", "RedeemBrand")
+                        .WithMany()
+                        .HasForeignKey("RedeemBrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NonCash.Core.Entities.Outlet", "RedeemOutlet")
+                        .WithMany()
+                        .HasForeignKey("RedeemOutletId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NonCash.Core.Entities.Brand", "SponsorBrand")
+                        .WithMany()
+                        .HasForeignKey("SponsorBrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NonCash.Core.Entities.VoucherUsage", "VoucherUsage")
+                        .WithOne()
+                        .HasForeignKey("NonCash.Core.Entities.SettlementEntry", "VoucherUsageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IssuingBrand");
+
+                    b.Navigation("RedeemBrand");
+
+                    b.Navigation("RedeemOutlet");
+
+                    b.Navigation("SponsorBrand");
+
+                    b.Navigation("VoucherUsage");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.UserAccount", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.Brand", "Brand")
@@ -1117,6 +1583,23 @@ namespace NonCash.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Member");
+
+                    b.Navigation("Voucher");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Brand", "Brand")
+                        .WithMany()
+                        .HasForeignKey("BrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NonCash.Core.Entities.VoucherPlanDetail", "Voucher")
+                        .WithMany()
+                        .HasForeignKey("VoucherId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Brand");
 
                     b.Navigation("Voucher");
                 });
@@ -1163,6 +1646,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasForeignKey("PreviousVersionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("NonCash.Core.Entities.Brand", "SponsorBrand")
+                        .WithMany()
+                        .HasForeignKey("SponsorBrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Approver");
 
                     b.Navigation("Brand");
@@ -1170,6 +1658,8 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("PreviousVersion");
+
+                    b.Navigation("SponsorBrand");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherReview", b =>
@@ -1220,18 +1710,66 @@ namespace NonCash.Infrastructure.Migrations
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherUsage", b =>
                 {
+                    b.HasOne("NonCash.Core.Entities.Brand", "RedeemBrand")
+                        .WithMany()
+                        .HasForeignKey("RedeemBrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NonCash.Core.Entities.Brand", "SponsorBrand")
+                        .WithMany()
+                        .HasForeignKey("SponsorBrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("NonCash.Core.Entities.VoucherPlanDetail", "Voucher")
                         .WithMany()
                         .HasForeignKey("VoucherId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("RedeemBrand");
+
+                    b.Navigation("SponsorBrand");
+
                     b.Navigation("Voucher");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.WebhookDelivery", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.VoucherEvent", "Event")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.IntegrationPartner", "Partner")
+                        .WithMany()
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+
+                    b.Navigation("Partner");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.Business", b =>
+                {
+                    b.Navigation("Brands");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.IntegrationPartner", b =>
+                {
+                    b.Navigation("PartnerBrands");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.PurchaseOrder", b =>
                 {
                     b.Navigation("OrderDetails");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>
+                {
+                    b.Navigation("Deliveries");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherPlanHeader", b =>

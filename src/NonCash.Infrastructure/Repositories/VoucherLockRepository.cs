@@ -44,6 +44,13 @@ public class VoucherLockRepository : IVoucherLockRepository
             .FirstOrDefaultAsync(v => v.Id == voucherId, cancellationToken);
     }
 
+    public async Task<VoucherPlanDetail?> FindByLockIdAsync(Guid lockId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Set<VoucherPlanDetail>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.LockId == lockId, cancellationToken);
+    }
+
     public async Task<int> ReleaseExpiredLocksAsync(DateTime cutoff, CancellationToken cancellationToken = default)
     {
         return await _context.Set<VoucherPlanDetail>()
@@ -75,6 +82,8 @@ public class VoucherLockRepository : IVoucherLockRepository
         Guid posId,
         DateTime now,
         DateTime expiryCutoff,
+        Guid? sponsorBrandId = null,
+        Guid? redeemBrandId = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the locked voucher detail by LockId.
@@ -133,7 +142,10 @@ public class VoucherLockRepository : IVoucherLockRepository
                 TransactionId = transactionId,
                 UsageDate = now,
                 AmountUsed = amountUsed,
-                CreatedAt = now
+                CreatedAt = now,
+                // Epic 7.1: Cross-tenant settlement attribution
+                SponsorBrandId = sponsorBrandId,
+                RedeemBrandId = redeemBrandId
             };
             _context.Set<VoucherUsage>().Add(usage);
             await _context.SaveChangesAsync(cancellationToken);

@@ -21,6 +21,11 @@ public interface IVoucherLockRepository
     Task<VoucherPlanDetail?> FindByIdAsync(Guid voucherId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the voucher detail currently holding the given LockId (used for settlement attribution lookup).
+    /// </summary>
+    Task<VoucherPlanDetail?> FindByLockIdAsync(Guid lockId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Releases all locks whose LockedAt + ttl has passed (resets them to Pending).
     /// Returns the number of locks released.
     /// </summary>
@@ -35,6 +40,7 @@ public interface IVoucherLockRepository
     /// Atomically commits a locked voucher: validates lock, transitions InUse to Complete,
     /// inserts a VoucherUsage record, and clears lock fields. Wrapped in a DB transaction.
     /// Returns CommitOutcome.Success on success, or a specific failure status.
+    /// Epic 7.1: optionally records SponsorBrandId and RedeemBrandId on VoucherUsage for cross-tenant settlement.
     /// </summary>
     Task<CommitOutcome> CommitAsync(
         Guid lockId,
@@ -43,6 +49,8 @@ public interface IVoucherLockRepository
         Guid posId,
         DateTime now,
         DateTime expiryCutoff,
+        Guid? sponsorBrandId = null,
+        Guid? redeemBrandId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

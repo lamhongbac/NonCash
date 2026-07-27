@@ -20,20 +20,34 @@ public class BrandsControllerTests
         return new ApplicationDbContext(options);
     }
 
-    private BrandsController CreateController(ApplicationDbContext context)
+    private (BrandsController Controller, Guid BusinessId) CreateController(ApplicationDbContext context)
     {
-        var repository = new BrandRepository(context);
-        var service = new BrandService(repository);
-        return new BrandsController(service);
+        var businessRepository = new BusinessRepository(context);
+        var brandRepository = new BrandRepository(context);
+        var service = new BrandService(businessRepository, brandRepository);
+        var controller = new BrandsController(service);
+
+        var business = new Business
+        {
+            BusinessName = "Test Business",
+            TaxCode = "BUS999",
+            Address = "Test Address",
+            ContactEmail = "business@test.com",
+            IsActive = true
+        };
+        businessRepository.AddAsync(business).GetAwaiter().GetResult();
+        businessRepository.SaveChangesAsync().GetAwaiter().GetResult();
+
+        return (controller, business.Id);
     }
 
     [Fact]
     public async Task GetBrands_ReturnsEmptyList()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
+        var (controller, _) = CreateController(context);
 
-        var result = await controller.GetBrands(null, null, 1, 20, CancellationToken.None);
+        var result = await controller.GetBrands(null, null, null, 1, 20, CancellationToken.None);
 
         result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>();
         var okResult = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
@@ -45,8 +59,8 @@ public class BrandsControllerTests
     public async Task CreateBrand_WithValidData_ReturnsCreated()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
-        var request = new CreateBrandRequest("Integration Test Brand", "INT999", "int@test.com");
+        var (controller, businessId) = CreateController(context);
+        var request = new CreateBrandRequest(businessId, "Integration Test Brand", "INT999", "int@test.com");
 
         var result = await controller.CreateBrand(request, CancellationToken.None);
 
@@ -61,8 +75,8 @@ public class BrandsControllerTests
     public async Task CreateBrand_WithDuplicateTaxCode_ReturnsConflict()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
-        var request = new CreateBrandRequest("Brand A", "DUP001", null);
+        var (controller, businessId) = CreateController(context);
+        var request = new CreateBrandRequest(businessId, "Brand A", "DUP001", null);
         await controller.CreateBrand(request, CancellationToken.None);
 
         var result = await controller.CreateBrand(request, CancellationToken.None);
@@ -74,8 +88,8 @@ public class BrandsControllerTests
     public async Task GetBrandById_WithValidId_ReturnsBrand()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
-        var createRequest = new CreateBrandRequest("Get By Id Brand", "GET001", null);
+        var (controller, businessId) = CreateController(context);
+        var createRequest = new CreateBrandRequest(businessId, "Get By Id Brand", "GET001", null);
         var createResult = await controller.CreateBrand(createRequest, CancellationToken.None);
         var created = (createResult.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as BrandResponse;
 
@@ -88,7 +102,7 @@ public class BrandsControllerTests
     public async Task GetBrandById_WithInvalidId_ReturnsNotFound()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
+        var (controller, _) = CreateController(context);
 
         var result = await controller.GetBrand(Guid.NewGuid(), CancellationToken.None);
 
@@ -99,8 +113,8 @@ public class BrandsControllerTests
     public async Task UpdateBrand_WithValidData_ReturnsOk()
     {
         using var context = CreateContext();
-        var controller = CreateController(context);
-        var createRequest = new CreateBrandRequest("Update Brand", "UPD001", null);
+        var (controller, businessId) = CreateController(context);
+        var createRequest = new CreateBrandRequest(businessId, "Update Brand", "UPD001", null);
         var createResult = await controller.CreateBrand(createRequest, CancellationToken.None);
         var created = (createResult.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as BrandResponse;
 

@@ -87,3 +87,26 @@ development_status:
   5-2-recipient-confirmation: done
   5-3-sender-cancel-and-history: done
   epic-5-retrospective: optional
+
+  # Epic 6: Loyalty App Integration (External Partner API)
+  epic-6: backlog
+  6-1-loyalty-app-partner-onboarding: backlog
+  6-2-segment-distribution-api: backlog
+  6-3-member-wallet-event-history-api: backlog
+  6-4-webhook-lifecycle-events: backlog
+  6-5-campaign-performance-api: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Cross-Tenant Settlement & Campaign Sponsorship
+  epic-7: backlog
+  7-1-plan-sponsor-redeem-tracking: backlog
+  7-2-settlement-ledger: backlog
+  7-3-netting-report: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Voucher Display & Presentation
+  epic-8: backlog
+  8-1-voucher-display-data-model: backlog
+  8-2-member-store-wallet-display: backlog
+  8-3-loyalty-app-display-payload: backlog
+  epic-8-retrospective: optional

@@ -10,6 +10,16 @@ public class BrandConfiguration : IEntityTypeConfiguration<Brand>
     {
         builder.HasKey(b => b.Id);
 
+        builder.Property(b => b.BusinessId)
+            .IsRequired();
+
+        builder.HasIndex(b => b.BusinessId);
+
+        builder.HasOne(b => b.Business)
+            .WithMany(bu => bu.Brands)
+            .HasForeignKey(b => b.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Property(b => b.Name)
             .IsRequired()
             .HasMaxLength(200);

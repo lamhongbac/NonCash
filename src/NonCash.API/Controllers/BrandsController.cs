@@ -22,6 +22,7 @@ public class BrandsController : ControllerBase
     public async Task<ActionResult<PagedResult<BrandResponse>>> GetBrands(
         [FromQuery] string? name,
         [FromQuery] string? status,
+        [FromQuery] Guid? businessId,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -36,8 +37,8 @@ public class BrandsController : ControllerBase
             statusFilter = parsedStatus;
         }
 
-        var items = await _brandService.ListAsync(name, statusFilter, pageNumber, pageSize, cancellationToken);
-        var totalCount = await _brandService.CountAsync(name, statusFilter, cancellationToken);
+        var items = await _brandService.ListAsync(name, statusFilter, businessId, pageNumber, pageSize, cancellationToken);
+        var totalCount = await _brandService.CountAsync(name, statusFilter, businessId, cancellationToken);
 
         var response = new PagedResult<BrandResponse>(
             items.Select(MapToResponse).ToList(),
@@ -67,6 +68,7 @@ public class BrandsController : ControllerBase
         try
         {
             var brand = await _brandService.CreateAsync(
+                request.BusinessId,
                 request.Name,
                 request.TaxCode,
                 request.ContactEmail,
@@ -75,6 +77,10 @@ public class BrandsController : ControllerBase
             return CreatedAtAction(nameof(GetBrand), new { id = brand.Id }, MapToResponse(brand));
         }
         catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
@@ -111,6 +117,8 @@ public class BrandsController : ControllerBase
     {
         return new BrandResponse(
             brand.Id,
+            brand.BusinessId,
+            brand.Business?.BusinessName ?? string.Empty,
             brand.Name,
             brand.TaxCode,
             brand.ContactEmail,

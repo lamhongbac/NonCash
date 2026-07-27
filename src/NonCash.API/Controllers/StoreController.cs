@@ -31,7 +31,14 @@ public class StoreController : ControllerBase
             p.ValidTo,
             p.ExpiryDate,
             p.ImageUrl,
-            p.IconUrl
+            p.IconUrl,
+            // Epic 8.1: Display fields
+            p.CoverImageUrl,
+            p.BrandColor,
+            p.DisplayName,
+            p.ShortDescription,
+            p.TermsAndConditions,
+            p.ValidDaysOfWeek
         )).ToList();
         return Ok(items);
     }
@@ -46,4 +53,11 @@ public record CatalogItemResponse(
     DateTime? ValidTo,
     DateTime ExpiryDate,
     string? ImageUrl,
-    string? IconUrl);
+    string? IconUrl,
+    // Epic 8.1: Display fields
+    string? CoverImageUrl,
+    string? BrandColor,
+    string? DisplayName,
+    string? ShortDescription,
+    string? TermsAndConditions,
+    string? ValidDaysOfWeek);

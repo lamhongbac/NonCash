@@ -1,5 +1,6 @@
 ﻿@page "/"
 @inject NonCash.Web.Services.ClientAuthService AuthState
+@implements IDisposable
 
 <PageTitle>NonCash Dashboard</PageTitle>
 
@@ -16,6 +17,24 @@ else
     <MudAlert Severity="Severity.Warning" Class="mb-4">
         You are not logged in. Please sign in to access your account.
     </MudAlert>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.OnAuthStateChanged += OnAuthStateChanged;
+        await AuthState.InitializeAsync();
+    }
+
+    private void OnAuthStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthState.OnAuthStateChanged -= OnAuthStateChanged;
+    }
 }
 
 <MudText Typo="Typo.body1" Class="mb-6">

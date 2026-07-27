@@ -45,10 +45,22 @@ public class VoucherPlanHeader : BaseEntity
     public Guid? PreviousVersionId { get; set; }
     public int VersionNumber { get; set; } = 1;
 
+    // Epic 7.1: Cross-tenant sponsorship
+    public Guid? SponsorBrandId { get; set; }
+
+    // Epic 8.1: Display data model
+    public string? CoverImageUrl { get; set; }
+    public string? TermsAndConditions { get; set; }
+    public string? BrandColor { get; set; }
+    public string? DisplayName { get; set; }
+    public string? ShortDescription { get; set; }
+    public string? ValidDaysOfWeek { get; set; }
+
     // Navigation properties
     public UserAccount? Creator { get; set; }
     public UserAccount? Approver { get; set; }
     public Brand? Brand { get; set; }
+    public Brand? SponsorBrand { get; set; }
     public VoucherPlanHeader? PreviousVersion { get; set; }
     public ICollection<PlanOutlet> PlanOutlets { get; set; } = new List<PlanOutlet>();
 }

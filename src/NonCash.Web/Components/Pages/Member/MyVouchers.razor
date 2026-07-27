@@ -4,6 +4,9 @@
 @inject IJSRuntime JSRuntime
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
+@using NonCash.Shared.Helpers
+@using NonCash.Shared.Enums
+
 <PageTitle>My Vouchers</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-2">My Vouchers</MudText>
@@ -35,36 +38,24 @@ else if (_vouchers.Any())
         @foreach (var v in _vouchers)
         {
             <MudItem xs="12" sm="6" md="4">
-                <MudCard Elevation="2" Outlined="@(_selectedVoucher?.Id == v.Id)" Class="cursor-pointer" @onclick="() => SelectVoucher(v)">
-                    @if (v.UsageStatus == "Pending")
-                    {
-                        <MudCardActions Class="pa-2" @onclick:stopPropagation="true">
-                            <MudCheckBox T="bool" Value="@(_selectedIds.Contains(v.Id))" ValueChanged="@((bool b) => ToggleSelection(v.Id, b))" Label="Select for transfer" />
-                        </MudCardActions>
-                    }
-                    @if (!string.IsNullOrEmpty(v.ImageUrl))
-                    {
-                        <MudCardMedia Image="@v.ImageUrl" Height="140" />
-                    }
-                    <MudCardContent>
-                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                            <MudText Typo="Typo.h6">@v.FaceValue.ToString("N0") @(v.ValueType == "Percentage" ? "%" : "VND")</MudText>
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(v.UsageStatus)">@v.UsageStatus</MudChip>
-                        </MudStack>
-                        <MudText Typo="Typo.caption" Class="mt-2">Serial: <b>@v.SerialNo</b></MudText>
-                        @if (v.ExpiryDate.HasValue)
+                <NonCash.Web.Components.Shared.VoucherCard
+                    ImageUrl="@v.ImageUrl"
+                    FaceValue="@v.FaceValue"
+                    ValueType="@v.ValueType"
+                    ExpiryDate="@v.ExpiryDate"
+                    UsageStatus="@v.UsageStatus"
+                    StatusBadge="@VoucherDisplayHelper.ComputeStatusBadge(ParseStatus(v.UsageStatus), v.ExpiryDate ?? DateTime.MaxValue)"
+                    ShowViewButton="true"
+                    OnView="@(() => SelectVoucher(v))"
+                    OnClick="@(() => SelectVoucher(v))"
+                    CardClass="@(_selectedVoucher?.Id == v.Id ? "mud-theme-primary" : "")">
+                    <ChildContent>
+                        @if (v.UsageStatus == "Pending")
                         {
-                            <MudText Typo="Typo.caption">Expires: @v.ExpiryDate.Value.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                            <MudCheckBox T="bool" Value="@(_selectedIds.Contains(v.Id))" ValueChanged="@((bool b) => ToggleSelection(v.Id, b))" Label="Select" @onclick:stopPropagation="true" />
                         }
-                        @if (v.UsedDate.HasValue)
-                        {
-                            <MudText Typo="Typo.caption">Used on: @v.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
-                        }
-                    </MudCardContent>
-                    <MudCardActions>
-                        <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Visibility" @onclick="() => SelectVoucher(v)">View</MudButton>
-                    </MudCardActions>
-                </MudCard>
+                    </ChildContent>
+                </NonCash.Web.Components.Shared.VoucherCard>
             </MudItem>
         }
     </MudGrid>
@@ -347,6 +338,14 @@ else if (_vouchers.Any())
         "InUse" => Color.Warning,
         "Complete" => Color.Success,
         _ => Color.Default
+    };
+
+    private static VoucherStatus ParseStatus(string status) => status switch
+    {
+        "Pending" => VoucherStatus.Pending,
+        "InUse" => VoucherStatus.InUse,
+        "Complete" => VoucherStatus.Complete,
+        _ => VoucherStatus.Pending
     };
 
     public class MemberVoucher

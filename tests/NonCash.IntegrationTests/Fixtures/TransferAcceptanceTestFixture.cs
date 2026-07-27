@@ -13,7 +13,7 @@ namespace NonCash.IntegrationTests.Fixtures;
 
 /// <summary>
 /// Shared fixture for voucher transfer acceptance tests.
-/// Seeds an SQLite in-memory database with a brand, two member accounts,
+/// Seeds an SQLite in-memory database with a business, brand, two member accounts,
 /// vouchers, and all required repositories/services.
 /// </summary>
 public class TransferAcceptanceTestFixture : IDisposable
@@ -30,6 +30,7 @@ public class TransferAcceptanceTestFixture : IDisposable
     public IMemberAccountRepository MemberRepository { get; }
     public IUserAccountRepository UserRepository { get; }
 
+    public Guid BusinessId { get; } = Guid.Parse("05000000-0000-0000-0000-000000000001");
     public Guid BrandId { get; } = Guid.Parse("10000000-0000-0000-0000-000000000001");
     public Guid StaffUserId { get; } = Guid.Parse("20000000-0000-0000-0000-000000000001");
     public Guid AliceMemberId { get; } = Guid.Parse("30000000-0000-0000-0000-000000000001");
@@ -73,10 +74,20 @@ public class TransferAcceptanceTestFixture : IDisposable
 
     private async Task SeedAsync()
     {
-        // Brand
+        // Business and Brand
+        Context.Businesses.Add(new Business
+        {
+            Id = BusinessId,
+            BusinessName = "Test Coffee Business",
+            TaxCode = "TAX-TEST",
+            Address = "Test Address",
+            IsActive = true
+        });
+
         Context.Brands.Add(new Brand
         {
             Id = BrandId,
+            BusinessId = BusinessId,
             Name = "Test Coffee",
             TaxCode = "TAX-TEST",
             Status = BrandStatus.Active

@@ -52,6 +52,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // Repository pattern
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IBusinessRepository, BusinessRepository>();
 builder.Services.AddScoped<IBrandRepository, BrandRepository>();
 builder.Services.AddScoped<IOutletRepository, OutletRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
@@ -90,6 +91,17 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IDistributionReportService, DistributionReportService>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 
+// Settlement (Epic 7.2)
+builder.Services.AddScoped<ISettlementService, SettlementService>();
+
+// Integration partners (Epic 6)
+builder.Services.AddScoped<IIntegrationPartnerService, IntegrationPartnerService>();
+builder.Services.AddScoped<IVoucherEventPublisher, VoucherEventPublisher>();
+builder.Services.AddHttpClient("WebhookDelivery", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 // Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -111,6 +123,22 @@ else
 
 // Import services
 builder.Services.AddScoped<ICustomerImportService, CsvCustomerImportService>();
+
+// Image storage (Epic 8.1) — toggle via MediaServiceConfig:ImageStorage ("MSA" or "Local")
+var imageStorageMode = builder.Configuration["MediaServiceConfig:ImageStorage"] ?? "Local";
+if (imageStorageMode.Equals("MSA", StringComparison.OrdinalIgnoreCase))
+{
+    // MSA media service: uploads to remote storage, returns RelativeUrl
+    builder.Services.AddHttpClient<MsaMediaClient>();
+    builder.Services.AddScoped<IImageStorageService, MsaImageStorageService>();
+}
+else
+{
+    // Local fallback: stores to wwwroot/uploads/
+    var webRootPath = builder.Environment.WebRootPath
+        ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+    builder.Services.AddSingleton<IImageStorageService>(new LocalStorageImageService(webRootPath));
+}
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")
@@ -137,6 +165,7 @@ builder.Services.AddAuthorization();
 // Hosted services
 builder.Services.AddHostedService<LockCleanupService>();
 builder.Services.AddHostedService<TransferExpirySweepService>();
+builder.Services.AddHostedService<WebhookDeliveryService>();
 
 // Health checks
 builder.Services.AddHealthChecks()
@@ -152,8 +181,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles(); // Serve uploaded images from wwwroot/uploads/
 app.UseAuthentication();
 app.UseMiddleware<BrandScopeMiddleware>();
+app.UseMiddleware<IntegrationApiKeyMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

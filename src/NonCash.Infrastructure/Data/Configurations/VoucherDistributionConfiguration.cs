@@ -15,6 +15,9 @@ public class VoucherDistributionConfiguration : IEntityTypeConfiguration<Voucher
         builder.Property(d => d.Method).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(d => d.DistributionDate).IsRequired();
 
+        // Epic 6.2: External member reference for Loyalty App integration
+        builder.Property(d => d.ExternalMemberId).HasMaxLength(100);
+
         builder.HasIndex(d => d.VoucherId).HasDatabaseName("IX_voucher_distributions_voucher_id");
         builder.HasIndex(d => d.MemberId).HasDatabaseName("IX_voucher_distributions_member_id");
 

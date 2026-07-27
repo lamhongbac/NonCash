@@ -1,5 +1,6 @@
 @page "/brandmanager/customers"
 @attribute [StreamRendering]
+@attribute [Authorize(Roles = "BrandManager")]
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService

@@ -22,5 +22,22 @@ public class VoucherUsageConfiguration : IEntityTypeConfiguration<VoucherUsage>
             .WithMany()
             .HasForeignKey(u => u.VoucherId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Epic 7.1: Cross-tenant settlement attribution
+        builder.Property(u => u.SponsorBrandId);
+        builder.Property(u => u.RedeemBrandId);
+
+        builder.HasOne(u => u.SponsorBrand)
+            .WithMany()
+            .HasForeignKey(u => u.SponsorBrandId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(u => u.RedeemBrand)
+            .WithMany()
+            .HasForeignKey(u => u.RedeemBrandId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(u => u.SponsorBrandId).HasDatabaseName("IX_voucher_usages_sponsor_brand_id");
+        builder.HasIndex(u => u.RedeemBrandId).HasDatabaseName("IX_voucher_usages_redeem_brand_id");
     }
 }

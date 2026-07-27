@@ -8,6 +8,10 @@ namespace NonCash.Core.Entities
         public string BusinessName { get; set; } = string.Empty;
         public string TaxCode { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
+        public string? ContactEmail { get; set; }
+        public string? PhoneNumber { get; set; }
         public bool IsActive { get; set; } = true;
+
+        public ICollection<Brand> Brands { get; set; } = new List<Brand>();
     }
 }

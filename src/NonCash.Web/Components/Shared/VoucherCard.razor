@@ -1,0 +1,150 @@
+@using NonCash.Shared.Helpers
+@using System.Globalization
+
+<MudCard Elevation="@Elevation" Class="@($"voucher-card {CardClass}")" Style="@CardStyle" @onclick="OnClickHandler">
+    @if (!string.IsNullOrEmpty(CoverImageUrl))
+    {
+        <MudCardMedia Image="@CoverImageUrl" Height="160" />
+    }
+    else if (!string.IsNullOrEmpty(BrandColor))
+    {
+        <div class="voucher-card-gradient" style="height: 160px; background: linear-gradient(135deg, @BrandColor 0%, @($"{BrandColor}99") 100%); display: flex; align-items: center; justify-content: center;">
+            @if (!string.IsNullOrEmpty(IconUrl))
+            {
+                <MudImage Src="@IconUrl" Alt="Brand icon" Width="64" Height="64" ObjectFit="ObjectFit.Contain" />
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Size="Size.Large" Style="color: white;" />
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(ImageUrl))
+    {
+        <MudCardMedia Image="@ImageUrl" Height="160" />
+    }
+    else
+    {
+        <div style="height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
+            <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Size="Size.Large" Style="color: white;" />
+        </div>
+    }
+
+    <MudCardContent>
+        @if (!string.IsNullOrEmpty(DisplayName))
+        {
+            <MudText Typo="Typo.h6" Class="mb-1">@DisplayName</MudText>
+        }
+
+        @if (!string.IsNullOrEmpty(ShortDescription))
+        {
+            <MudText Typo="Typo.body2" Class="mb-2 text-muted" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                @ShortDescription
+            </MudText>
+        }
+
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6" Style="@(!string.IsNullOrEmpty(BrandColor) ? $"color: {BrandColor}" : "")">
+                @VoucherDisplayHelper.FormatValue(FaceValue, ValueType)
+            </MudText>
+
+            @if (!string.IsNullOrEmpty(StatusBadge))
+            {
+                <MudChip T="string" Size="Size.Small" Color="@BadgeColor">@StatusBadge</MudChip>
+            }
+        </MudStack>
+
+        @if (ShowPrice && NetValue > 0)
+        {
+            <MudText Typo="Typo.body2" Class="mt-1">Price: <b>@NetValue.ToString("N0", CultureInfo.CurrentCulture) ₫</b></MudText>
+        }
+
+        @if (ExpiryDate.HasValue)
+        {
+            <MudText Typo="Typo.caption" Class="mt-1" Style="@ExpiryStyle">
+                @VoucherDisplayHelper.ComputeExpiryDisplay(ExpiryDate.Value)
+            </MudText>
+        }
+    </MudCardContent>
+
+    @if (ShowActions)
+    {
+        <MudCardActions>
+            @if (ShowBuyButton)
+            {
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="OnBuyClick">Buy</MudButton>
+            }
+            @if (ShowViewButton)
+            {
+                <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Visibility" OnClick="OnViewClick">View</MudButton>
+            }
+            @ChildContent
+        </MudCardActions>
+    }
+</MudCard>
+
+@code {
+    [Parameter] public string? CoverImageUrl { get; set; }
+    [Parameter] public string? ImageUrl { get; set; }
+    [Parameter] public string? IconUrl { get; set; }
+    [Parameter] public string? BrandColor { get; set; }
+    [Parameter] public string? DisplayName { get; set; }
+    [Parameter] public string? ShortDescription { get; set; }
+    [Parameter] public decimal FaceValue { get; set; }
+    [Parameter] public string ValueType { get; set; } = "Value";
+    [Parameter] public decimal NetValue { get; set; }
+    [Parameter] public DateTime? ExpiryDate { get; set; }
+    [Parameter] public string? StatusBadge { get; set; }
+    [Parameter] public string? UsageStatus { get; set; }
+    [Parameter] public bool ShowPrice { get; set; }
+    [Parameter] public bool ShowActions { get; set; } = true;
+    [Parameter] public bool ShowBuyButton { get; set; }
+    [Parameter] public bool ShowViewButton { get; set; }
+    [Parameter] public EventCallback OnBuy { get; set; }
+    [Parameter] public EventCallback OnView { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public int Elevation { get; set; } = 2;
+    [Parameter] public string? CardClass { get; set; }
+    [Parameter] public string? CardStyle { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string ExpiryStyle
+    {
+        get
+        {
+            if (!ExpiryDate.HasValue) return "";
+            var daysLeft = (ExpiryDate.Value.Date - DateTime.UtcNow.Date).Days;
+            if (daysLeft < 0) return "color: #d32f2f;"; // red
+            if (daysLeft <= 3) return "color: #ed6c02;"; // orange
+            return "";
+        }
+    }
+
+    private Color BadgeColor => StatusBadge switch
+    {
+        "Active" => Color.Success,
+        "Expiring Soon" => Color.Warning,
+        "Expired" => Color.Error,
+        "Used" => Color.Default,
+        "In Use" => Color.Info,
+        _ => Color.Default
+    };
+
+    private async Task OnClickHandler()
+    {
+        if (OnClick.HasDelegate)
+            await OnClick.InvokeAsync();
+    }
+
+    private async Task OnBuyClick()
+    {
+        if (OnBuy.HasDelegate)
+            await OnBuy.InvokeAsync();
+    }
+
+    private async Task OnViewClick()
+    {
+        if (OnView.HasDelegate)
+            await OnView.InvokeAsync();
+    }
+}

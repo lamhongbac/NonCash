@@ -43,6 +43,7 @@ public class PublicRegistrationController : ControllerBase
 
         return Ok(new BusinessRegistrationResponse(
             result.RequestId!.Value,
+            result.BusinessId!.Value,
             result.BrandId!.Value,
             result.Status.ToString()));
     }

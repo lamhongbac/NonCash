@@ -12,6 +12,7 @@ public class ApplicationDbContext : DbContext
     {
     }
 
+    public DbSet<Business> Businesses => Set<Business>();
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<Outlet> Outlets => Set<Outlet>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -23,6 +24,16 @@ public class ApplicationDbContext : DbContext
     public DbSet<VoucherPlanDetail> VoucherPlanDetails => Set<VoucherPlanDetail>();
     public DbSet<VoucherTransfer> VoucherTransfers => Set<VoucherTransfer>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<VoucherUsage> VoucherUsages => Set<VoucherUsage>();
+    public DbSet<VoucherDistribution> VoucherDistributions => Set<VoucherDistribution>();
+    public DbSet<VoucherReview> VoucherReviews => Set<VoucherReview>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
+    public DbSet<SettlementEntry> SettlementEntries => Set<SettlementEntry>();
+    public DbSet<IntegrationPartner> IntegrationPartners => Set<IntegrationPartner>();
+    public DbSet<PartnerBrand> PartnerBrands => Set<PartnerBrand>();
+    public DbSet<VoucherEvent> VoucherEvents => Set<VoucherEvent>();
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

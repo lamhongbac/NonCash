@@ -64,7 +64,8 @@ public class RegistrationReviewController : ControllerBase
 
     private static AdminRegistrationRequestDto MapToDto(RegistrationRequestSummary s) => new(
         s.RequestId,
-        s.CompanyName,
+        s.BusinessName,
+        s.BrandName,
         s.TaxCode,
         s.ContactEmail,
         s.RepresentativeName,

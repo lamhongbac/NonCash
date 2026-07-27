@@ -26,6 +26,17 @@ public class VoucherPlanHeaderConfiguration : IEntityTypeConfiguration<VoucherPl
         builder.Property(p => p.IconUrl).HasColumnType("text");
         builder.Property(p => p.VersionNumber).HasDefaultValue(1).IsRequired();
 
+        // Epic 7.1: Cross-tenant sponsorship
+        builder.Property(p => p.SponsorBrandId);
+
+        // Epic 8.1: Display data model
+        builder.Property(p => p.CoverImageUrl).HasColumnType("text");
+        builder.Property(p => p.TermsAndConditions).HasColumnType("text");
+        builder.Property(p => p.BrandColor).HasMaxLength(7);
+        builder.Property(p => p.DisplayName).HasMaxLength(200);
+        builder.Property(p => p.ShortDescription).HasMaxLength(500);
+        builder.Property(p => p.ValidDaysOfWeek).HasMaxLength(50);
+
         builder.HasIndex(p => p.BrandId).HasDatabaseName("IX_voucher_plan_headers_brand_id");
         builder.HasIndex(p => p.ApprovalStatus).HasDatabaseName("IX_voucher_plan_headers_approval_status");
         builder.HasIndex(p => p.PreviousVersionId).HasDatabaseName("IX_voucher_plan_headers_previous_version_id");
@@ -44,6 +55,11 @@ public class VoucherPlanHeaderConfiguration : IEntityTypeConfiguration<VoucherPl
             .WithMany()
             .HasForeignKey(p => p.BrandId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.SponsorBrand)
+            .WithMany()
+            .HasForeignKey(p => p.SponsorBrandId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.PreviousVersion)
             .WithMany()

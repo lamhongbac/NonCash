@@ -11,8 +11,8 @@
 <MudText Typo="Typo.body1" Class="mb-4">Review and approve or reject business registration applications.</MudText>
 
 <MudStack Row="true" Spacing="2" Class="mb-4">
-    <MudButton Variant="@( _filter == "pending" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending"))">Pending Only</MudButton>
-    <MudButton Variant="@( _filter == "all" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("all"))">All Requests</MudButton>
+    <MudButton Variant="@(_filter == "pending" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending"))">Pending Only</MudButton>
+    <MudButton Variant="@(_filter == "all" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("all"))">All Requests</MudButton>
 </MudStack>
 
 @if (_loading)
@@ -31,7 +31,8 @@ else
             <MudCardContent>
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                     <div>
-                        <MudText Typo="Typo.h6">@req.CompanyName</MudText>
+                        <MudText Typo="Typo.h6">@req.BusinessName</MudText>
+                        <MudText Typo="Typo.body2">Brand: @req.BrandName</MudText>
                         <MudText Typo="Typo.body2">Tax Code: @req.TaxCode | Email: @req.ContactEmail</MudText>
                         <MudText Typo="Typo.body2">Representative: @req.RepresentativeName (@req.Username)</MudText>
                         <MudText Typo="Typo.body2">Submitted: @req.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
@@ -151,7 +152,7 @@ else
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(
-                    approve ? $"Approved: {item.CompanyName}" : $"Rejected: {item.CompanyName}",
+                    approve ? $"Approved: {item.BusinessName}" : $"Rejected: {item.BusinessName}",
                     approve ? Severity.Success : Severity.Warning);
                 await LoadRequests();
                 return true;
@@ -173,7 +174,8 @@ else
     public class RegistrationRequestItem
     {
         public Guid RequestId { get; set; }
-        public string CompanyName { get; set; } = "";
+        public string BusinessName { get; set; } = "";
+        public string BrandName { get; set; } = "";
         public string TaxCode { get; set; } = "";
         public string ContactEmail { get; set; } = "";
         public string RepresentativeName { get; set; } = "";

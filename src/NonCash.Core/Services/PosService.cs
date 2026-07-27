@@ -13,6 +13,7 @@ public class PosService : IPosService
     private readonly IBrandRepository _brandRepository;
     private readonly IVoucherCodeService _codeService;
     private readonly IVoucherLockRepository _lockRepository;
+    private readonly ISettlementService _settlementService;
 
     public PosService(
         IRepository<VoucherPlanDetail> detailRepository,
@@ -20,7 +21,8 @@ public class PosService : IPosService
         IRepository<Outlet> outletRepository,
         IBrandRepository brandRepository,
         IVoucherCodeService codeService,
-        IVoucherLockRepository lockRepository)
+        IVoucherLockRepository lockRepository,
+        ISettlementService settlementService)
     {
         _detailRepository = detailRepository;
         _planRepository = planRepository;
@@ -28,6 +30,7 @@ public class PosService : IPosService
         _brandRepository = brandRepository;
         _codeService = codeService;
         _lockRepository = lockRepository;
+        _settlementService = settlementService;
     }
 
     public async Task<PosVerifyResult> VerifyAsync(
@@ -116,11 +119,42 @@ public class PosService : IPosService
             return new PosCommitResult("Success", "Voucher already committed", null);
         }
 
+        // Epic 7.1: Resolve settlement attribution from plan header + outlet brand.
+        Guid? sponsorBrandId = null;
+        Guid? redeemBrandId = null;
+        Guid issuingBrandId = Guid.Empty;
+        decimal faceValue = 0;
+        var lockedDetail = await _lockRepository.FindByLockIdAsync(lockId, cancellationToken);
+        if (lockedDetail != null)
+        {
+            var plan = await _planRepository.GetByIdWithOutletsAsync(lockedDetail.ParentId, cancellationToken);
+            sponsorBrandId = plan?.SponsorBrandId;
+            issuingBrandId = plan?.BrandId ?? Guid.Empty;
+            faceValue = plan?.FaceValue ?? 0;
+
+            var outlet = await _outletRepository.GetByIdAsync(outletId, cancellationToken);
+            redeemBrandId = outlet?.BrandId;
+        }
+
         var now = DateTime.UtcNow;
         var expiryCutoff = now.AddMinutes(-LockTtlMinutes);
 
         var outcome = await _lockRepository.CommitAsync(
-            lockId, transactionId, amountUsed, outletId, now, expiryCutoff, cancellationToken);
+            lockId, transactionId, amountUsed, outletId, now, expiryCutoff,
+            sponsorBrandId, redeemBrandId, cancellationToken);
+
+        // Epic 7.2: Create settlement entry for cross-tenant redemptions.
+        if (outcome == CommitOutcome.Success
+            && sponsorBrandId.HasValue
+            && sponsorBrandId.Value != redeemBrandId)
+        {
+            var usage = await _lockRepository.FindUsageByTransactionIdAsync(transactionId, cancellationToken);
+            if (usage != null)
+            {
+                await _settlementService.CreateSettlementEntryAsync(
+                    usage, issuingBrandId, faceValue, cancellationToken);
+            }
+        }
 
         return outcome switch
         {

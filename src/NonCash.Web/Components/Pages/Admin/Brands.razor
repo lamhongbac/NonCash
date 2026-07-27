@@ -12,7 +12,7 @@
 
 <MudPaper Class="pa-4 mb-4">
     <MudGrid>
-        <MudItem xs="12" sm="4">
+        <MudItem xs="12" sm="3">
             <MudTextField @bind-Value="_searchName" Label="Search by name" Variant="Variant.Outlined" />
         </MudItem>
         <MudItem xs="12" sm="3">
@@ -21,7 +21,18 @@
                 <MudSelectItem Value="@((string?)"Suspended")">Suspended</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="5" Class="d-flex align-center">
+        <MudItem xs="12" sm="3">
+            <MudAutocomplete T="BusinessDto"
+                             Label="Business"
+                             @bind-Value="_searchBusiness"
+                             SearchFunc="SearchBusinessesAsync"
+                             ToStringFunc="@((BusinessDto? b) => b?.BusinessName)"
+                             Variant="Variant.Outlined"
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             ShowProgressIndicator="true" />
+        </MudItem>
+        <MudItem xs="12" sm="3" Class="d-flex align-center">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadBrands">Search</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="OpenCreateDialog" Class="ml-2">Add Brand</MudButton>
         </MudItem>
@@ -36,6 +47,7 @@ else if (_brands is not null)
 {
     <MudTable Items="_brands" Hover="true" Breakpoint="Breakpoint.Sm">
         <HeaderContent>
+            <MudTh>Business</MudTh>
             <MudTh>Name</MudTh>
             <MudTh>Tax Code</MudTh>
             <MudTh>Contact Email</MudTh>
@@ -44,6 +56,7 @@ else if (_brands is not null)
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd DataLabel="Business">@context.BusinessName</MudTd>
             <MudTd DataLabel="Name">@context.Name</MudTd>
             <MudTd DataLabel="Tax Code">@context.TaxCode</MudTd>
             <MudTd DataLabel="Contact Email">@context.ContactEmail</MudTd>
@@ -66,6 +79,19 @@ else if (_brands is not null)
     </TitleContent>
     <DialogContent>
         <MudForm @ref="_form" Model="_model">
+            @if (!_isEdit)
+            {
+                <MudAutocomplete T="BusinessDto"
+                                 Label="Business"
+                                 @bind-Value="_createBusiness"
+                                 SearchFunc="SearchBusinessesAsync"
+                                 ToStringFunc="@((BusinessDto? b) => b?.BusinessName)"
+                                 Required="true"
+                                 RequiredError="Business is required"
+                                 Variant="Variant.Outlined"
+                                 ResetValueOnEmptyText="true"
+                                 ShowProgressIndicator="true" />
+            }
             <MudTextField @bind-Value="_model.Name" Label="Name" Required="true" RequiredError="Name is required" />
             <MudTextField @bind-Value="_model.TaxCode" Label="Tax Code" Required="true" RequiredError="Tax Code is required" Disabled="_isEdit" />
             <MudTextField @bind-Value="_model.ContactEmail" Label="Contact Email" />
@@ -84,16 +110,19 @@ else if (_brands is not null)
 @code {
     private bool _loading = false;
     private List<BrandDto>? _brands;
+    private List<BusinessDto> _businesses = new();
     private int _pageNumber = 1;
     private int _pageSize = 10;
     private int _totalCount = 0;
     private string? _searchName;
     private string? _searchStatus;
+    private BusinessDto? _searchBusiness;
 
     private bool _showDialog = false;
     private bool _isEdit = false;
     private MudForm? _form;
     private BrandFormModel _model = new();
+    private BusinessDto? _createBusiness;
     private readonly DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true };
 
     protected override async Task OnInitializedAsync()
@@ -105,7 +134,38 @@ else if (_brands is not null)
             return;
         }
 
+        await LoadBusinesses();
         await LoadBrands();
+    }
+
+    private async Task<IEnumerable<BusinessDto>> SearchBusinessesAsync(string? value, CancellationToken cancellationToken)
+    {
+        await Task.Delay(0, cancellationToken);
+        if (string.IsNullOrWhiteSpace(value))
+            return _businesses;
+        return _businesses.Where(b => b.BusinessName.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task LoadBusinesses()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/businesses");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<BusinessDto>>();
+                _businesses = result ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load businesses: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task LoadBrands()
@@ -116,6 +176,7 @@ else if (_brands is not null)
             var query = $"?pageNumber={_pageNumber}&pageSize={_pageSize}";
             if (!string.IsNullOrWhiteSpace(_searchName)) query += $"&name={Uri.EscapeDataString(_searchName)}";
             if (!string.IsNullOrWhiteSpace(_searchStatus)) query += $"&status={Uri.EscapeDataString(_searchStatus)}";
+            if (_searchBusiness is not null) query += $"&businessId={_searchBusiness.Id}";
 
             var token = await AuthState.GetTokenAsync();
             var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/brands" + query);
@@ -160,6 +221,7 @@ else if (_brands is not null)
     {
         _isEdit = false;
         _model = new BrandFormModel();
+        _createBusiness = null;
         _showDialog = true;
     }
 
@@ -169,11 +231,13 @@ else if (_brands is not null)
         _model = new BrandFormModel
         {
             Id = brand.Id,
+            BusinessId = brand.BusinessId,
             Name = brand.Name,
             TaxCode = brand.TaxCode,
             ContactEmail = brand.ContactEmail,
             Status = brand.Status
         };
+        _createBusiness = null;
         _showDialog = true;
     }
 
@@ -183,6 +247,12 @@ else if (_brands is not null)
         {
             await _form.ValidateAsync();
             if (!_form.IsValid) return;
+        }
+
+        if (!_isEdit && _createBusiness is null)
+        {
+            Snackbar.Add("Business is required.", Severity.Error);
+            return;
         }
 
         try
@@ -209,7 +279,7 @@ else if (_brands is not null)
             }
             else
             {
-                var request = new { _model.Name, _model.TaxCode, _model.ContactEmail };
+                var request = new { BusinessId = _createBusiness!.Id, _model.Name, _model.TaxCode, _model.ContactEmail };
                 var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/brands") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
                     httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -243,9 +313,18 @@ else if (_brands is not null)
         _ => Color.Default
     };
 
+    public class BusinessDto
+    {
+        public Guid Id { get; set; }
+        public string BusinessName { get; set; } = string.Empty;
+        public string TaxCode { get; set; } = string.Empty;
+    }
+
     public class BrandDto
     {
         public Guid Id { get; set; }
+        public Guid BusinessId { get; set; }
+        public string BusinessName { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string TaxCode { get; set; } = string.Empty;
         public string? ContactEmail { get; set; }
@@ -265,6 +344,7 @@ else if (_brands is not null)
     public class BrandFormModel
     {
         public Guid Id { get; set; }
+        public Guid BusinessId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string TaxCode { get; set; } = string.Empty;
         public string? ContactEmail { get; set; }

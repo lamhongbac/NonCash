@@ -39,11 +39,12 @@
             {
                 <MudText Typo="Typo.caption" Class="px-4">Admin</MudText>
                 <MudNavLink Href="/admin/registration-requests" Icon="@Icons.Material.Filled.AppRegistration">Registration Requests</MudNavLink>
+                <MudNavLink Href="/admin/businesses" Icon="@Icons.Material.Filled.AccountBalance">Businesses</MudNavLink>
                 <MudNavLink Href="/admin/brands" Icon="@Icons.Material.Filled.Business">Brands</MudNavLink>
                 <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
                 <MudDivider Class="my-2" />
             }
-            @if (AuthState.IsLoggedIn && (AuthState.Role == "BrandManager" || AuthState.Role == "Admin"))
+            @if (AuthState.IsLoggedIn && AuthState.Role == "BrandManager")
             {
                 <MudText Typo="Typo.caption" Class="px-4">Brand Manager</MudText>
                 <MudNavLink Href="/brandmanager/plans" Icon="@Icons.Material.Filled.Assignment">Voucher Plans</MudNavLink>

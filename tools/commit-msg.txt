@@ -1,0 +1,24 @@
+feat: implement Epics 6, 7, 8 + MSA image storage integration
+
+Epic 6 - Loyalty App Integration:
+- IntegrationPartner/PartnerBrand entities, CRUD, API key management
+- IntegrationApiKeyMiddleware for X-API-Key auth on /integration/* routes
+- IntegrationController: distribute, wallet, events, campaign performance
+- VoucherEvent/WebhookDelivery outbox pattern with background delivery
+- WebhookDeliveryService: HMAC-SHA256 signatures, exponential backoff retry
+
+Epic 7 - Cross-Tenant Settlement:
+- SettlementEntry entity, SettlementService, SettlementsController
+- PosService hooked to create settlement entries on cross-tenant commits
+- Netting report computation between sponsor/redeem brand pairs
+
+Epic 8 - Voucher Display and Presentation:
+- VoucherPlanHeader display fields: CoverImageUrl, BrandColor, DisplayName, etc.
+- VoucherDisplayHelper, VoucherCard Blazor component, Store/MyVouchers updates
+
+MSA Image Storage:
+- MsaMediaClient + MsaImageStorageService (delete-before-upload, RelativeUrl only)
+- LocalStorageImageService as dev fallback, config toggle via ImageStorage key
+- ImageUploadController accepts entity + uniqueCode form fields
+
+Also: 3 EF migrations, functional test plan, handoff report

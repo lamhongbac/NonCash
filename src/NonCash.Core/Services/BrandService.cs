@@ -5,26 +5,35 @@ namespace NonCash.Core.Services;
 
 public class BrandService
 {
+    private readonly IBusinessRepository _businessRepository;
     private readonly IBrandRepository _brandRepository;
 
-    public BrandService(IBrandRepository brandRepository)
+    public BrandService(IBusinessRepository businessRepository, IBrandRepository brandRepository)
     {
+        _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
         _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
     }
 
-    public async Task<Brand> CreateAsync(string name, string taxCode, string? contactEmail, CancellationToken cancellationToken = default)
+    public async Task<Brand> CreateAsync(Guid businessId, string name, string taxCode, string? contactEmail, CancellationToken cancellationToken = default)
     {
+        if (businessId == Guid.Empty)
+            throw new ArgumentException("Business is required.", nameof(businessId));
+
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Name is required.", nameof(name));
 
         if (string.IsNullOrWhiteSpace(taxCode))
             throw new ArgumentException("TaxCode is required.", nameof(taxCode));
 
+        var business = await _businessRepository.GetByIdAsync(businessId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Business with ID '{businessId}' not found.");
+
         if (await _brandRepository.TaxCodeExistsAsync(taxCode, cancellationToken))
             throw new InvalidOperationException($"A brand with tax code '{taxCode}' already exists.");
 
         var brand = new Brand
         {
+            BusinessId = businessId,
             Name = name.Trim(),
             TaxCode = taxCode.Trim(),
             ContactEmail = contactEmail?.Trim(),
@@ -34,6 +43,7 @@ public class BrandService
         await _brandRepository.AddAsync(brand, cancellationToken);
         await _brandRepository.SaveChangesAsync(cancellationToken);
 
+        brand.Business = business;
         return brand;
     }
 
@@ -59,7 +69,7 @@ public class BrandService
         return await _brandRepository.GetByIdAsync(id, cancellationToken);
     }
 
-    public async Task<IEnumerable<Brand>> ListAsync(string? nameFilter, BrandStatus? statusFilter, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Brand>> ListAsync(string? nameFilter, BrandStatus? statusFilter, Guid? businessId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
         var brands = await _brandRepository.GetAllAsync(cancellationToken);
 
@@ -71,6 +81,11 @@ public class BrandService
         if (statusFilter.HasValue)
         {
             brands = brands.Where(b => b.Status == statusFilter.Value);
+        }
+
+        if (businessId.HasValue && businessId.Value != Guid.Empty)
+        {
+            brands = brands.Where(b => b.BusinessId == businessId.Value);
         }
 
         return brands
@@ -80,7 +95,7 @@ public class BrandService
             .ToList();
     }
 
-    public async Task<int> CountAsync(string? nameFilter, BrandStatus? statusFilter, CancellationToken cancellationToken = default)
+    public async Task<int> CountAsync(string? nameFilter, BrandStatus? statusFilter, Guid? businessId, CancellationToken cancellationToken = default)
     {
         var brands = await _brandRepository.GetAllAsync(cancellationToken);
 
@@ -92,6 +107,11 @@ public class BrandService
         if (statusFilter.HasValue)
         {
             brands = brands.Where(b => b.Status == statusFilter.Value);
+        }
+
+        if (businessId.HasValue && businessId.Value != Guid.Empty)
+        {
+            brands = brands.Where(b => b.BusinessId == businessId.Value);
         }
 
         return brands.Count();

@@ -3,6 +3,7 @@ using NonCash.Core.Entities;
 namespace NonCash.API.DTOs;
 
 public record CreateBrandRequest(
+    Guid BusinessId,
     string Name,
     string TaxCode,
     string? ContactEmail
@@ -16,6 +17,8 @@ public record UpdateBrandRequest(
 
 public record BrandResponse(
     Guid Id,
+    Guid BusinessId,
+    string BusinessName,
     string Name,
     string TaxCode,
     string? ContactEmail,

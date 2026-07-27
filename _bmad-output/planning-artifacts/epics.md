@@ -74,6 +74,18 @@ Tại các điểm bán đã được cấu hình, thu ngân (nhân viên POS) c
 Khách hàng sau khi sở hữu voucher có thể tặng lại cho gia đình hoặc chuyển nhượng qua số tài khoản một cách an toàn thông qua thao tác xác nhận 2 chiều, giúp tối ưu tỉ lệ sử dụng và tính linh hoạt.
 **FRs covered:** FR5
 
+### Epic 6: Loyalty App Integration (External Partner API)
+Enable any brand Loyalty App (Giga Mall, Coffee House, Golden Gate, etc.) to integrate with NonCash as a generic voucher engine. Covers partner onboarding, API key management, segment distribution push, member wallet/event history queries, real-time webhook events, and campaign performance analytics.
+**FRs covered:** FR10 (new) — External Loyalty App Integration
+
+### Epic 7: Cross-Tenant Settlement & Campaign Sponsorship
+Enable brands to sponsor cross-tenant campaigns (e.g., Fashion Store sponsors a voucher redeemable at F&B outlet). Track financial settlement between sponsoring and redeeming brands, and provide monthly netting reports for mall operators acting as clearinghouse.
+**FRs covered:** FR11 (new) — Cross-Tenant Settlement
+
+### Epic 8: Voucher Display & Presentation
+Rich, standardized voucher display data model (cover image, icon, T&C, brand color, display name, value formatting) for consistent rendering across member store, member wallet, Loyalty App, and POS preview. Adopts best practices from leading voucher platforms.
+**FRs covered:** FR12 (new) — Voucher Display Best Practices
+
 <!-- Repeat for each epic in epics_list (N = 1, 2, 3...) -->
 
 ## Epic 1: Quản lý Hồ sơ cốt lõi (Core Profiles & Onboarding)
@@ -316,3 +328,63 @@ So that nếu khách đổi ý hoặc thẻ bị lỗi, voucher được nhả l
 **And** không sinh bản log hoàn thành nào trong VoucherUsage
 
 <!-- End story repeat -->
+
+## Epic 6: Loyalty App Integration (External Partner API)
+
+Enable any brand Loyalty App to integrate with NonCash as a generic voucher engine. NonCash is the voucher engine (produce, distribute, redeem); the Loyalty App owns customer data, segmentation, marketing planning, and push notifications.
+
+### Story 6.1: Loyalty App Partner Onboarding & API Key Management
+As a System Admin, I want to register a Loyalty App partner and issue scoped API credentials, so that the partner can authenticate against the Integration API.
+**See:** `6-1-loyalty-app-partner-onboarding.md`
+
+### Story 6.2: Segment Distribution API (Loyalty App Push)
+As a Loyalty App partner, I want to push a target member segment to NonCash for batch distribution, so that I can trigger campaigns from my segmentation engine.
+**See:** `6-2-segment-distribution-api.md`
+
+### Story 6.3: Member Wallet & Event History API
+As a Loyalty App partner, I want to query a member's voucher wallet and lifecycle events, so that I can display vouchers in-app and power analytics.
+**See:** `6-3-member-wallet-event-history-api.md`
+
+### Story 6.4: Webhook Lifecycle Events (Push)
+As a Loyalty App partner, I want real-time webhook events for voucher lifecycle changes, so that I can update wallet state and trigger push notifications instantly.
+**See:** `6-4-webhook-lifecycle-events.md`
+
+### Story 6.5: Campaign Performance Query API
+As a Loyalty App partner, I want to query aggregated campaign performance data, so that I can measure ROI and redemption rates.
+**See:** `6-5-campaign-performance-api.md`
+
+---
+
+## Epic 7: Cross-Tenant Settlement & Campaign Sponsorship
+
+Enable cross-tenant campaigns where one brand sponsors vouchers redeemable at another brand's outlet. Track financial settlement and provide netting reports.
+
+### Story 7.1: Plan Sponsor & Redeem Brand Tracking
+As a Brand Manager, I want to record which Brand sponsors a campaign (SponsorBrandID) separate from the issuing Brand, so that cross-tenant attribution is clear.
+**See:** `7-1-plan-sponsor-redeem-tracking.md`
+
+### Story 7.2: Settlement Ledger
+As a Mall Operator, I want every cross-tenant redemption to generate a settlement entry (who owes whom), so that financial obligations are tracked automatically.
+**See:** `7-2-settlement-ledger.md`
+
+### Story 7.3: Netting Report
+As a Mall Operator, I want a monthly netting report showing net obligations between brands, so that the mall can act as a clearinghouse.
+**See:** `7-3-netting-report.md`
+
+---
+
+## Epic 8: Voucher Display & Presentation
+
+Rich, standardized display data for consistent voucher rendering across all surfaces. Adopts best practices from Grab, Shopee, Starbucks, and Urbox.
+
+### Story 8.1: Voucher Display Data Model (Best Practices)
+As a Planner, I want to define cover images, icons, T&C, brand colors, display names, and value formatting, so that vouchers render attractively and consistently everywhere.
+**See:** `8-1-voucher-display-data-model.md`
+
+### Story 8.2: Member Store & Wallet Display
+As a Member, I want to browse a visual catalog and see my wallet with status badges, expiry countdowns, and rich card rendering.
+**See:** `8-2-member-store-wallet-display.md`
+
+### Story 8.3: Loyalty App Display Payload
+As a Loyalty App partner, I want the API wallet response to include all display fields pre-computed (formatted value, status badge, expiry countdown), so I can render rich cards without extra logic.
+**See:** `8-3-loyalty-app-display-payload.md`

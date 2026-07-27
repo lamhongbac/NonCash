@@ -23,4 +23,21 @@ public class BrandRepository : Repository<Brand>, IBrandRepository
     {
         return await _context.Brands.AsNoTracking().FirstOrDefaultAsync(b => b.TaxCode == taxCode, cancellationToken);
     }
+
+    public override async Task<IEnumerable<Brand>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Brands
+            .AsNoTracking()
+            .Include(b => b.Business)
+            .OrderByDescending(b => b.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public override async Task<Brand?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Brands
+            .AsNoTracking()
+            .Include(b => b.Business)
+            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
+    }
 }
