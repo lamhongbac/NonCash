@@ -14,7 +14,14 @@ public record CreatePlanRequest(
     decimal Budget,
     string? ImageUrl,
     string? IconUrl,
-    List<Guid> OutletIds
+    List<Guid> OutletIds,
+    // Epic 8.1: Display data model
+    string? CoverImageUrl = null,
+    string? TermsAndConditions = null,
+    string? BrandColor = null,
+    string? DisplayName = null,
+    string? ShortDescription = null,
+    string? ValidDaysOfWeek = null
 );
 
 public record UpdatePlanRequest(
@@ -31,7 +38,14 @@ public record UpdatePlanRequest(
     decimal Budget,
     string? ImageUrl,
     string? IconUrl,
-    List<Guid> OutletIds
+    List<Guid> OutletIds,
+    // Epic 8.1: Display data model
+    string? CoverImageUrl = null,
+    string? TermsAndConditions = null,
+    string? BrandColor = null,
+    string? DisplayName = null,
+    string? ShortDescription = null,
+    string? ValidDaysOfWeek = null
 );
 
 public record PlanResponse(
@@ -56,5 +70,12 @@ public record PlanResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     int? VersionNumber = null,
-    Guid? PreviousVersionId = null
+    Guid? PreviousVersionId = null,
+    // Epic 8.1: Display data model
+    string? CoverImageUrl = null,
+    string? TermsAndConditions = null,
+    string? BrandColor = null,
+    string? DisplayName = null,
+    string? ShortDescription = null,
+    string? ValidDaysOfWeek = null
 );

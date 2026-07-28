@@ -1,17 +1,18 @@
 @using NonCash.Shared.Helpers
 @using System.Globalization
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 
 <MudCard Elevation="@Elevation" Class="@($"voucher-card {CardClass}")" Style="@CardStyle" @onclick="OnClickHandler">
     @if (!string.IsNullOrEmpty(CoverImageUrl))
     {
-        <MudCardMedia Image="@CoverImageUrl" Height="160" />
+        <MudCardMedia Image="@ResolveImageUrl(CoverImageUrl)" Height="160" />
     }
     else if (!string.IsNullOrEmpty(BrandColor))
     {
         <div class="voucher-card-gradient" style="height: 160px; background: linear-gradient(135deg, @BrandColor 0%, @($"{BrandColor}99") 100%); display: flex; align-items: center; justify-content: center;">
             @if (!string.IsNullOrEmpty(IconUrl))
             {
-                <MudImage Src="@IconUrl" Alt="Brand icon" Width="64" Height="64" ObjectFit="ObjectFit.Contain" />
+                <MudImage Src="@ResolveImageUrl(IconUrl)" Alt="Brand icon" Width="64" Height="64" ObjectFit="ObjectFit.Contain" />
             }
             else
             {
@@ -21,7 +22,7 @@
     }
     else if (!string.IsNullOrEmpty(ImageUrl))
     {
-        <MudCardMedia Image="@ImageUrl" Height="160" />
+        <MudCardMedia Image="@ResolveImageUrl(ImageUrl)" Height="160" />
     }
     else
     {
@@ -107,6 +108,15 @@
     [Parameter] public string? CardClass { get; set; }
     [Parameter] public string? CardStyle { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string ResolveImageUrl(string url)
+    {
+        // DB stores the MSA relative URL; full CDN URL is composed at display time.
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return url;
+        var cdnBase = Configuration["MediaServiceConfig:CDNEndpointURL"] ?? "";
+        return $"{cdnBase.TrimEnd('/')}/{url.TrimStart('/')}";
+    }
 
     private string ExpiryStyle
     {

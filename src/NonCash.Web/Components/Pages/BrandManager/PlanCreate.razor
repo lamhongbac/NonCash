@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 
 <PageTitle>@(_isEdit ? "Edit Plan" : "Create Voucher Plan")</PageTitle>
 
@@ -40,16 +41,16 @@ else
         <MudText Typo="Typo.h6" Class="mb-3">Voucher Values</MudText>
         <MudGrid>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal" @bind-Value="_model.FaceValue" Label="Face Value" Variant="Variant.Outlined" Min="1" />
+                <MudNumericField T="decimal" @bind-Value="_model.FaceValue" Label="Face Value" Variant="Variant.Outlined" Min="1" Format="N2" Culture="@System.Globalization.CultureInfo.InvariantCulture" />
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal" @bind-Value="_model.NetValue" Label="Net Value" Variant="Variant.Outlined" Min="0" />
+                <MudNumericField T="decimal" @bind-Value="_model.NetValue" Label="Net Value" Variant="Variant.Outlined" Min="0" Format="N2" Culture="@System.Globalization.CultureInfo.InvariantCulture" />
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudNumericField T="int" @bind-Value="_model.TargetQuantity" Label="Target Quantity" Variant="Variant.Outlined" Min="1" />
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudNumericField T="decimal" @bind-Value="_model.Budget" Label="Budget" Variant="Variant.Outlined" Min="0" />
+                <MudNumericField T="decimal" @bind-Value="_model.Budget" Label="Budget" Variant="Variant.Outlined" Min="0" Format="N2" Culture="@System.Globalization.CultureInfo.InvariantCulture" />
             </MudItem>
         </MudGrid>
 
@@ -67,6 +68,56 @@ else
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudDatePicker @bind-Date="_model.ValidTo" Label="Valid To (opt)" Variant="Variant.Outlined" Class="w-100" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-3">Display (Mobile App / Web)</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" @bind-Value="_model.DisplayName" Label="Display Name" Variant="Variant.Outlined" MaxLength="40" Counter="40" HelperText="Marketing name on the voucher card" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" @bind-Value="_model.ShortDescription" Label="Short Description" Variant="Variant.Outlined" MaxLength="80" Counter="80" HelperText="One-line teaser under the name" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" @bind-Value="_model.BrandColor" Label="Brand Color" Variant="Variant.Outlined" Placeholder="#FF5733" HelperText="Hex accent color" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" @bind-Value="_model.ValidDaysOfWeek" Label="Valid Days" Variant="Variant.Outlined" Placeholder="Mon-Fri" HelperText="e.g. Mon-Thu" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_model.TermsAndConditions" Label="Terms &amp; Conditions" Variant="Variant.Outlined" Lines="4" HelperText="Shown collapsible on the voucher detail screen" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.webp" FilesChanged="@((IBrowserFile? f) => UploadImageAsync(f, isCover: true))" Disabled="_uploading">
+                        <CustomContent Context="upload">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Image" Disabled="_uploading" OnClick="@upload.OpenFilePickerAsync">Upload Cover Image</MudButton>
+                        </CustomContent>
+                    </MudFileUpload>
+                    @if (!string.IsNullOrEmpty(_model.CoverImageUrl))
+                    {
+                        <MudImage Src="@ResolveImageUrl(_model.CoverImageUrl)" Alt="Cover preview" Width="96" Height="54" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Clear" Size="Size.Small" OnClick="@(() => _model.CoverImageUrl = null)" />
+                    }
+                </MudStack>
+                <MudText Typo="Typo.caption">Banner on the voucher card — 1200×630 px (16:9), JPEG/PNG/WebP, ≤ 2 MB</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.webp" FilesChanged="@((IBrowserFile? f) => UploadImageAsync(f, isCover: false))" Disabled="_uploading">
+                        <CustomContent Context="upload">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.InsertPhoto" Disabled="_uploading" OnClick="@upload.OpenFilePickerAsync">Upload Icon</MudButton>
+                        </CustomContent>
+                    </MudFileUpload>
+                    @if (!string.IsNullOrEmpty(_model.IconUrl))
+                    {
+                        <MudImage Src="@ResolveImageUrl(_model.IconUrl)" Alt="Icon preview" Width="40" Height="40" ObjectFit="ObjectFit.Contain" Class="rounded" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Clear" Size="Size.Small" OnClick="@(() => _model.IconUrl = null)" />
+                    }
+                </MudStack>
+                <MudText Typo="Typo.caption">Square brand icon — 128×128 px (1:1), ≤ 500 KB</MudText>
             </MudItem>
         </MudGrid>
 
@@ -115,9 +166,12 @@ else
     private bool _isEdit => PlanId.HasValue;
     private bool _loading = true;
     private bool _submitting = false;
+    private bool _uploading = false;
     private string? _errorMessage;
     private PlanModel _model = new();
     private List<OutletItem> _outlets = new();
+    // Stable id used as the MSA uniqueCode prefix while the plan has no id yet (create mode).
+    private readonly Guid _draftId = Guid.NewGuid();
 
     public class PlanModel
     {
@@ -132,6 +186,14 @@ else
         public DateTime? ValidTo { get; set; }
         public int TargetQuantity { get; set; } = 100;
         public decimal Budget { get; set; }
+        // Epic 8.1: Display data model
+        public string? DisplayName { get; set; }
+        public string? ShortDescription { get; set; }
+        public string? BrandColor { get; set; }
+        public string? TermsAndConditions { get; set; }
+        public string? ValidDaysOfWeek { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public string? IconUrl { get; set; }
     }
 
     public class OutletItem
@@ -153,17 +215,70 @@ else
         try
         {
             var token = await AuthState.GetTokenAsync();
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/outlets");
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/outlets?pageSize=100");
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<List<OutletResponse>>();
-                _outlets = result?.Select(o => new OutletItem { Id = o.Id, Name = o.Name }).ToList() ?? new();
+                var result = await response.Content.ReadFromJsonAsync<PagedResult<OutletResponse>>();
+                _outlets = result?.Items.Select(o => new OutletItem { Id = o.Id, Name = o.Name }).ToList() ?? new();
             }
         }
-        catch { }
+        catch (Exception ex) { Snackbar.Add($"Failed to load outlets: {ex.Message}", Severity.Error); }
+    }
+
+    private string ResolveImageUrl(string url)
+    {
+        // DB stores the MSA relative URL; full CDN URL is composed at display time.
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return url;
+        var cdnBase = Configuration["MediaServiceConfig:CDNEndpointURL"] ?? "";
+        return $"{cdnBase.TrimEnd('/')}/{url.TrimStart('/')}";
+    }
+
+    private async Task UploadImageAsync(IBrowserFile? file, bool isCover)
+    {
+        if (file == null) return;
+
+        var maxBytes = isCover ? 2 * 1024 * 1024 : 500 * 1024;
+        if (file.Size > maxBytes)
+        {
+            Snackbar.Add($"File too large. Max {(isCover ? "2 MB" : "500 KB")} for the {(isCover ? "cover image" : "icon")}.", Severity.Warning);
+            return;
+        }
+
+        _uploading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(maxBytes));
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+            content.Add(new StringContent("voucher_plan_headers"), "entity");
+            var recordId = _isEdit ? PlanId!.Value : _draftId;
+            content.Add(new StringContent($"{recordId}_{(isCover ? "cover_image" : "icon")}"), "uniqueCode");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/upload/image") { Content = content };
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            var result = await response.Content.ReadFromJsonAsync<UploadResponse>();
+            if (response.IsSuccessStatusCode && result?.Success == true && !string.IsNullOrEmpty(result.Url))
+            {
+                if (isCover) _model.CoverImageUrl = result.Url;
+                else _model.IconUrl = result.Url;
+                Snackbar.Add($"{(isCover ? "Cover image" : "Icon")} uploaded.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Upload failed: {result?.Error ?? response.StatusCode.ToString()}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Upload failed: {ex.Message}", Severity.Error); }
+        finally { _uploading = false; }
     }
 
     private async Task LoadPlanAsync()
@@ -191,6 +306,13 @@ else
                     _model.ValidTo = plan.ValidTo;
                     _model.TargetQuantity = plan.TargetQuantity;
                     _model.Budget = plan.Budget;
+                    _model.DisplayName = plan.DisplayName;
+                    _model.ShortDescription = plan.ShortDescription;
+                    _model.BrandColor = plan.BrandColor;
+                    _model.TermsAndConditions = plan.TermsAndConditions;
+                    _model.ValidDaysOfWeek = plan.ValidDaysOfWeek;
+                    _model.CoverImageUrl = plan.CoverImageUrl;
+                    _model.IconUrl = plan.IconUrl;
                     foreach (var outlet in _outlets)
                         outlet.Selected = plan.OutletIds.Contains(outlet.Id);
                 }
@@ -227,8 +349,14 @@ else
                 TargetQuantity = _model.TargetQuantity,
                 Budget = _model.Budget,
                 ImageUrl = (string?)null,
-                IconUrl = (string?)null,
-                OutletIds = selectedOutlets
+                IconUrl = _model.IconUrl,
+                OutletIds = selectedOutlets,
+                DisplayName = _model.DisplayName,
+                ShortDescription = _model.ShortDescription,
+                BrandColor = _model.BrandColor,
+                TermsAndConditions = _model.TermsAndConditions,
+                ValidDaysOfWeek = _model.ValidDaysOfWeek,
+                CoverImageUrl = _model.CoverImageUrl
             };
 
             var request = new HttpRequestMessage(
@@ -255,6 +383,13 @@ else
     }
 
     private class OutletResponse { public Guid Id { get; set; } public string Name { get; set; } = ""; }
+    private class PagedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
+    }
     private class PlanDetailResponse
     {
         public DateTime PlanDate { get; set; }
@@ -269,6 +404,14 @@ else
         public int TargetQuantity { get; set; }
         public decimal Budget { get; set; }
         public List<Guid> OutletIds { get; set; } = new();
+        public string? DisplayName { get; set; }
+        public string? ShortDescription { get; set; }
+        public string? BrandColor { get; set; }
+        public string? TermsAndConditions { get; set; }
+        public string? ValidDaysOfWeek { get; set; }
+        public string? CoverImageUrl { get; set; }
+        public string? IconUrl { get; set; }
     }
+    private class UploadResponse { public bool Success { get; set; } public string? Url { get; set; } public string? Error { get; set; } }
     private class ErrorResponse { public string? error { get; set; } public string? message { get; set; } }
 }

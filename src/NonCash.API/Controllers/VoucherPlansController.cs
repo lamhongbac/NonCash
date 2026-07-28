@@ -45,7 +45,13 @@ public class VoucherPlansController : ControllerBase
             request.Budget,
             request.ImageUrl,
             request.IconUrl,
-            request.OutletIds
+            request.OutletIds,
+            CoverImageUrl: request.CoverImageUrl,
+            TermsAndConditions: request.TermsAndConditions,
+            BrandColor: request.BrandColor,
+            DisplayName: request.DisplayName,
+            ShortDescription: request.ShortDescription,
+            ValidDaysOfWeek: request.ValidDaysOfWeek
         );
 
         var result = await _planService.CreateAsync(dto, creatorId, brandId.Value, cancellationToken);
@@ -105,7 +111,13 @@ public class VoucherPlansController : ControllerBase
             request.Budget,
             request.ImageUrl,
             request.IconUrl,
-            request.OutletIds
+            request.OutletIds,
+            CoverImageUrl: request.CoverImageUrl,
+            TermsAndConditions: request.TermsAndConditions,
+            BrandColor: request.BrandColor,
+            DisplayName: request.DisplayName,
+            ShortDescription: request.ShortDescription,
+            ValidDaysOfWeek: request.ValidDaysOfWeek
         );
 
         var result = await _planService.UpdateDraftAsync(id, dto, brandId.Value, cancellationToken);
@@ -137,6 +149,12 @@ public class VoucherPlansController : ControllerBase
         p.CreatedAt,
         p.UpdatedAt,
         p.VersionNumber,
-        p.PreviousVersionId
+        p.PreviousVersionId,
+        CoverImageUrl: p.CoverImageUrl,
+        TermsAndConditions: p.TermsAndConditions,
+        BrandColor: p.BrandColor,
+        DisplayName: p.DisplayName,
+        ShortDescription: p.ShortDescription,
+        ValidDaysOfWeek: p.ValidDaysOfWeek
     );
 }
