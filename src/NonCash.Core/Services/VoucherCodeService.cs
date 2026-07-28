@@ -8,6 +8,10 @@ namespace NonCash.Core.Services;
 
 public class VoucherCodeService : IVoucherCodeService
 {
+    // Payload is serialized with lowercase names ({vid, iat, exp}); deserialization
+    // must be case-insensitive to map them onto VoucherCodePayload properties.
+    private static readonly JsonSerializerOptions PayloadJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public string GenerateCode(Guid voucherDetailId, string secretKey, int validitySeconds = 120)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -48,7 +52,7 @@ public class VoucherCodeService : IVoucherCodeService
             // Decode payload
             var payloadBytes = Convert.FromBase64String(payloadBase64);
             var payloadJson = Encoding.UTF8.GetString(payloadBytes);
-            var payload = JsonSerializer.Deserialize<VoucherCodePayload>(payloadJson);
+            var payload = JsonSerializer.Deserialize<VoucherCodePayload>(payloadJson, PayloadJsonOptions);
 
             if (payload == null) return null;
 
@@ -86,7 +90,7 @@ public class VoucherCodeService : IVoucherCodeService
 
             var payloadBytes = Convert.FromBase64String(parts[0]);
             var payloadJson = Encoding.UTF8.GetString(payloadBytes);
-            var payload = JsonSerializer.Deserialize<VoucherCodePayload>(payloadJson);
+            var payload = JsonSerializer.Deserialize<VoucherCodePayload>(payloadJson, PayloadJsonOptions);
             if (payload == null) return false;
 
             return Guid.TryParse(payload.Vid, out voucherId);

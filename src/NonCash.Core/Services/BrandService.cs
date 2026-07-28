@@ -1,3 +1,4 @@
+using NonCash.Core.Configuration;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
@@ -7,11 +8,19 @@ public class BrandService
 {
     private readonly IBusinessRepository _businessRepository;
     private readonly IBrandRepository _brandRepository;
+    private readonly ICreditService? _creditService;
+    private readonly CreditConfig _creditConfig;
 
-    public BrandService(IBusinessRepository businessRepository, IBrandRepository brandRepository)
+    public BrandService(
+        IBusinessRepository businessRepository,
+        IBrandRepository brandRepository,
+        ICreditService? creditService = null,
+        CreditConfig? creditConfig = null)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
         _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
+        _creditService = creditService;
+        _creditConfig = creditConfig ?? new CreditConfig();
     }
 
     public async Task<Brand> CreateAsync(Guid businessId, string name, string taxCode, string? contactEmail, CancellationToken cancellationToken = default)
@@ -42,6 +51,14 @@ public class BrandService
 
         await _brandRepository.AddAsync(brand, cancellationToken);
         await _brandRepository.SaveChangesAsync(cancellationToken);
+
+        // Epic 9: welcome credit grant for each newly activated brand (free period).
+        if (_creditService != null && _creditConfig.WelcomeCredits > 0)
+        {
+            await _creditService.TopUpAsync(
+                brand.Id, _creditConfig.WelcomeCredits, CreditEntryType.Grant,
+                "Welcome credits", null, cancellationToken);
+        }
 
         brand.Business = business;
         return brand;

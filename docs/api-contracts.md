@@ -109,6 +109,68 @@ Initiates a transfer to another member via Phone Number.
 
 ---
 
+## Credits API (Prepaid Billing)
+
+Brands prepay credits to use the platform. **Billing rule: each voucher consumes exactly 1 credit, once in its lifetime, at its value moment** — Gift vouchers when sold (payment confirmed), Complimentary vouchers when redeemed (POS commit). Consumption entries are recorded automatically by the system; only top-ups are created via API. All endpoints require a JWT Bearer token.
+
+### 1. Get Balance
+- **Endpoint**: `GET /credits/balance`
+- **Auth**: Brand user → own Brand; Admin may pass `?brandId={GUID}` for any Brand.
+- **Response**:
+  ```json
+  {
+    "brandId": "GUID",
+    "balance": 498
+  }
+  ```
+
+### 2. Get Ledger
+- **Endpoint**: `GET /credits/ledger`
+- **Query params**: `?brandId=` (Admin only) `&type=Grant|Purchase|Consumption|Adjustment&from=2026-07-01&to=2026-07-31&page=1&pageSize=20`
+- **Auth**: same scoping as balance (Brand user sees own Brand only).
+- **Response**:
+  ```json
+  {
+    "entries": [
+      {
+        "id": "GUID",
+        "brandId": "GUID",
+        "brandName": "The Coffee House",
+        "entryType": "Consumption",
+        "amount": -1,
+        "reference": "Gift sale, order GUID",
+        "voucherDetailId": "GUID",
+        "createdBy": null,
+        "createdAt": "2026-07-28T09:30:00Z"
+      }
+    ],
+    "totalCount": 3,
+    "page": 1,
+    "pageSize": 20
+  }
+  ```
+
+### 3. Top Up (Admin Only)
+Records a credit top-up after a manual bank-transfer confirmation.
+- **Endpoint**: `POST /credits/topup`
+- **Auth**: Admin role required (returns `403` otherwise).
+- **Request**:
+  ```json
+  {
+    "brandId": "GUID",
+    "amount": 1000,
+    "type": "Purchase",
+    "reference": "Bank transfer #TX-2026-0728"
+  }
+  ```
+- **Rules**: `type` ∈ `Purchase` | `Grant` | `Adjustment` (`Consumption` rejected); amount must be non-zero; negative amounts allowed only for `Adjustment` (clawback).
+- **Response**: the created ledger entry (same shape as a ledger item).
+
+### Balance Guard Behavior
+When a Brand's balance is ≤ 0, the following operations fail with error code `InsufficientCredits`: voucher generation, batch/partner distribution, and new self-purchase orders. **POS redemption is never blocked** (grace overdraft — the balance may go negative).
+
+---
+
 ## Loyalty App Integration API
 
 A generic integration layer for **any brand Loyalty App** (e.g., Giga Mall App, Coffee House App, Golden Gate App, etc.) to connect with NonCash. NonCash does not own customer data or marketing logic — it provides the voucher engine and exposes event history via API.

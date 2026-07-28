@@ -10,19 +10,22 @@ public class PromotionService : IPromotionService
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
+    private readonly ICreditService _creditService;
 
     public PromotionService(
         IVoucherPlanRepository planRepository,
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
-        IRepository<VoucherDistribution> distributionRepository)
+        IRepository<VoucherDistribution> distributionRepository,
+        ICreditService creditService)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
+        _creditService = creditService;
     }
 
     public async Task<PromotionResult> DistributeAsync(
@@ -45,6 +48,10 @@ public class PromotionService : IPromotionService
         // AC1: Plan must be Approved (Published is a future state; treat Approved as eligible)
         if (plan.ApprovalStatus != ApprovalStatus.Approved)
             return new PromotionResult(false, ErrorCode: "PlanNotApproved", ErrorMessage: "Only approved plans can be promoted.");
+
+        // Epic 9: block distribution when the brand has no credits left.
+        if (!await _creditService.HasCreditAsync(brandId, cancellationToken))
+            return new PromotionResult(false, ErrorCode: "InsufficientCredits", ErrorMessage: "Your credit balance is depleted. Please top up to continue.");
 
         // Normalize and dedupe phone numbers preserving order
         var normalized = new List<string>();

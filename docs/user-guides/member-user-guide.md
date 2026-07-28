@@ -42,20 +42,21 @@ The Voucher Store lists Gift-type vouchers that are Approved, Published, and cur
 ### 2.1 Browse Available Vouchers
 
 1. Tap **Voucher Store**.
-2. Browse the catalog. Each card shows:
-   - Brand name
-   - Voucher image
-   - Face value
+2. Browse the catalog. Each voucher card shows:
+   - Cover image (when the Brand has provided one)
+   - Brand color accent bar
+   - Display name (marketing name) and short description
+   - Face value formatted in local currency (for example, "100,000 ₫")
    - Net value / price
-   - Validity period
-   - Expiry date
+   - Validity period and expiry date
+   - Valid days of week (for example, "Mon–Fri") when the voucher is restricted to specific days
 3. Tap a voucher to see details.
 
 ### 2.2 Voucher Details
 
 The detail screen shows:
 
-- Full terms and conditions
+- Full terms and conditions (collapsible section)
 - Applicable outlet list (Sales Range)
 - Remaining stock
 - Your purchase history for this voucher (if any)
@@ -101,6 +102,12 @@ You will receive a notification when allocation is complete.
 
 If the quantity you selected exceeds available stock, the system shows an **Insufficient Stock** message with the current available count. Reduce the quantity or choose another voucher.
 
+### 3.6 Voucher Temporarily Unavailable
+
+Occasionally a voucher cannot be purchased and the store shows a **"temporarily unavailable"** message. This happens when the issuing Brand's account is temporarily suspended for new sales on the platform. No action is needed on your side — try again later or choose a voucher from another Brand.
+
+> **Note:** This only affects **new purchases**. Vouchers you already own remain fully valid and can still be redeemed at POS or transferred as usual.
+
 ---
 
 ## 4. My Vouchers
@@ -110,13 +117,15 @@ My Vouchers shows all vouchers currently assigned to you.
 ### 4.1 View Owned Vouchers
 
 1. Tap **My Vouchers**.
-2. Each card shows:
+2. Each voucher card shows:
+   - Cover image and brand color (when provided by the Brand)
+   - Display name or brand name
    - Serial number (partially masked)
-   - Brand name
-   - Face value
-   - Expiry date
-   - Usage status:
-     - `Pending` — not yet used
+   - Face value formatted in local currency
+   - Expiry date with countdown display
+   - Status badge:
+     - `Active` — ready to use
+     - `Expiring Soon` — close to the expiry date; use it before it lapses
      - `Used` — already redeemed
      - `Expired` — past expiry date
      - `Locked` — pending transfer
@@ -142,6 +151,14 @@ To use a voucher at a participating outlet:
 5. The POS system validates the code and applies the discount to your bill.
 
 > **Note:** A voucher that is pending transfer (locked) cannot be redeemed until the transfer is resolved.
+
+### 4.4 Vouchers from a Loyalty App
+
+If a Brand you follow runs its own Loyalty App connected to NonCash, vouchers may be delivered to you through that app:
+
+- Vouchers distributed by the Loyalty App appear in your NonCash wallet just like any other voucher.
+- You can also view and redeem them from within the partner's Loyalty App, which reads your wallet through a secure integration.
+- Redemption at POS works the same way regardless of which app you use to present the voucher.
 
 ---
 
@@ -287,9 +304,12 @@ Your phone number is your primary login identifier. Contact platform support if 
 | --- | --- | --- |
 | Cannot log in | Wrong password or locked account | Reset password or contact support. |
 | Voucher not visible in My Vouchers | Order not yet paid | Wait for payment confirmation. |
+| Voucher image not displayed | Brand has not uploaded a cover image | The card falls back to brand name and face value. |
+| Voucher rejected at POS on certain days | Voucher restricted by valid days of week | Check the "Valid days" shown on the voucher card (e.g., Mon–Fri only). |
 | Cannot transfer voucher | Voucher is locked, used, or expired | Check voucher status in My Vouchers. |
 | Transfer button missing | Voucher already pending transfer | Wait for existing transfer to resolve. |
 | Cannot redeem at POS | Voucher is locked by pending transfer | Ask sender to cancel or recipient to reject. |
 | Transfer expired | Recipient did not act within 7 days | Sender can initiate a new transfer. |
 | Purchase failed with Insufficient Stock | Not enough vouchers available | Reduce quantity or choose another voucher. |
+| Voucher shows "temporarily unavailable" | The issuing Brand is temporarily suspended for new sales | Try again later or pick another Brand; vouchers you already own still work. |
 

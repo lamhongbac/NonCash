@@ -154,6 +154,35 @@ After a plan is Approved:
 
 The system creates `VoucherPlanDetail` records (serials, secrets) tied to the plan header. These vouchers start with `UsageStatus = Pending` and no owner (`MemberID = null`).
 
+### 4.6 Voucher Display and Branding
+
+Each plan supports optional display fields that control how the voucher appears in the member store and wallet:
+
+| Field | Purpose | Recommendation |
+| --- | --- | --- |
+| **Display Name** | Marketing name shown on the voucher card | ≤ 40 characters |
+| **Short Description** | One-line teaser under the name | ≤ 80 characters |
+| **Cover Image** | Banner image on the voucher card | 1200×630 px (16:9), JPEG/PNG/WebP, ≤ 2 MB |
+| **Brand Color** | Accent color bar on the card | Hex value, e.g. `#FF5733` |
+| **Terms & Conditions** | Full usage terms, shown collapsible on detail screen | Plain text |
+| **Valid Days of Week** | Days the voucher can be redeemed | e.g. `Mon-Fri` |
+
+If display fields are empty, the store falls back to the plan's face value and brand name.
+
+### 4.7 Upload a Cover Image
+
+Cover images are stored on the platform's media service (MSA). Upload via the API:
+
+1. Call `POST /api/v1/upload/image` (`multipart/form-data`) with your Brand token:
+   - `file` — the image file (JPG/PNG/WebP/GIF, max 5 MB).
+   - `entity` — `voucher_plan_headers`.
+   - `uniqueCode` — `{planId}_cover_image` (the plan's ID plus the field name).
+2. The response returns a **relative URL** (no domain), for example `/noncash/images/voucher_plan_headers/{planId}_cover_image.jpg`. This value is stored on the plan's `CoverImageUrl`.
+
+> **Notes:**
+> - Re-uploading with the same `entity` + `uniqueCode` automatically replaces the previous image (the old file is deleted first).
+> - The displayed URL is composed at runtime as `{CDN endpoint}/{relative URL}`.
+
 ---
 
 ## 5. Voucher Distribution
@@ -184,6 +213,15 @@ Customers can purchase Gift vouchers through the member store. Brand staff can m
 - Payment confirmation and voucher allocation status.
 
 When an order is marked as paid, the system allocates vouchers to the purchaser and records `VoucherDistribution` with `Method = Sale`.
+
+### 5.3 Loyalty App Distribution
+
+Brands connected to an external Loyalty App (integration partner) can have vouchers distributed by the partner:
+
+- The partner calls the platform's integration API with a member segment (phone numbers plus optional external member IDs).
+- Distribution is idempotent — repeated calls with the same request key do not duplicate vouchers.
+- Each assignment records the partner's `ExternalMemberId` on the `VoucherDistribution`, so campaign performance can be reported back to the Loyalty App.
+- Partner onboarding and API keys are managed by the platform Admin (see the Admin User Guide).
 
 ---
 
@@ -219,13 +257,46 @@ Go to **Reports > Distribution Tracking** to view:
 - Distribution method breakdown (Promotion, Sale, Transfer).
 - Per-Outlet redemption totals.
 
-### 7.2 Export Data
+### 7.2 Cross-Tenant Redemptions and Settlement
+
+If your vouchers can be redeemed at outlets belonging to another Brand (sponsored campaigns), each cross-tenant redemption automatically creates a **settlement entry** recording which Brand owes which. The platform Admin reconciles these balances periodically using the settlement ledger and netting report — no action is needed from Brand staff, but redemption reports show sponsor and redeeming Brand attribution per usage.
+
+### 7.3 Export Data
 
 Use the export buttons on list pages to download current filtered results as CSV or Excel.
 
 ---
 
-## 8. Common Tasks Quick Reference
+## 8. Credits (Platform Usage Fee)
+
+Your Brand prepays **credits** to use the platform. The charging rule is one sentence: **each voucher consumes exactly 1 credit, once in its lifetime** — a Gift voucher when it is sold (payment confirmed), a Complimentary voucher when it is redeemed at POS. Gift redemptions and member transfers are free (the Gift voucher was already charged at sale).
+
+### 8.1 Welcome Credits
+
+When your Brand is activated, it automatically receives a welcome grant of credits (free period) — you can start issuing vouchers immediately.
+
+### 8.2 Check Your Balance and Ledger
+
+- `GET /api/v1/credits/balance` — returns your Brand's current balance.
+- `GET /api/v1/credits/ledger` — returns your Brand's credit history (grants, purchases, consumptions, adjustments), with optional `type`, `from`/`to`, and pagination filters.
+
+Both endpoints are automatically scoped to your own Brand.
+
+### 8.3 What Happens at Zero Balance
+
+Customer-facing redemption is **never blocked** — vouchers already in circulation keep working at POS even if your balance reaches 0 (the balance may go slightly negative). However, while your balance is ≤ 0, the following actions are blocked with an `InsufficientCredits` error:
+
+- Generating new vouchers.
+- Batch and partner distribution.
+- New self-purchase orders from customers (your catalog shows "temporarily unavailable").
+
+### 8.4 How to Top Up
+
+Pay by bank transfer, then contact the platform Admin with the transfer reference. Once payment is confirmed, the Admin records the top-up and the blocked actions resume automatically. Keep an eye on your balance before large campaigns.
+
+---
+
+## 9. Common Tasks Quick Reference
 
 | Task | Path | Role |
 | --- | --- | --- |
@@ -239,12 +310,15 @@ Use the export buttons on list pages to download current filtered results as CSV
 | Approve/Reject Plan | Approvals | Approver |
 | Generate Vouchers | Plans > Open Approved Plan | Planner / BrandManager |
 | Run Batch Promotion | Distribution > Batch Promotion | BrandManager |
+| Upload voucher cover image | API: `POST /api/v1/upload/image` | BrandManager / Planner |
 | View Transfer Activity | Transfers | BrandManager |
 | View Distribution Reports | Reports > Distribution Tracking | BrandManager / Planner |
+| Check credit balance | API: `GET /api/v1/credits/balance` | BrandManager |
+| View credit ledger | API: `GET /api/v1/credits/ledger` | BrandManager |
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Issue | Cause | Resolution |
 | --- | --- | --- |
@@ -254,4 +328,7 @@ Use the export buttons on list pages to download current filtered results as CSV
 | Batch promotion shows Insufficient Stock | Not enough unassigned vouchers | Generate more vouchers or reduce the recipient list. |
 | Customer skipped in promotion | Customer is Blacklisted | Remove from blacklist or exclude from the list. |
 | Transfer appears Expired | Recipient did not act within 7 days | Sender can initiate a new transfer. |
+| Image upload returns 400 | Missing `entity`/`uniqueCode` field, file > 5 MB, or invalid format | Include both form fields and use JPG/PNG/WebP/GIF under 5 MB. |
+| Voucher card shows no image | `CoverImageUrl` not set on the plan | Upload a cover image and set the display fields. |
+| Generation/distribution fails with `InsufficientCredits` | Credit balance ≤ 0 | Top up via bank transfer and Admin confirmation; redemption of existing vouchers is unaffected. |
 

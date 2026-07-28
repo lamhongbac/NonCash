@@ -92,6 +92,10 @@ else if (_brands is not null)
                                  ResetValueOnEmptyText="true"
                                  ShowProgressIndicator="true" />
             }
+            else
+            {
+                <MudTextField Value="_editBusinessName" Label="Business" Disabled="true" />
+            }
             <MudTextField @bind-Value="_model.Name" Label="Name" Required="true" RequiredError="Name is required" />
             <MudTextField @bind-Value="_model.TaxCode" Label="Tax Code" Required="true" RequiredError="Tax Code is required" Disabled="_isEdit" />
             <MudTextField @bind-Value="_model.ContactEmail" Label="Contact Email" />
@@ -123,6 +127,7 @@ else if (_brands is not null)
     private MudForm? _form;
     private BrandFormModel _model = new();
     private BusinessDto? _createBusiness;
+    private string _editBusinessName = string.Empty;
     private readonly DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true };
 
     protected override async Task OnInitializedAsync()
@@ -228,6 +233,7 @@ else if (_brands is not null)
     private void OpenEditDialog(BrandDto brand)
     {
         _isEdit = true;
+        _editBusinessName = brand.BusinessName;
         _model = new BrandFormModel
         {
             Id = brand.Id,

@@ -21,6 +21,12 @@ After login, the Admin dashboard provides navigation to:
 - **User Management** — create and manage staff accounts.
 - **Registration Review** — approve or reject business self-registration requests.
 
+In addition, Admins can operate the following platform features through the Admin API (Swagger UI at `/swagger`):
+
+- **Integration Partners** — onboard external Loyalty Apps and manage their API keys.
+- **Settlements** — review and settle cross-tenant redemption balances.
+- **Credits** — top up Brand prepaid credits and review the credit ledger.
+
 ---
 
 ## 2. Brand Management
@@ -149,15 +155,138 @@ The system atomically:
 
 ---
 
-## 5. Security and Multi-Tenancy
+## 5. Integration Partner Management (Loyalty Apps)
+
+External Loyalty Apps (partners) integrate with NonCash through API-key authenticated endpoints under `/integration/*`. Admins manage these partners via the Admin API.
+
+### 5.1 Create an Integration Partner
+
+1. Call `POST /api/v1/integration-partners` with your Admin token.
+2. Provide:
+   - **Name** — partner display name.
+   - **Contact Email** — technical contact.
+   - **Callback URL** — HTTPS endpoint that will receive webhook notifications.
+   - **Brand IDs** — the Brands this partner is allowed to access.
+3. The response returns the new partner `id`.
+
+### 5.2 Generate an API Key
+
+1. Call `POST /api/v1/integration-partners/{id}/generate-key`.
+2. The response contains the full **API key** (64-character hex string) and its 8-character **prefix**.
+
+> **IMPORTANT:** The full API key is shown **only once**. It is stored as a BCrypt hash — only the prefix is kept for identification. Deliver the key to the partner through a secure channel. If lost, generate a new key (the old one is invalidated).
+
+### 5.3 Manage Brand Associations
+
+1. Call `PUT /api/v1/integration-partners/{id}/brands` with the list of Brand IDs.
+2. The partner can only distribute vouchers and query data for its associated Brands.
+
+### 5.4 Update or Deactivate a Partner
+
+- `PUT /api/v1/integration-partners/{id}` — update name, contact email, callback URL, or set `isActive: false` to block all API access without deleting the record.
+- `DELETE /api/v1/integration-partners/{id}` — permanently remove the partner.
+
+### 5.5 Webhook Delivery
+
+When voucher events occur (for example, `voucher.distributed`), the platform:
+
+- Records the event in an outbox and delivers it asynchronously to the partner's Callback URL.
+- Signs each payload with **HMAC-SHA256** so the partner can verify authenticity.
+- Retries failed deliveries with exponential backoff (1m → 5m → 25m → 2h → 10h, maximum 5 attempts).
+
+No Admin action is required for delivery; check the `webhook_deliveries` table if a partner reports missing notifications.
+
+---
+
+## 6. Cross-Tenant Settlement
+
+When a voucher sponsored by one Brand is redeemed at an outlet belonging to a different Brand, the system automatically creates a **settlement entry** (who owes whom, and how much). Admins reconcile these balances.
+
+### 6.1 View the Settlement Ledger
+
+1. Call `GET /api/v1/settlements` with your Admin token.
+2. Optional filters:
+   - `sponsorBrandId` / `redeemBrandId` — filter by either side of the transaction.
+   - `status` — `Pending` or `Settled`.
+   - `from` / `to` — date range on the entry creation date.
+   - `page` / `pageSize` — pagination.
+
+### 6.2 Netting Report
+
+1. Call `GET /api/v1/settlements/netting?from={date}&to={date}`.
+2. The report aggregates all entries per sponsor/redeem Brand pair and computes the **net amount** owed in each direction, so Brands can settle with a single payment instead of per-transaction transfers.
+
+### 6.3 Mark an Entry as Settled
+
+1. After the payment between Brands is confirmed offline, call `PUT /api/v1/settlements/{id}/settle`.
+2. The entry status changes to `Settled` and is excluded from future pending balances.
+
+> **Note:** An entry can only be settled once. Settling an unknown or already-settled entry returns 404.
+
+---
+
+## 7. Credit & Billing Management
+
+Brands prepay **credits** to use the platform (usage-based fee). The billing rule is simple: **each voucher consumes exactly 1 credit, once in its lifetime, at its value moment** — a Gift voucher is charged when it is sold (payment confirmed), a Complimentary voucher is charged when it is redeemed at POS. Transfers and Gift redemptions consume nothing (the Gift voucher was already charged at sale).
+
+### 7.1 Welcome Credits (Free Period)
+
+Every newly activated Brand — whether created directly by an Admin or activated through registration approval — automatically receives a **welcome grant** (default: 500 credits, configurable via `CreditConfig:WelcomeCredits` in `appsettings.json`). The grant appears in the ledger as an entry of type `Grant` with reference "Welcome credits".
+
+### 7.2 Check a Brand's Balance
+
+1. Call `GET /api/v1/credits/balance?brandId={brandId}` with your Admin token.
+2. The response returns the current balance (sum of all ledger entries). Admins can query any Brand; Brand users can only see their own balance.
+
+### 7.3 Top Up Credits (Manual Bank-Transfer Flow)
+
+Payments are manual in v1: the Brand pays by bank transfer, and once the payment is confirmed, an Admin records the top-up.
+
+1. Call `POST /api/v1/credits/topup` with your Admin token:
+
+   ```json
+   {
+     "brandId": "<brand-guid>",
+     "amount": 1000,
+     "type": "Purchase",
+     "reference": "Bank transfer #TX-2026-0728"
+   }
+   ```
+
+2. Allowed types:
+   - `Purchase` — paid top-up (positive amount only).
+   - `Grant` — free/promotional credits (positive amount only).
+   - `Adjustment` — manual correction; **the only type that accepts a negative amount** (clawback).
+3. The response returns the created ledger entry. `Consumption` entries cannot be created manually — they are recorded automatically by the system.
+
+### 7.4 Review the Credit Ledger
+
+1. Call `GET /api/v1/credits/ledger` with your Admin token.
+2. Optional filters: `brandId`, `type` (`Grant`/`Purchase`/`Consumption`/`Adjustment`), `from`/`to` date range, `page`/`pageSize`.
+3. Consumption entries carry the `voucherDetailId` that was charged — each voucher can appear at most once (enforced by a unique database index), so a voucher is never double-charged.
+
+### 7.5 Grace Overdraft Policy
+
+Redemption at POS **never fails because of credit balance** — customer-facing operations must not break. If a Complimentary voucher is redeemed while the Brand's balance is 0, the balance simply goes negative. Instead, the platform blocks *upstream* actions when a Brand's balance is ≤ 0:
+
+- Voucher generation is blocked.
+- Batch/partner distribution is blocked.
+- New self-purchase orders are blocked (customers see "temporarily unavailable").
+
+Once the Brand tops up, these operations resume automatically. Negative balances should be recovered through the next top-up.
+
+---
+
+## 8. Security and Multi-Tenancy
 
 - **JWT tokens** carry `sub` (UserID), `brandId`, and `role` claims.
 - **Brand scoping** is enforced automatically. Non-Admin users can only access data belonging to their Brand.
 - **Role-based access control** is enforced on every controller action. Do not share Admin credentials.
+- **Integration API keys** authenticate partners on `/integration/*` routes via the `X-API-Key` header. Keys are validated against BCrypt hashes; revoke access by deactivating the partner or generating a new key.
 
 ---
 
-## 6. Common Tasks Quick Reference
+## 9. Common Tasks Quick Reference
 
 | Task | Path | Role |
 | --- | --- | --- |
@@ -167,10 +296,18 @@ The system atomically:
 | Approve registration | Registration Review | Admin |
 | Reject registration | Registration Review | Admin |
 | View all Brands | Business Management > Brands | Admin |
+| Create integration partner | API: `POST /api/v1/integration-partners` | Admin |
+| Generate partner API key | API: `POST /api/v1/integration-partners/{id}/generate-key` | Admin |
+| View settlement ledger | API: `GET /api/v1/settlements` | Admin |
+| View netting report | API: `GET /api/v1/settlements/netting` | Admin |
+| Mark settlement settled | API: `PUT /api/v1/settlements/{id}/settle` | Admin |
+| Check a Brand's credit balance | API: `GET /api/v1/credits/balance?brandId={id}` | Admin |
+| Top up Brand credits | API: `POST /api/v1/credits/topup` | Admin |
+| Review credit ledger | API: `GET /api/v1/credits/ledger` | Admin |
 
 ---
 
-## 7. Troubleshooting
+## 10. Troubleshooting
 
 | Issue | Cause | Resolution |
 | --- | --- | --- |
@@ -178,4 +315,9 @@ The system atomically:
 | Cannot update Brand Tax Code | Brand has linked Outlets or Plans | Tax Code is immutable after linked records exist. |
 | User cannot log in | Account is `Locked` or Brand is not `Active` | Unlock the account or activate the Brand. |
 | Registration approval fails | Request already Approved/Rejected | Check the request status and open a new request if needed. |
+| Partner gets 401 on /integration/* | Missing/invalid `X-API-Key` or partner deactivated | Verify the key, partner `isActive` flag, and brand associations. |
+| Partner not receiving webhooks | Callback URL unreachable or retries exhausted (max 5) | Verify the Callback URL is publicly reachable over HTTPS; re-trigger the event if needed. |
+| Settle returns 404 | Entry not found or already settled | Check the entry ID and status in the settlement ledger. |
+| Top-up returns 400 | Type is `Consumption`, amount is 0, or negative amount on Grant/Purchase | Use `Purchase`/`Grant`/`Adjustment`; only `Adjustment` may be negative. |
+| Brand cannot generate/distribute vouchers | Credit balance ≤ 0 (`InsufficientCredits`) | Confirm the bank transfer and record a top-up for the Brand. |
 

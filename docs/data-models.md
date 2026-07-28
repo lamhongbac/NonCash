@@ -95,3 +95,18 @@ The consumers who hold and use the distributed vouchers.
 - `FullName`: String
 - `Email`: String
 - `Status`: Enum (Active, Blacklisted)
+
+### 4. Billing (Prepaid Credits)
+
+#### `CreditLedgerEntry`
+Append-only ledger for the prepaid credit billing model (Epic 9). A Brand's balance is the SUM of `Amount` across its entries. Each voucher consumes exactly 1 credit once in its lifetime — Gift at sale (payment confirmed), Complimentary at POS redemption.
+- `ID`: GUID (Primary Key)
+- `BrandID`: GUID (FK to Brand)
+- `EntryType`: Enum (Grant, Purchase, Consumption, Adjustment)
+- `Amount`: Integer (signed: + for Grant/Purchase, − for Consumption; Adjustment may be either)
+- `Reference`: String? (e.g. bank transfer reference or note)
+- `VoucherDetailID`: GUID? (set on Consumption; **unique index when not null** — guarantees 1 voucher = max 1 credit)
+- `CreatedBy`: GUID? (admin/reviewer who recorded the entry)
+- `CreatedAt`: DateTime
+
+Indexes: unique filtered index on `VoucherDetailID` (idempotent consumption), composite index on `(BrandID, CreatedAt)` for ledger queries.

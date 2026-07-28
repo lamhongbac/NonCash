@@ -4,12 +4,12 @@
 @inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
-<PageTitle>Staff Login</PageTitle>
+<PageTitle>Admin / Brand Staff Login</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
     <MudPaper Class="pa-8">
         <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">NonCash</MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Staff Sign In</MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Admin / Brand Staff Sign In</MudText>
 
         <MudForm @ref="_form">
             <MudTextField @bind-Value="_username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" FullWidth="true" Class="mb-4" />
@@ -32,13 +32,13 @@
         </MudButton>
 
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
-            Are you a member? <MudLink Href="/member-login">Member Login</MudLink>
+            Are you a customer? <MudLink Href="/member-login">Customer Login</MudLink>
         </MudText>
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
             Don't have an account? <MudLink Href="/register">Register your business</MudLink>
         </MudText>
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
-            Want to buy vouchers? <MudLink Href="/member-register">Create a member account</MudLink>
+            Want to buy vouchers? <MudLink Href="/member-register">Create a customer account</MudLink>
         </MudText>
     </MudPaper>
 </MudContainer>

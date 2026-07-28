@@ -16,15 +16,18 @@ public class VoucherGenerationService : IVoucherGenerationService
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IVoucherCodeService _voucherCodeService;
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
+    private readonly ICreditService _creditService;
 
     public VoucherGenerationService(
         IVoucherPlanRepository planRepository,
         IVoucherCodeService voucherCodeService,
-        IRepository<VoucherPlanDetail> detailRepository)
+        IRepository<VoucherPlanDetail> detailRepository,
+        ICreditService creditService)
     {
         _planRepository = planRepository;
         _voucherCodeService = voucherCodeService;
         _detailRepository = detailRepository;
+        _creditService = creditService;
     }
 
     public async Task<GenerationResult> GenerateBatchAsync(Guid planId, int quantity, Guid brandId, CancellationToken cancellationToken = default)
@@ -45,6 +48,10 @@ public class VoucherGenerationService : IVoucherGenerationService
         // AC1: Approval Gate
         if (plan.ApprovalStatus != ApprovalStatus.Approved)
             return new GenerationResult(false, ErrorMessage: "PlanNotApproved: Vouchers can only be generated for approved plans.");
+
+        // Epic 9: block generation when the brand has no credits left.
+        if (!await _creditService.HasCreditAsync(brandId, cancellationToken))
+            return new GenerationResult(false, ErrorMessage: "InsufficientCredits: Your credit balance is depleted. Please top up to continue.");
 
         // Generate voucher details
         var brandCode = plan.Brand?.TaxCode ?? plan.BrandId.ToString()[..8].ToUpperInvariant();

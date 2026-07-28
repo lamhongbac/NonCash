@@ -189,7 +189,21 @@ Update `Jwt:Key` to a random string of at least 32 characters. Do not use the de
 }
 ```
 
-### 6.4 Web Frontend API Base URL
+### 6.4 Prepaid Credits (Billing)
+
+The usage-based billing model (Epic 9) is configured in `src/NonCash.API/appsettings.json`:
+
+```json
+"CreditConfig": {
+  "WelcomeCredits": 500,
+  "LowBalanceWarningPercent": 20
+}
+```
+
+- `WelcomeCredits` — credits granted automatically to every newly activated Brand (free period). Set to `0` to disable the welcome grant.
+- `LowBalanceWarningPercent` — reserved for UI low-balance warnings (no notification system in v1).
+
+### 6.5 Web Frontend API Base URL
 
 Edit `src/NonCash.Web/appsettings.Development.json`:
 

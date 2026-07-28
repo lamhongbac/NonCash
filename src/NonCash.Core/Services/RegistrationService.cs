@@ -1,3 +1,4 @@
+using NonCash.Core.Configuration;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
@@ -81,6 +82,8 @@ public class RegistrationService : IRegistrationService
     private readonly IBrandRegistrationRequestRepository _requestRepository;
     private readonly IAuthService _authService;
     private readonly INotificationService _notificationService;
+    private readonly ICreditService? _creditService;
+    private readonly CreditConfig _creditConfig;
 
     public RegistrationService(
         IBusinessRepository businessRepository,
@@ -88,7 +91,9 @@ public class RegistrationService : IRegistrationService
         IUserAccountRepository userAccountRepository,
         IBrandRegistrationRequestRepository requestRepository,
         IAuthService authService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        ICreditService? creditService = null,
+        CreditConfig? creditConfig = null)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
         _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
@@ -96,6 +101,8 @@ public class RegistrationService : IRegistrationService
         _requestRepository = requestRepository ?? throw new ArgumentNullException(nameof(requestRepository));
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+        _creditService = creditService;
+        _creditConfig = creditConfig ?? new CreditConfig();
     }
 
     public async Task<RegistrationResult> SubmitAsync(RegistrationRequestDto request, CancellationToken cancellationToken = default)
@@ -236,6 +243,14 @@ public class RegistrationService : IRegistrationService
             brand.Status = approve ? BrandStatus.Active : BrandStatus.Suspended;
             _brandRepository.Update(brand);
             await _brandRepository.SaveChangesAsync(cancellationToken);
+
+            // Epic 9: welcome credit grant when the brand is activated on approval (free period).
+            if (approve && _creditService != null && _creditConfig.WelcomeCredits > 0)
+            {
+                await _creditService.TopUpAsync(
+                    brand.Id, _creditConfig.WelcomeCredits, CreditEntryType.Grant,
+                    "Welcome credits", reviewerUserId, cancellationToken);
+            }
         }
 
         // Update the associated Business

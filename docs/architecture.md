@@ -22,6 +22,7 @@ The system is designed as a Software as a Service (SaaS) platform using a robust
     - **Approval Service**: Handles the routing and state management of plan reviews.
     - **Distribution Service**: Manages voucher sales, batch promotions, and inbox delivery.
     - **Usage Service**: Orchestrates the POS redemption workflow (Lock -> Commit/Rollback).
+    - **Billing Service**: Manages the prepaid credit ledger (usage-based fee) — charges 1 credit per voucher at its value moment (Gift at sale, Complimentary at redemption), enforces balance guards on upstream operations, and handles admin top-ups.
     - **Identity & Tenant Service**: Handles RBAC for `UserAccount`, multi-tenancy for `Brand` & `Outlet`, and profile management for `Customer`.
 - **Security**: Implements JWT-based authentication and specialized logic for dynamic voucher code generation.
 

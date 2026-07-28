@@ -94,6 +94,11 @@ builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 // Settlement (Epic 7.2)
 builder.Services.AddScoped<ISettlementService, SettlementService>();
 
+// Prepaid credits (Epic 9)
+var creditConfig = builder.Configuration.GetSection(CreditConfig.SectionName).Get<CreditConfig>() ?? new CreditConfig();
+builder.Services.AddSingleton(creditConfig);
+builder.Services.AddScoped<ICreditService, CreditService>();
+
 // Integration partners (Epic 6)
 builder.Services.AddScoped<IIntegrationPartnerService, IntegrationPartnerService>();
 builder.Services.AddScoped<IVoucherEventPublisher, VoucherEventPublisher>();

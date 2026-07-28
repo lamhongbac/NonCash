@@ -34,6 +34,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<PartnerBrand> PartnerBrands => Set<PartnerBrand>();
     public DbSet<VoucherEvent> VoucherEvents => Set<VoucherEvent>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+    public DbSet<CreditLedgerEntry> CreditLedgerEntries => Set<CreditLedgerEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

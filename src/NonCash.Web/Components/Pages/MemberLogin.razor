@@ -4,12 +4,12 @@
 @inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
-<PageTitle>Member Login</PageTitle>
+<PageTitle>Customer Login</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
     <MudPaper Class="pa-8">
         <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">NonCash</MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Member Sign In</MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">Customer Sign In</MudText>
 
         <MudForm @ref="_form">
             <MudTextField @bind-Value="_username" Label="Username" Required="true" RequiredError="Username is required" Variant="Variant.Outlined" FullWidth="true" Class="mb-4" />
@@ -32,10 +32,10 @@
         </MudButton>
 
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
-            Are you staff? <MudLink Href="/login">Staff Login</MudLink>
+            Are you an admin or brand staff? <MudLink Href="/login">Admin / Brand Staff Login</MudLink>
         </MudText>
         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
-            Don't have an account? <MudLink Href="/member-register">Create a member account</MudLink>
+            Don't have an account? <MudLink Href="/member-register">Create a customer account</MudLink>
         </MudText>
     </MudPaper>
 </MudContainer>

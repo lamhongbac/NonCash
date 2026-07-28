@@ -12,6 +12,7 @@ public class PurchaseService : IPurchaseService
     private readonly IRepository<VoucherDistribution> _distributionRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly ICreditService _creditService;
 
     public PurchaseService(
         IVoucherPlanRepository planRepository,
@@ -20,7 +21,8 @@ public class PurchaseService : IPurchaseService
         IRepository<OrderDetail> orderDetailRepository,
         IRepository<VoucherDistribution> distributionRepository,
         IMemberAccountRepository memberRepository,
-        ICustomerRepository customerRepository)
+        ICustomerRepository customerRepository,
+        ICreditService creditService)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -29,6 +31,7 @@ public class PurchaseService : IPurchaseService
         _distributionRepository = distributionRepository;
         _memberRepository = memberRepository;
         _customerRepository = customerRepository;
+        _creditService = creditService;
     }
 
     public async Task<IReadOnlyList<VoucherPlanHeader>> ListCatalogAsync(CancellationToken cancellationToken = default)
@@ -75,6 +78,10 @@ public class PurchaseService : IPurchaseService
             return new OrderResult(false, ErrorCode: "PlanNotApproved", ErrorMessage: "Plan is not available for sale.");
         if (plan.ExpiryDate <= DateTime.UtcNow)
             return new OrderResult(false, ErrorCode: "PlanExpired", ErrorMessage: "Plan has expired.");
+
+        // Epic 9: block new orders when the selling brand has no credits left.
+        if (!await _creditService.HasCreditAsync(plan.BrandId, cancellationToken))
+            return new OrderResult(false, ErrorCode: "InsufficientCredits", ErrorMessage: "This voucher is temporarily unavailable.");
 
         // AC6: Check stock at order creation (advisory; final check happens at payment)
         var available = (await _detailRepository.FindAsync(
@@ -128,6 +135,9 @@ public class PurchaseService : IPurchaseService
         var totalAllocated = 0;
         var now = DateTime.UtcNow;
 
+        // Epic 9: Gift vouchers consume 1 credit each at sale (charged to the plan's brand).
+        var chargedVouchers = new List<(Guid BrandId, Guid VoucherId)>();
+
         foreach (var od in orderDetails)
         {
             // AC4: Allocate Q vouchers per line item
@@ -166,6 +176,9 @@ public class PurchaseService : IPurchaseService
             {
                 plan.TargetDistributed += od.Quantity;
                 _planRepository.Update(plan);
+
+                foreach (var v in available.Take(od.Quantity))
+                    chargedVouchers.Add((plan.BrandId, v.Id));
             }
         }
 
@@ -174,6 +187,11 @@ public class PurchaseService : IPurchaseService
         _orderRepository.Update(order);
 
         await _orderRepository.SaveChangesAsync(cancellationToken);
+
+        // Epic 9: charge credits after the order is committed; failures are logged inside
+        // TryConsumeAsync and never fail the order (grace overdraft).
+        foreach (var (chargeBrandId, voucherId) in chargedVouchers)
+            await _creditService.TryConsumeAsync(chargeBrandId, voucherId, $"Sale order {order.Id}", cancellationToken);
 
         return new OrderResult(true, Order: order, AllocatedCount: totalAllocated);
     }
