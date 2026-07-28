@@ -233,6 +233,15 @@ else
         // DB stores the MSA relative URL; full CDN URL is composed at display time.
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return url;
+
+        // Local dev fallback: files served from API host (e.g. /uploads/...)
+        if (url.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+        {
+            var envName = Configuration[$"Environment:Name"] ?? "dev";
+            var apiBase = Configuration[$"ApiBaseUrls:{envName}"] ?? Configuration["ApiBaseUrl"] ?? "";
+            return $"{apiBase.TrimEnd('/')}/{url.TrimStart('/')}";
+        }
+
         var cdnBase = Configuration["MediaServiceConfig:CDNEndpointURL"] ?? "";
         return $"{cdnBase.TrimEnd('/')}/{url.TrimStart('/')}";
     }
