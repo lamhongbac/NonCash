@@ -91,17 +91,17 @@ public class VoucherPlanService : IVoucherPlanService
 
         var plan = new VoucherPlanHeader
         {
-            PlanDate = dto.PlanDate,
+            PlanDate = AsUtc(dto.PlanDate),
             CreatorId = creatorId,
             BrandId = brandId,
             VoucherType = dto.VoucherType,
             ValueType = dto.ValueType,
             FaceValue = dto.FaceValue,
             NetValue = dto.NetValue,
-            ExpiryDate = dto.ExpiryDate,
-            PublishDate = dto.PublishDate,
-            ValidFrom = dto.ValidFrom,
-            ValidTo = dto.ValidTo,
+            ExpiryDate = AsUtc(dto.ExpiryDate),
+            PublishDate = AsUtc(dto.PublishDate),
+            ValidFrom = AsUtc(dto.ValidFrom),
+            ValidTo = AsUtc(dto.ValidTo),
             TargetQuantity = dto.TargetQuantity,
             Budget = dto.Budget,
             ImageUrl = dto.ImageUrl,
@@ -152,15 +152,15 @@ public class VoucherPlanService : IVoucherPlanService
             return new PlanResult(false, outletError);
 
         // Update fields
-        plan.PlanDate = dto.PlanDate;
+        plan.PlanDate = AsUtc(dto.PlanDate);
         plan.VoucherType = dto.VoucherType;
         plan.ValueType = dto.ValueType;
         plan.FaceValue = dto.FaceValue;
         plan.NetValue = dto.NetValue;
-        plan.ExpiryDate = dto.ExpiryDate;
-        plan.PublishDate = dto.PublishDate;
-        plan.ValidFrom = dto.ValidFrom;
-        plan.ValidTo = dto.ValidTo;
+        plan.ExpiryDate = AsUtc(dto.ExpiryDate);
+        plan.PublishDate = AsUtc(dto.PublishDate);
+        plan.ValidFrom = AsUtc(dto.ValidFrom);
+        plan.ValidTo = AsUtc(dto.ValidTo);
         plan.TargetQuantity = dto.TargetQuantity;
         plan.Budget = dto.Budget;
         plan.ImageUrl = dto.ImageUrl;
@@ -201,6 +201,17 @@ public class VoucherPlanService : IVoucherPlanService
 
         return await _planRepository.ListByBrandAsync(brandId, cancellationToken);
     }
+
+    /// <summary>
+    /// Npgsql only accepts Kind=Utc for 'timestamp with time zone' columns.
+    /// Plan dates are date-only values picked in the UI, so we keep the wall-clock
+    /// date and stamp it as UTC instead of shifting it across time zones.
+    /// </summary>
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static DateTime? AsUtc(DateTime? value) =>
+        value.HasValue ? AsUtc(value.Value) : null;
 
     private static string? ValidatePlan(decimal faceValue, decimal netValue, DateTime expiryDate, DateTime publishDate, DateTime? validFrom, DateTime? validTo, int targetQuantity)
     {
