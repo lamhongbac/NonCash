@@ -8,6 +8,7 @@ public interface IPromotionService
         Guid planId,
         Guid brandId,
         IReadOnlyList<string> phoneNumbers,
+        NotificationChannel notifyChannels = NotificationChannel.Email,
         CancellationToken cancellationToken = default);
 
     // Epic 6.3: Wallet & Event History for Integration API

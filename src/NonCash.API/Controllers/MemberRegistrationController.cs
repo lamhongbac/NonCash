@@ -41,10 +41,16 @@ public class MemberRegistrationController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Username)
             || string.IsNullOrWhiteSpace(request.Password)
             || string.IsNullOrWhiteSpace(request.PhoneNumber)
-            || string.IsNullOrWhiteSpace(request.FullName))
+            || string.IsNullOrWhiteSpace(request.FullName)
+            || string.IsNullOrWhiteSpace(request.Email))
         {
-            return BadRequest(new { error = "Username, password, phone number, and full name are required." });
+            return BadRequest(new { error = "Username, password, phone number, full name, and email are required." });
         }
+
+        // Email is mandatory: it is the primary voucher notification channel.
+        var email = request.Email.Trim();
+        if (!System.Net.Mail.MailAddress.TryCreate(email, out _))
+            return BadRequest(new { error = "Invalid email address." });
 
         if (request.Password.Length < 8)
             return BadRequest(new { error = "Password must be at least 8 characters." });
@@ -67,15 +73,14 @@ public class MemberRegistrationController : ControllerBase
                 customer = await _customerService.CreateAsync(
                     normalizedPhone,
                     request.FullName.Trim(),
-                    request.Email?.Trim(),
+                    email,
                     cancellationToken);
             }
             else
             {
                 // Update profile details if customer already exists (e.g. placeholder from transfer)
                 customer.FullName = request.FullName.Trim();
-                if (!string.IsNullOrWhiteSpace(request.Email))
-                    customer.Email = request.Email.Trim();
+                customer.Email = email;
                 _customerRepository.Update(customer);
                 await _customerRepository.SaveChangesAsync(cancellationToken);
             }
@@ -153,7 +158,7 @@ public record MemberRegisterRequest(
     string Password,
     string FullName,
     string PhoneNumber,
-    string? Email);
+    string Email);
 
 public record MemberRegistrationResponse(
     Guid MemberAccountId,

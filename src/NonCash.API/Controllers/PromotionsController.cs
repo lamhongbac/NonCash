@@ -27,7 +27,8 @@ public class PromotionsController : ControllerBase
         Guid planId,
         [FromForm] IFormFile? file,
         [FromForm] string? phoneNumbersCsv,
-        CancellationToken cancellationToken)
+        [FromForm] NotificationChannel notifyChannels = NotificationChannel.Email,
+        CancellationToken cancellationToken = default)
     {
         var brandId = _currentUser.GetCurrentBrandId();
         var role = _currentUser.GetCurrentUserRole();
@@ -41,7 +42,7 @@ public class PromotionsController : ControllerBase
         if (phones.Count == 0)
             return BadRequest(new { error = "EmptyList", message = "No phone numbers were provided." });
 
-        var result = await _promotionService.DistributeAsync(planId, brandId.Value, phones, cancellationToken);
+        var result = await _promotionService.DistributeAsync(planId, brandId.Value, phones, notifyChannels, cancellationToken);
         return MapResult(result);
     }
 
@@ -62,7 +63,7 @@ public class PromotionsController : ControllerBase
         if (request?.PhoneNumbers == null || request.PhoneNumbers.Count == 0)
             return BadRequest(new { error = "EmptyList", message = "phoneNumbers is required." });
 
-        var result = await _promotionService.DistributeAsync(planId, brandId.Value, request.PhoneNumbers, cancellationToken);
+        var result = await _promotionService.DistributeAsync(planId, brandId.Value, request.PhoneNumbers, request.NotifyChannels, cancellationToken);
         return MapResult(result);
     }
 
@@ -132,7 +133,7 @@ public class PromotionsController : ControllerBase
     }
 }
 
-public record PromoteJsonRequest(List<string> PhoneNumbers);
+public record PromoteJsonRequest(List<string> PhoneNumbers, NotificationChannel NotifyChannels = NotificationChannel.Email);
 
 public record PromoteResponse(int DistributedCount, int SkippedCount, List<SkippedDto> SkippedPhones);
 

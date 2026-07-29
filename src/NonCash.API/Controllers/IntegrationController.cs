@@ -55,6 +55,8 @@ public class IntegrationController : ControllerBase
                 request.PlanId,
                 request.BrandId,
                 request.PhoneNumbers,
+                // Partner apps notify their own members; platform channels stay silent here.
+                NotificationChannel.None,
                 cancellationToken);
 
             // Publish distribution events

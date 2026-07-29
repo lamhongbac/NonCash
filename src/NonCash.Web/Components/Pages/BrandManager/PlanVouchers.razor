@@ -40,6 +40,14 @@ else
         <MudText Typo="Typo.body2" Class="mb-3">Distribute vouchers to a target customer list. Paste phone numbers (comma/newline separated) or upload a CSV with phones in the first column. Blacklisted customers are skipped automatically.</MudText>
         <MudStack Spacing="2">
             <MudTextField T="string" @bind-Value="_phoneList" Label="Phone numbers" Lines="4" Variant="Variant.Outlined" Placeholder="0912345678, 0987654321" />
+            <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.body2">Notify recipients via:</MudText>
+                <MudRadioGroup T="string" @bind-Value="_notifyChannel">
+                    <MudRadio T="string" Value="@("Email")" Color="Color.Primary" Dense="true">Email</MudRadio>
+                    <MudRadio T="string" Value="@("Zalo")" Color="Color.Primary" Dense="true">Zalo</MudRadio>
+                    <MudRadio T="string" Value="@("Both")" Color="Color.Primary" Dense="true">Both</MudRadio>
+                </MudRadioGroup>
+            </MudStack>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <InputFile OnChange="OnFileSelected" accept=".csv,.txt" />
                 @if (_selectedFile != null)
@@ -122,6 +130,7 @@ else
 
     // Batch promotion state
     private string _phoneList = string.Empty;
+    private string _notifyChannel = "Email";
     private IBrowserFile? _selectedFile;
     private bool _promoting = false;
     private PromoteResultDto? _lastPromoteResult;
@@ -244,6 +253,8 @@ else
             {
                 content.Add(new StringContent(_phoneList), "phoneNumbersCsv");
             }
+
+            content.Add(new StringContent(_notifyChannel), "notifyChannels");
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/promote") { Content = content };
             if (!string.IsNullOrEmpty(token))

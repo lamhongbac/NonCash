@@ -11,6 +11,7 @@ public class PromotionService : IPromotionService
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
     private readonly ICreditService _creditService;
+    private readonly INotificationService _notificationService;
 
     public PromotionService(
         IVoucherPlanRepository planRepository,
@@ -18,7 +19,8 @@ public class PromotionService : IPromotionService
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository,
-        ICreditService creditService)
+        ICreditService creditService,
+        INotificationService notificationService)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -26,12 +28,14 @@ public class PromotionService : IPromotionService
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
         _creditService = creditService;
+        _notificationService = notificationService;
     }
 
     public async Task<PromotionResult> DistributeAsync(
         Guid planId,
         Guid brandId,
         IReadOnlyList<string> phoneNumbers,
+        NotificationChannel notifyChannels = NotificationChannel.Email,
         CancellationToken cancellationToken = default)
     {
         if (phoneNumbers == null || phoneNumbers.Count == 0)
@@ -74,7 +78,7 @@ public class PromotionService : IPromotionService
 
         // AC2 + AC5: Resolve customers and ensure each has a MemberAccount
         var skipped = new List<SkippedRecord>(invalidPhones);
-        var eligibleMembers = new List<(string Phone, Guid MemberId)>();
+        var eligibleMembers = new List<(string Phone, Guid MemberId, string? Email, string Name)>();
         foreach (var phone in normalized)
         {
             var existing = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
@@ -90,7 +94,7 @@ public class PromotionService : IPromotionService
                 await _customerRepository.SaveChangesAsync(cancellationToken);
 
                 var newMember = await EnsureMemberAccountAsync(newCustomer, cancellationToken);
-                eligibleMembers.Add((phone, newMember.Id));
+                eligibleMembers.Add((phone, newMember.Id, newCustomer.Email, newCustomer.FullName));
             }
             else if (existing.Status == CustomerStatus.Blacklisted)
             {
@@ -99,7 +103,7 @@ public class PromotionService : IPromotionService
             else
             {
                 var member = await EnsureMemberAccountAsync(existing, cancellationToken);
-                eligibleMembers.Add((phone, member.Id));
+                eligibleMembers.Add((phone, member.Id, existing.Email, existing.FullName));
             }
         }
 
@@ -126,7 +130,7 @@ public class PromotionService : IPromotionService
         var now = DateTime.UtcNow;
         for (var i = 0; i < eligibleMembers.Count; i++)
         {
-            var (_, memberId) = eligibleMembers[i];
+            var (_, memberId, _, _) = eligibleMembers[i];
 
             // Re-attach a tracked entity (FindAsync returned AsNoTracking entries)
             var trackedDetail = await _detailRepository.GetByIdAsync(available[i].Id, cancellationToken);
@@ -158,6 +162,31 @@ public class PromotionService : IPromotionService
 
         // Single atomic save (EF Core wraps in implicit transaction)
         await _planRepository.SaveChangesAsync(cancellationToken);
+
+        // Notify recipients on the requested channels; delivery failures never fail the distribution.
+        if (notifyChannels != NotificationChannel.None)
+        {
+            foreach (var (phone, _, email, name) in eligibleMembers)
+            {
+                try
+                {
+                    await _notificationService.NotifyVoucherReceivedAsync(
+                        new VoucherReceivedNotification(
+                            email,
+                            phone,
+                            name,
+                            plan.DisplayName,
+                            plan.FaceValue,
+                            plan.ExpiryDate,
+                            notifyChannels),
+                        cancellationToken);
+                }
+                catch
+                {
+                    // Best-effort: notification errors are logged inside the service.
+                }
+            }
+        }
 
         return new PromotionResult(
             Success: true,

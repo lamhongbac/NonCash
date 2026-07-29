@@ -22,4 +22,11 @@ public class ConsoleNotificationService : INotificationService
         Console.WriteLine($"[NOTIFICATION] Thank-you email sent to '{email}' for company '{companyName}'. Request #{requestId}.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Voucher '{notification.VoucherName}' ({notification.FaceValue:N0}) delivered to {notification.PhoneNumber} " +
+                          $"(email: {notification.Email ?? "n/a"}) via {notification.Channels}. Expires {notification.ExpiryDate:yyyy-MM-dd}.");
+        return Task.CompletedTask;
+    }
 }

@@ -49,6 +49,35 @@ public class EmailNotificationService : INotificationService
         return SendAsync(email, subject, body, cancellationToken);
     }
 
+    public async Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (notification.Channels.HasFlag(NotificationChannel.Email))
+        {
+            if (string.IsNullOrWhiteSpace(notification.Email))
+            {
+                _logger.LogInformation("Voucher notification skipped for {Phone}: no email on file.", notification.PhoneNumber);
+            }
+            else
+            {
+                var subject = $"You've received a voucher: {notification.VoucherName ?? "NonCash voucher"}";
+                var body = $"Dear {notification.RecipientName},\n\n" +
+                           $"A voucher has been added to your NonCash wallet.\n\n" +
+                           $"Voucher: {notification.VoucherName ?? "NonCash voucher"}\n" +
+                           $"Value: {notification.FaceValue:N0}\n" +
+                           $"Valid until: {notification.ExpiryDate:yyyy-MM-dd}\n\n" +
+                           $"Log in with your phone number {notification.PhoneNumber} to view and redeem it.\n\n" +
+                           $"Best regards,\nNonCash Team";
+                await SendAsync(notification.Email, subject, body, cancellationToken);
+            }
+        }
+
+        if (notification.Channels.HasFlag(NotificationChannel.Zalo))
+        {
+            // Zalo ZNS delivery activates once the Official Account and templates are approved.
+            _logger.LogInformation("Zalo ZNS not yet onboarded. Zalo notification for {Phone} skipped.", notification.PhoneNumber);
+        }
+    }
+
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromAddress))
