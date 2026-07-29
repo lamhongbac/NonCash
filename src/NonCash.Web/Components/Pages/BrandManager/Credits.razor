@@ -1,0 +1,400 @@
+@page "/brandmanager/credits"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>My Credits</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">My Credits</MudText>
+
+@* ── Balance + pricing cards ──────────────────────────────────── *@
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="3">
+            <MudIcon Icon="@Icons.Material.Filled.Toll" Color="@_balanceColor" Style="font-size:3rem;" Class="mb-2" />
+            <MudText Typo="Typo.h3" Color="@_balanceColor">@(_balance?.ToString("N0") ?? "—")</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">Available Credits</MudText>
+            @if (_balance.HasValue && _balance.Value <= 50 && _balance.Value > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
+                    Low balance — contact your account manager to top up.
+                </MudAlert>
+            }
+            @if (_balance.HasValue && _balance.Value <= 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">
+                    Credits depleted — distribution is blocked until topped up.
+                </MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.subtitle1" GutterBottom="true">Your Pricing</MudText>
+            @if (_pricing != null)
+            {
+                <MudText Typo="Typo.h5" Color="Color.Primary">@_pricing.PricePerCreditVnd.ToString("N0") ₫ <MudText Typo="Typo.caption" Inline="true">/ credit</MudText></MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    Credits are valid for
+                    <strong>@(_pricing.CreditExpiryMonths.HasValue ? $"{_pricing.CreditExpiryMonths} months" : "unlimited time")</strong>
+                    from purchase.
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mt-1">Plan: @_pricing.Name</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">Loading…</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.subtitle1" GutterBottom="true">How credits work</MudText>
+            <MudText Typo="Typo.body2">Each voucher distributed to a customer consumes <strong>1 credit</strong>.</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">Credits are added by the platform admin after a verified bank transfer.</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">Oldest credits are used first, so nothing is wasted before expiry.</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* ── Expiry warnings ──────────────────────────────────────────── *@
+@if (_expiring is { Count: > 0 })
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.HourglassBottom">
+        <strong>@_expiring.Sum(b => b.RemainingAmount) credits expire soon:</strong>
+        @foreach (var b in _expiring)
+        {
+            <div>@b.RemainingAmount credits expire on @b.ExpiresAt!.Value.ToString("yyyy-MM-dd") (@((int)Math.Ceiling((b.ExpiresAt.Value - DateTime.UtcNow).TotalDays)) days left)</div>
+        }
+    </MudAlert>
+}
+
+@* ── Batch / consumption history ─────────────────────────────── *@
+<MudPaper Class="pa-4">
+    <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4">
+        <MudTabPanel Text="Credit Batches">
+            <MudGrid Class="mb-2">
+                <MudItem xs="12" sm="3">
+                    <MudSelect @bind-Value="_filterType" Label="Filter by type" Variant="Variant.Outlined" Clearable="true">
+                        @foreach (var t in BatchTypes)
+                        {
+                            <MudSelectItem Value="@((string?)t)">@t</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="9" Class="d-flex align-center justify-end">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadBatches">Refresh</MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_loadingBatches)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_batches != null)
+            {
+                <MudTable Items="_batches" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh Style="text-align:right">Credits</MudTh>
+                        <MudTh Style="text-align:right">Remaining</MudTh>
+                        <MudTh>Expires</MudTh>
+                        <MudTh>Reference</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Type">
+                            <MudChip T="string" Color="@GetBatchColor(context.BatchType)" Size="Size.Small">@context.BatchType</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Credits" Style="text-align:right;font-weight:bold">
+                            <span style="@(context.OriginalAmount >= 0 ? "color:green" : "color:red")">@(context.OriginalAmount > 0 ? $"+{context.OriginalAmount}" : context.OriginalAmount.ToString())</span>
+                        </MudTd>
+                        <MudTd DataLabel="Remaining" Style="text-align:right">@context.RemainingAmount</MudTd>
+                        <MudTd DataLabel="Expires">
+                            @if (context.ExpiresAt.HasValue)
+                            {
+                                <span style="@(context.ExpiresAt.Value < DateTime.UtcNow ? "color:red" : "")">@context.ExpiresAt.Value.ToString("yyyy-MM-dd")</span>
+                            }
+                            else
+                            {
+                                <span>never</span>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Reference">@(context.Reference ?? "—")</MudTd>
+                    </RowTemplate>
+                    <FooterContent>
+                        <MudTd colspan="6">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.caption">@_batchTotal batches total</MudText>
+                                <MudStack Row="true" Spacing="1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="_batchPage <= 1" OnClick="PrevBatchPage" />
+                                    <MudText Typo="Typo.body2" Class="align-self-center">Page @_batchPage</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="_batchPage * _pageSize >= _batchTotal" OnClick="NextBatchPage" />
+                                </MudStack>
+                            </MudStack>
+                        </MudTd>
+                    </FooterContent>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Usage History">
+            @if (_loadingConsumptions)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_consumptions != null)
+            {
+                <MudTable Items="_consumptions" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Voucher</MudTh>
+                        <MudTh>Reference</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Voucher">@(context.VoucherDetailId.ToString()[..8])…</MudTd>
+                        <MudTd DataLabel="Reference">@(context.Reference ?? "—")</MudTd>
+                    </RowTemplate>
+                    <FooterContent>
+                        <MudTd colspan="3">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.caption">@_consumptionTotal vouchers billed total</MudText>
+                                <MudStack Row="true" Spacing="1">
+                                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="_consumptionPage <= 1" OnClick="PrevConsumptionPage" />
+                                    <MudText Typo="Typo.body2" Class="align-self-center">Page @_consumptionPage</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="_consumptionPage * _pageSize >= _consumptionTotal" OnClick="NextConsumptionPage" />
+                                </MudStack>
+                            </MudStack>
+                        </MudTd>
+                    </FooterContent>
+                </MudTable>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadConsumptions">Load usage history</MudButton>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>
+
+@code {
+    private bool _loadingBatches = false;
+    private bool _loadingConsumptions = false;
+
+    private int? _balance;
+    private Color _balanceColor => _balance switch
+    {
+        null => Color.Default,
+        <= 0 => Color.Error,
+        <= 50 => Color.Warning,
+        _ => Color.Success
+    };
+
+    private ResolvedPolicyDto? _pricing;
+    private List<CreditBatchDto>? _expiring;
+
+    private static readonly string[] BatchTypes =
+        { "Purchase", "WelcomeGrant", "Grant", "Compensation", "Correction", "Clawback", "Reinstatement" };
+
+    private List<CreditBatchDto>? _batches;
+    private string? _filterType;
+    private int _batchPage = 1;
+    private int _batchTotal = 0;
+    private const int _pageSize = 20;
+
+    private List<CreditConsumptionDto>? _consumptions;
+    private int _consumptionPage = 1;
+    private int _consumptionTotal = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        await LoadBalance();
+        await LoadPricing();
+        await LoadExpiring();
+        await LoadBatches();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url)
+    {
+        var req = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadBalance()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/credits/balance");
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreditBalanceDto>();
+                _balance = result?.Balance;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load balance: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadPricing()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/credits/pricing");
+            if (resp.IsSuccessStatusCode)
+                _pricing = await resp.Content.ReadFromJsonAsync<ResolvedPolicyDto>();
+        }
+        catch
+        {
+            // Pricing card is informational only — ignore failures.
+        }
+    }
+
+    private async Task LoadExpiring()
+    {
+        try
+        {
+            var days = _pricing?.ExpiryWarningDays ?? 30;
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/credits/expiring?withinDays={days}");
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreditBatchListDto>();
+                _expiring = result?.Batches ?? new();
+            }
+        }
+        catch
+        {
+            // Warning banner is best-effort.
+        }
+    }
+
+    private async Task LoadBatches()
+    {
+        _loadingBatches = true;
+        try
+        {
+            var url = $"api/v1/credits/batches?page={_batchPage}&pageSize={_pageSize}";
+            if (!string.IsNullOrEmpty(_filterType)) url += $"&type={_filterType}";
+
+            var resp = await SendAsync(HttpMethod.Get, url);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreditBatchListDto>();
+                _batches = result?.Batches ?? new();
+                _batchTotal = result?.TotalCount ?? 0;
+            }
+            else
+            {
+                Snackbar.Add("Failed to load credit batches.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading batches: {ex.Message}", Severity.Error);
+        }
+        finally { _loadingBatches = false; }
+    }
+
+    private async Task PrevBatchPage() { _batchPage--; await LoadBatches(); }
+    private async Task NextBatchPage() { _batchPage++; await LoadBatches(); }
+
+    private async Task LoadConsumptions()
+    {
+        _loadingConsumptions = true;
+        try
+        {
+            var url = $"api/v1/credits/consumptions?page={_consumptionPage}&pageSize={_pageSize}";
+            var resp = await SendAsync(HttpMethod.Get, url);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CreditConsumptionListDto>();
+                _consumptions = result?.Consumptions ?? new();
+                _consumptionTotal = result?.TotalCount ?? 0;
+            }
+            else
+            {
+                Snackbar.Add("Failed to load usage history.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading usage: {ex.Message}", Severity.Error);
+        }
+        finally { _loadingConsumptions = false; }
+    }
+
+    private async Task PrevConsumptionPage() { _consumptionPage--; await LoadConsumptions(); }
+    private async Task NextConsumptionPage() { _consumptionPage++; await LoadConsumptions(); }
+
+    private static Color GetBatchColor(string type) => type switch
+    {
+        "Purchase"      => Color.Primary,
+        "WelcomeGrant"  => Color.Info,
+        "Grant"         => Color.Success,
+        "Compensation"  => Color.Success,
+        "Correction"    => Color.Warning,
+        "Clawback"      => Color.Error,
+        "Reinstatement" => Color.Warning,
+        _               => Color.Default
+    };
+
+    private class CreditBalanceDto
+    {
+        public Guid BrandId { get; set; }
+        public int Balance { get; set; }
+    }
+
+    private class ResolvedPolicyDto
+    {
+        public Guid? PolicyId { get; set; }
+        public string Name { get; set; } = "";
+        public string? Scope { get; set; }
+        public decimal PricePerCreditVnd { get; set; }
+        public int? CreditExpiryMonths { get; set; }
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; }
+        public int? LowBalanceWarningPct { get; set; }
+        public int? ExpiryWarningDays { get; set; }
+        public int? AdjustmentApprovalThreshold { get; set; }
+    }
+
+    private class CreditBatchDto
+    {
+        public Guid Id { get; set; }
+        public string BatchType { get; set; } = "";
+        public int OriginalAmount { get; set; }
+        public int RemainingAmount { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public string? Reference { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class CreditBatchListDto
+    {
+        public List<CreditBatchDto> Batches { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+
+    private class CreditConsumptionDto
+    {
+        public Guid Id { get; set; }
+        public Guid BatchId { get; set; }
+        public Guid VoucherDetailId { get; set; }
+        public string? Reference { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class CreditConsumptionListDto
+    {
+        public List<CreditConsumptionDto> Consumptions { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+}

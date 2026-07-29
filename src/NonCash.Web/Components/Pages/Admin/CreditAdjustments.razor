@@ -1,0 +1,445 @@
+@page "/admin/credit-adjustments"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Credit Adjustments</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Credit Adjustments</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">
+    Maker-checker workflow: Admin or Financial Controller requests; only a Financial Controller
+    (other than the requester) approves. Corrections, clawbacks and reinstatements always need approval.
+</MudText>
+
+@* ── New request form ────────────────────────────────────────── *@
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" GutterBottom="true">New Adjustment Request</MudText>
+    <MudGrid>
+        <MudItem xs="12" sm="3">
+            <MudSelect T="BrandLookupDto?" @bind-Value="_newBrand" Label="Brand" Variant="Variant.Outlined"
+                       ToStringFunc="@((BrandLookupDto? b) => b == null ? "" : b.Name)">
+                @foreach (var b in _brands)
+                {
+                    <MudSelectItem Value="@((BrandLookupDto?)b)">@b.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2">
+            <MudSelect @bind-Value="_newType" Label="Type" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("Grant")">Grant</MudSelectItem>
+                <MudSelectItem Value="@("Compensation")">Compensation</MudSelectItem>
+                <MudSelectItem Value="@("Correction")">Correction</MudSelectItem>
+                <MudSelectItem Value="@("Clawback")">Clawback</MudSelectItem>
+                <MudSelectItem Value="@("Reinstatement")">Reinstatement</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2">
+            <MudNumericField @bind-Value="_newAmount" Label="Credits" Variant="Variant.Outlined" Min="1"
+                             HelperText="Always positive" />
+        </MudItem>
+        <MudItem xs="12" sm="5">
+            <MudTextField @bind-Value="_newReason" Label="Reason (required)" Variant="Variant.Outlined" MaxLength="500" />
+        </MudItem>
+        @if (RequiresRelatedBatch)
+        {
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="_newRelatedBatchId" Label="Related batch id (required)" Variant="Variant.Outlined"
+                              HelperText="The batch being fixed" />
+            </MudItem>
+        }
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_newEvidenceNote" Label="Evidence note (ticket #…)" Variant="Variant.Outlined" MaxLength="500" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_newEvidenceUrl" Label="Evidence image URL" Variant="Variant.Outlined" MaxLength="500" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PostAdd"
+                       OnClick="SubmitRequest" Disabled="_submitting">
+                @if (_submitting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Submit Request
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* ── Request list ────────────────────────────────────────────── *@
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid Class="mb-2">
+        <MudItem xs="12" sm="3">
+            <MudSelect @bind-Value="_filterStatus" Label="Status" Variant="Variant.Outlined" Clearable="true">
+                <MudSelectItem Value="@((string?)"PendingApproval")">Pending approval</MudSelectItem>
+                <MudSelectItem Value="@((string?)"Applied")">Applied</MudSelectItem>
+                <MudSelectItem Value="@((string?)"Rejected")">Rejected</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="9" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadRequests">Refresh</MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_requests" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Requested</MudTh>
+                <MudTh>Brand</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh Style="text-align:right">Credits</MudTh>
+                <MudTh>Reason</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Review</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Requested">@context.RequestedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="Brand">@(context.BrandName ?? context.BrandId.ToString()[..8])</MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(context.AdjustmentType)">@context.AdjustmentType</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Credits" Style="text-align:right;font-weight:bold">
+                    <span style="@(context.AdjustmentType == "Clawback" ? "color:red" : "color:green")">
+                        @(context.AdjustmentType == "Clawback" ? $"-{context.Amount}" : $"+{context.Amount}")
+                    </span>
+                </MudTd>
+                <MudTd DataLabel="Reason">
+                    @context.ReasonText
+                    @if (!string.IsNullOrEmpty(context.EvidenceImageUrl))
+                    {
+                        <MudLink Href="@context.EvidenceImageUrl" Target="_blank" Class="ml-1">evidence</MudLink>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Review">
+                    @if (context.ReviewedAt.HasValue)
+                    {
+                        <MudText Typo="Typo.caption">@context.ReviewedAt.Value.ToString("yyyy-MM-dd HH:mm") — @(context.ReviewNote ?? "")</MudText>
+                    }
+                    else
+                    {
+                        <span>—</span>
+                    }
+                </MudTd>
+                <MudTd>
+                    @if (context.Status == "PendingApproval" && IsFinancialController)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                       OnClick="() => OpenReview(context, true)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => OpenReview(context, false)" />
+                    }
+                </MudTd>
+            </RowTemplate>
+            <FooterContent>
+                <MudTd colspan="8">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.caption">@_total requests total</MudText>
+                        <MudStack Row="true" Spacing="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="_page <= 1" OnClick="PrevPage" />
+                            <MudText Typo="Typo.body2" Class="align-self-center">Page @_page</MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="_page * _pageSize >= _total" OnClick="NextPage" />
+                        </MudStack>
+                    </MudStack>
+                </MudTd>
+            </FooterContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@* ── Review panel ────────────────────────────────────────────── *@
+@if (_reviewing != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            @(_reviewApprove ? "Approve" : "Reject") — @_reviewing.AdjustmentType @(_reviewing.AdjustmentType == "Clawback" ? "-" : "+")@_reviewing.Amount credits for @(_reviewing.BrandName ?? "brand")
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_reviewNote"
+                              Label="@(_reviewApprove ? "Review note (optional)" : "Review note (required)")"
+                              Variant="Variant.Outlined" MaxLength="500" />
+            </MudItem>
+            <MudItem xs="12" sm="4" Class="d-flex align-center gap-2">
+                <MudButton Variant="Variant.Filled" Color="@(_reviewApprove ? Color.Success : Color.Error)"
+                           OnClick="SubmitReview" Disabled="_submitting">
+                    Confirm @(_reviewApprove ? "Approve" : "Reject")
+                </MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _reviewing = null">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = false;
+    private bool _submitting = false;
+
+    private List<BrandLookupDto> _brands = new();
+    private List<AdjustmentDto> _requests = new();
+    private string? _filterStatus = "PendingApproval";
+    private int _page = 1;
+    private int _total = 0;
+    private const int _pageSize = 20;
+
+    // New request form
+    private BrandLookupDto? _newBrand;
+    private string _newType = "Grant";
+    private int _newAmount = 100;
+    private string? _newReason;
+    private string? _newRelatedBatchId;
+    private string? _newEvidenceNote;
+    private string? _newEvidenceUrl;
+
+    // Review panel
+    private AdjustmentDto? _reviewing;
+    private bool _reviewApprove;
+    private string? _reviewNote;
+
+    private bool IsFinancialController => AuthState.Role == "FinancialController";
+    private bool RequiresRelatedBatch => _newType is "Correction" or "Clawback" or "Reinstatement";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (AuthState.Role != "Admin" && AuthState.Role != "FinancialController")
+        {
+            Snackbar.Add("Access denied — Admin or Financial Controller only.", Severity.Error);
+            return;
+        }
+        await LoadBrandsAsync();
+        await LoadRequests();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadBrandsAsync()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/brands?pageSize=200");
+            if (resp.IsSuccessStatusCode)
+            {
+                var paged = await resp.Content.ReadFromJsonAsync<PagedResult<BrandLookupDto>>();
+                _brands = paged?.Items ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load brands: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadRequests()
+    {
+        _loading = true;
+        try
+        {
+            var url = $"api/v1/credit-adjustments?page={_page}&pageSize={_pageSize}";
+            if (!string.IsNullOrEmpty(_filterStatus)) url += $"&status={_filterStatus}";
+
+            var resp = await SendAsync(HttpMethod.Get, url);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<AdjustmentListDto>();
+                _requests = result?.Requests ?? new();
+                _total = result?.TotalCount ?? 0;
+            }
+            else
+            {
+                Snackbar.Add("Failed to load adjustment requests.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task PrevPage() { _page--; await LoadRequests(); }
+    private async Task NextPage() { _page++; await LoadRequests(); }
+
+    private async Task SubmitRequest()
+    {
+        if (_newBrand == null)
+        {
+            Snackbar.Add("Select a brand.", Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_newReason))
+        {
+            Snackbar.Add("A reason is required.", Severity.Warning);
+            return;
+        }
+        Guid? relatedBatchId = null;
+        if (RequiresRelatedBatch)
+        {
+            if (!Guid.TryParse(_newRelatedBatchId, out var rb))
+            {
+                Snackbar.Add("A valid related batch id is required for this type.", Severity.Warning);
+                return;
+            }
+            relatedBatchId = rb;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                BrandId = _newBrand.Id,
+                AdjustmentType = _newType,
+                Amount = _newAmount,
+                RelatedBatchId = relatedBatchId,
+                ReasonText = _newReason,
+                EvidenceNote = _newEvidenceNote,
+                EvidenceImageUrl = _newEvidenceUrl
+            };
+            var resp = await SendAsync(HttpMethod.Post, "api/v1/credit-adjustments", payload);
+            if (resp.IsSuccessStatusCode)
+            {
+                var created = await resp.Content.ReadFromJsonAsync<AdjustmentDto>();
+                Snackbar.Add(created?.Status == "Applied"
+                    ? "Adjustment applied immediately (no approval required)."
+                    : "Adjustment submitted for Financial Controller approval.", Severity.Success);
+                _newReason = null;
+                _newRelatedBatchId = null;
+                _newEvidenceNote = null;
+                _newEvidenceUrl = null;
+                await LoadRequests();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Request failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private void OpenReview(AdjustmentDto request, bool approve)
+    {
+        _reviewing = request;
+        _reviewApprove = approve;
+        _reviewNote = null;
+    }
+
+    private async Task SubmitReview()
+    {
+        if (_reviewing == null) return;
+        if (!_reviewApprove && string.IsNullOrWhiteSpace(_reviewNote))
+        {
+            Snackbar.Add("A review note is mandatory when rejecting.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var action = _reviewApprove ? "approve" : "reject";
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/credit-adjustments/{_reviewing.Id}/{action}",
+                new { Note = _reviewNote });
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add(_reviewApprove ? "Request approved and applied." : "Request rejected.", Severity.Success);
+                _reviewing = null;
+                await LoadRequests();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Review failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────
+    private static Color GetTypeColor(string type) => type switch
+    {
+        "Grant"         => Color.Success,
+        "Compensation"  => Color.Success,
+        "Correction"    => Color.Warning,
+        "Clawback"      => Color.Error,
+        "Reinstatement" => Color.Warning,
+        _               => Color.Default
+    };
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "PendingApproval" => Color.Warning,
+        "Approved"        => Color.Info,
+        "Applied"         => Color.Success,
+        "Rejected"        => Color.Error,
+        _                 => Color.Default
+    };
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class BrandLookupDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class AdjustmentDto
+    {
+        public Guid Id { get; set; }
+        public Guid BrandId { get; set; }
+        public string? BrandName { get; set; }
+        public string AdjustmentType { get; set; } = "";
+        public int Amount { get; set; }
+        public Guid? RelatedBatchId { get; set; }
+        public string ReasonText { get; set; } = "";
+        public string? EvidenceNote { get; set; }
+        public string? EvidenceImageUrl { get; set; }
+        public string Status { get; set; } = "";
+        public bool RequiresApproval { get; set; }
+        public int? ApprovalThreshold { get; set; }
+        public Guid RequestedBy { get; set; }
+        public DateTime RequestedAt { get; set; }
+        public Guid? ReviewedBy { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+        public string? ReviewNote { get; set; }
+        public DateTime? AppliedAt { get; set; }
+    }
+
+    private class AdjustmentListDto
+    {
+        public List<AdjustmentDto> Requests { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+
+    private class PagedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+}

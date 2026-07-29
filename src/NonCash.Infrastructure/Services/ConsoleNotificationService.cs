@@ -29,4 +29,26 @@ public class ConsoleNotificationService : INotificationService
                           $"(email: {notification.Email ?? "n/a"}) via {notification.Channels}. Expires {notification.ExpiryDate:yyyy-MM-dd}.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Credit adjustment #{notification.RequestId} ({notification.AdjustmentType} {notification.Amount:N0} for '{notification.BrandName}') " +
+                          $"requested by {notification.RequestedByName} awaits approval. Notified: {string.Join(", ", notification.ApproverEmails)}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default)
+    {
+        var outcome = notification.Approved ? "APPROVED" : "REJECTED";
+        Console.WriteLine($"[NOTIFICATION] Credit adjustment #{notification.RequestId} ({notification.AdjustmentType} {notification.Amount:N0} for '{notification.BrandName}') " +
+                          $"{outcome}. Note: {notification.ReviewNote ?? "n/a"}. Requester notified at {notification.RequesterEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}': {notification.ExpiringCredits:N0} credit(s) expire in {notification.DaysLeft} day(s) " +
+                          $"on {notification.ExpiresAt:yyyy-MM-dd}. Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
 }

@@ -1,0 +1,592 @@
+@page "/admin/credit-policies"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Credit Pricing Policies</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Credit Pricing Policies</MudText>
+
+<MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4">
+
+    @* ── Policies tab ────────────────────────────────────────── *@
+    <MudTabPanel Text="Policies">
+        <MudPaper Class="pa-4 mb-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudSwitch T="bool" @bind-Value="_includeInactive" Color="Color.Primary" Label="Show inactive" />
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadPolicies">Refresh</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add" OnClick="NewPolicy">New Policy</MudButton>
+                </MudStack>
+            </MudStack>
+
+            @if (_loadingPolicies)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                <MudTable Items="_policies" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Scope</MudTh>
+                        <MudTh>Target</MudTh>
+                        <MudTh Style="text-align:right">Price (₫)</MudTh>
+                        <MudTh Style="text-align:right">Expiry (mo)</MudTh>
+                        <MudTh Style="text-align:right">Welcome</MudTh>
+                        <MudTh Style="text-align:right">Threshold</MudTh>
+                        <MudTh>Effective</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Scope">
+                            <MudChip T="string" Size="Size.Small" Color="@GetScopeColor(context.Scope)">@context.Scope</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Target">@(context.BrandName ?? context.BrandGroupName ?? "All brands")</MudTd>
+                        <MudTd DataLabel="Price" Style="text-align:right">@context.PricePerCreditVnd.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Expiry" Style="text-align:right">@(context.CreditExpiryMonths?.ToString() ?? "never")</MudTd>
+                        <MudTd DataLabel="Welcome" Style="text-align:right">@context.WelcomeCredits</MudTd>
+                        <MudTd DataLabel="Threshold" Style="text-align:right">@(context.AdjustmentApprovalThreshold?.ToString() ?? "always")</MudTd>
+                        <MudTd DataLabel="Effective">
+                            @context.EffectiveFrom.ToString("yyyy-MM-dd")@(context.EffectiveTo.HasValue ? $" → {context.EffectiveTo.Value:yyyy-MM-dd}" : " →")
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                                @(context.IsActive ? "Active" : "Inactive")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditPolicy(context)" />
+                            @if (context.IsActive)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error"
+                                               OnClick="() => DeactivatePolicy(context)" />
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+
+        @if (_editingPolicy != null)
+        {
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">@(_editingPolicy.Id == Guid.Empty ? "New Policy" : $"Edit Policy — {_editingPolicy.Name}")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="_editingPolicy.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudSelect @bind-Value="_editingPolicy.Scope" Label="Scope" Variant="Variant.Outlined">
+                            <MudSelectItem Value="@("Global")">Global</MudSelectItem>
+                            <MudSelectItem Value="@("BrandGroup")">Brand group</MudSelectItem>
+                            <MudSelectItem Value="@("Brand")">Brand</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    @if (_editingPolicy.Scope == "BrandGroup")
+                    {
+                        <MudItem xs="12" sm="3">
+                            <MudSelect @bind-Value="_editingPolicy.BrandGroupId" Label="Target group" Variant="Variant.Outlined">
+                                @foreach (var g in _groups)
+                                {
+                                    <MudSelectItem Value="@((Guid?)g.Id)">@g.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    }
+                    @if (_editingPolicy.Scope == "Brand")
+                    {
+                        <MudItem xs="12" sm="3">
+                            <MudSelect @bind-Value="_editingPolicy.BrandId" Label="Target brand" Variant="Variant.Outlined">
+                                @foreach (var b in _brands)
+                                {
+                                    <MudSelectItem Value="@((Guid?)b.Id)">@b.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    }
+                    <MudItem xs="12" sm="3">
+                        <MudNumericField @bind-Value="_editingPolicy.PricePerCreditVnd" Label="Price per credit (₫)" Variant="Variant.Outlined" Min="0" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.CreditExpiryMonths" Label="Expiry (months)" Variant="Variant.Outlined" Min="1" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.WelcomeCredits" Label="Welcome credits" Variant="Variant.Outlined" Min="0" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.WelcomeCreditExpiryMonths" Label="Welcome expiry (mo)" Variant="Variant.Outlined" Min="1" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.LowBalanceWarningPct" Label="Low-balance warn %" Variant="Variant.Outlined" Min="1" Max="100" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.ExpiryWarningDays" Label="Expiry warn (days)" Variant="Variant.Outlined" Min="1" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField @bind-Value="_editingPolicy.AdjustmentApprovalThreshold" Label="Approval threshold" Variant="Variant.Outlined" Min="0" Clearable="true"
+                                         HelperText="Empty = always" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker @bind-Date="_effectiveFrom" Label="Effective from" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker @bind-Date="_effectiveTo" Label="Effective to (empty = open)" Variant="Variant.Outlined" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2" Class="d-flex align-center">
+                        <MudSwitch T="bool" @bind-Value="_editingPolicy.IsActive" Color="Color.Success" Label="Active" />
+                    </MudItem>
+                    <MudItem xs="12" Class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePolicy" Disabled="_submitting">Save</MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="() => _editingPolicy = null">Cancel</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+    </MudTabPanel>
+
+    @* ── Brand groups tab ────────────────────────────────────── *@
+    <MudTabPanel Text="Brand Groups">
+        <MudPaper Class="pa-4 mb-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">Groups</MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadGroups">Refresh</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add" OnClick="NewGroup">New Group</MudButton>
+                </MudStack>
+            </MudStack>
+
+            @if (_loadingGroups)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                <MudTable Items="_groups" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Description</MudTh>
+                        <MudTh Style="text-align:right">Members</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Description">@(context.Description ?? "—")</MudTd>
+                        <MudTd DataLabel="Members" Style="text-align:right">@context.Members.Count</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                                @(context.IsActive ? "Active" : "Inactive")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditGroup(context)" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+
+        @if (_editingGroup != null)
+        {
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">@(_editingGroup.Id == Guid.Empty ? "New Group" : $"Edit Group — {_editingGroup.Name}")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="_editingGroup.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+                    </MudItem>
+                    <MudItem xs="12" sm="5">
+                        <MudTextField @bind-Value="_editingGroup.Description" Label="Description" Variant="Variant.Outlined" MaxLength="500" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3" Class="d-flex align-center">
+                        <MudSwitch T="bool" @bind-Value="_editingGroup.IsActive" Color="Color.Success" Label="Active" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudSelect T="Guid" MultiSelection="true" @bind-SelectedValues="_editingGroupMemberIds"
+                                   Label="Member brands" Variant="Variant.Outlined"
+                                   ToStringFunc="@(id => _brands.FirstOrDefault(b => b.Id == id)?.Name ?? id.ToString())">
+                            @foreach (var b in _brands)
+                            {
+                                <MudSelectItem Value="@b.Id">@b.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" Class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveGroup" Disabled="_submitting">Save</MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="() => _editingGroup = null">Cancel</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private bool _loadingPolicies = false;
+    private bool _loadingGroups = false;
+    private bool _submitting = false;
+    private bool _includeInactive = false;
+
+    private List<PolicyDto> _policies = new();
+    private List<GroupDto> _groups = new();
+    private List<BrandLookupDto> _brands = new();
+
+    private PolicyEditModel? _editingPolicy;
+    private DateTime? _effectiveFrom;
+    private DateTime? _effectiveTo;
+
+    private GroupEditModel? _editingGroup;
+    private IReadOnlyCollection<Guid> _editingGroupMemberIds = new HashSet<Guid>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (AuthState.Role != "Admin")
+        {
+            Snackbar.Add("Access denied — Admin only.", Severity.Error);
+            return;
+        }
+        await LoadBrandsAsync();
+        await LoadGroups();
+        await LoadPolicies();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadBrandsAsync()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/brands?pageSize=200");
+            if (resp.IsSuccessStatusCode)
+            {
+                var paged = await resp.Content.ReadFromJsonAsync<PagedResult<BrandLookupDto>>();
+                _brands = paged?.Items ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load brands: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Policies ─────────────────────────────────────────────────
+    private async Task LoadPolicies()
+    {
+        _loadingPolicies = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/credit-policies?includeInactive={_includeInactive}");
+            if (resp.IsSuccessStatusCode)
+                _policies = await resp.Content.ReadFromJsonAsync<List<PolicyDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load policies.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loadingPolicies = false; }
+    }
+
+    private void NewPolicy()
+    {
+        _editingPolicy = new PolicyEditModel();
+        _effectiveFrom = DateTime.UtcNow.Date;
+        _effectiveTo = null;
+    }
+
+    private void EditPolicy(PolicyDto p)
+    {
+        _editingPolicy = new PolicyEditModel
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Scope = p.Scope,
+            BrandGroupId = p.BrandGroupId,
+            BrandId = p.BrandId,
+            PricePerCreditVnd = p.PricePerCreditVnd,
+            CreditExpiryMonths = p.CreditExpiryMonths,
+            WelcomeCredits = p.WelcomeCredits,
+            WelcomeCreditExpiryMonths = p.WelcomeCreditExpiryMonths,
+            LowBalanceWarningPct = p.LowBalanceWarningPct,
+            ExpiryWarningDays = p.ExpiryWarningDays,
+            AdjustmentApprovalThreshold = p.AdjustmentApprovalThreshold,
+            IsActive = p.IsActive
+        };
+        _effectiveFrom = p.EffectiveFrom;
+        _effectiveTo = p.EffectiveTo;
+    }
+
+    private async Task SavePolicy()
+    {
+        if (_editingPolicy == null) return;
+        if (string.IsNullOrWhiteSpace(_editingPolicy.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+        if (_effectiveFrom == null)
+        {
+            Snackbar.Add("Effective-from date is required.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                _editingPolicy.Name,
+                _editingPolicy.Scope,
+                BrandGroupId = _editingPolicy.Scope == "BrandGroup" ? _editingPolicy.BrandGroupId : null,
+                BrandId = _editingPolicy.Scope == "Brand" ? _editingPolicy.BrandId : null,
+                _editingPolicy.PricePerCreditVnd,
+                _editingPolicy.CreditExpiryMonths,
+                _editingPolicy.WelcomeCredits,
+                _editingPolicy.WelcomeCreditExpiryMonths,
+                _editingPolicy.LowBalanceWarningPct,
+                _editingPolicy.ExpiryWarningDays,
+                _editingPolicy.AdjustmentApprovalThreshold,
+                EffectiveFrom = DateTime.SpecifyKind(_effectiveFrom.Value, DateTimeKind.Utc),
+                EffectiveTo = _effectiveTo.HasValue ? DateTime.SpecifyKind(_effectiveTo.Value, DateTimeKind.Utc) : (DateTime?)null,
+                _editingPolicy.IsActive
+            };
+
+            var resp = _editingPolicy.Id == Guid.Empty
+                ? await SendAsync(HttpMethod.Post, "api/v1/credit-policies", payload)
+                : await SendAsync(HttpMethod.Put, $"api/v1/credit-policies/{_editingPolicy.Id}", payload);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Policy saved.", Severity.Success);
+                _editingPolicy = null;
+                await LoadPolicies();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Save failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private async Task DeactivatePolicy(PolicyDto p)
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/credit-policies/{p.Id}/deactivate");
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Policy '{p.Name}' deactivated.", Severity.Success);
+                await LoadPolicies();
+            }
+            else
+            {
+                Snackbar.Add("Deactivate failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Groups ───────────────────────────────────────────────────
+    private async Task LoadGroups()
+    {
+        _loadingGroups = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/credit-policies/groups");
+            if (resp.IsSuccessStatusCode)
+                _groups = await resp.Content.ReadFromJsonAsync<List<GroupDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load groups.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loadingGroups = false; }
+    }
+
+    private void NewGroup()
+    {
+        _editingGroup = new GroupEditModel();
+        _editingGroupMemberIds = new HashSet<Guid>();
+    }
+
+    private void EditGroup(GroupDto g)
+    {
+        _editingGroup = new GroupEditModel
+        {
+            Id = g.Id,
+            Name = g.Name,
+            Description = g.Description,
+            IsActive = g.IsActive
+        };
+        _editingGroupMemberIds = new HashSet<Guid>(g.Members.Select(m => m.BrandId));
+    }
+
+    private async Task SaveGroup()
+    {
+        if (_editingGroup == null) return;
+        if (string.IsNullOrWhiteSpace(_editingGroup.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            HttpResponseMessage resp;
+            Guid groupId;
+            if (_editingGroup.Id == Guid.Empty)
+            {
+                resp = await SendAsync(HttpMethod.Post, "api/v1/credit-policies/groups",
+                    new { _editingGroup.Name, _editingGroup.Description, _editingGroup.IsActive });
+                if (!resp.IsSuccessStatusCode)
+                {
+                    Snackbar.Add($"Save failed: {await resp.Content.ReadAsStringAsync()}", Severity.Error);
+                    return;
+                }
+                var created = await resp.Content.ReadFromJsonAsync<GroupDto>();
+                groupId = created!.Id;
+            }
+            else
+            {
+                resp = await SendAsync(HttpMethod.Put, $"api/v1/credit-policies/groups/{_editingGroup.Id}",
+                    new { _editingGroup.Name, _editingGroup.Description, _editingGroup.IsActive });
+                if (!resp.IsSuccessStatusCode)
+                {
+                    Snackbar.Add($"Save failed: {await resp.Content.ReadAsStringAsync()}", Severity.Error);
+                    return;
+                }
+                groupId = _editingGroup.Id;
+            }
+
+            var membersResp = await SendAsync(HttpMethod.Put, $"api/v1/credit-policies/groups/{groupId}/members",
+                new { BrandIds = _editingGroupMemberIds.ToList() });
+            if (!membersResp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Group saved but members failed: {await membersResp.Content.ReadAsStringAsync()}", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add("Group saved.", Severity.Success);
+            }
+
+            _editingGroup = null;
+            await LoadGroups();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────
+    private static Color GetScopeColor(string scope) => scope switch
+    {
+        "Brand"      => Color.Primary,
+        "BrandGroup" => Color.Info,
+        _            => Color.Default
+    };
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class BrandLookupDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class PolicyDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Scope { get; set; } = "Global";
+        public Guid? BrandGroupId { get; set; }
+        public string? BrandGroupName { get; set; }
+        public Guid? BrandId { get; set; }
+        public string? BrandName { get; set; }
+        public decimal PricePerCreditVnd { get; set; }
+        public int? CreditExpiryMonths { get; set; }
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; }
+        public int? LowBalanceWarningPct { get; set; }
+        public int? ExpiryWarningDays { get; set; }
+        public int? AdjustmentApprovalThreshold { get; set; }
+        public DateTime EffectiveFrom { get; set; }
+        public DateTime? EffectiveTo { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class PolicyEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Scope { get; set; } = "Global";
+        public Guid? BrandGroupId { get; set; }
+        public Guid? BrandId { get; set; }
+        public decimal PricePerCreditVnd { get; set; } = 5000m;
+        public int? CreditExpiryMonths { get; set; } = 12;
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; } = 12;
+        public int? LowBalanceWarningPct { get; set; } = 20;
+        public int? ExpiryWarningDays { get; set; } = 30;
+        public int? AdjustmentApprovalThreshold { get; set; } = 1000;
+        public bool IsActive { get; set; } = true;
+    }
+
+    private class GroupMemberDto
+    {
+        public Guid BrandId { get; set; }
+        public string? BrandName { get; set; }
+    }
+
+    private class GroupDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public bool IsActive { get; set; }
+        public List<GroupMemberDto> Members { get; set; } = new();
+    }
+
+    private class GroupEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    private class PagedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+}

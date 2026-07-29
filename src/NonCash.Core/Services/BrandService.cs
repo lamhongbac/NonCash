@@ -52,12 +52,10 @@ public class BrandService
         await _brandRepository.AddAsync(brand, cancellationToken);
         await _brandRepository.SaveChangesAsync(cancellationToken);
 
-        // Epic 9: welcome credit grant for each newly activated brand (free period).
-        if (_creditService != null && _creditConfig.WelcomeCredits > 0)
+        // Epic 10: welcome credit grant for each newly activated brand (policy-driven).
+        if (_creditService != null)
         {
-            await _creditService.TopUpAsync(
-                brand.Id, _creditConfig.WelcomeCredits, CreditEntryType.Grant,
-                "Welcome credits", null, cancellationToken);
+            await _creditService.GrantWelcomeAsync(brand.Id, cancellationToken);
         }
 
         brand.Business = business;

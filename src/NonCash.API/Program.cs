@@ -94,10 +94,12 @@ builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 // Settlement (Epic 7.2)
 builder.Services.AddScoped<ISettlementService, SettlementService>();
 
-// Prepaid credits (Epic 9)
+// Prepaid credits (Epic 9) + pricing policy / batch / adjustments (Epic 10)
 var creditConfig = builder.Configuration.GetSection(CreditConfig.SectionName).Get<CreditConfig>() ?? new CreditConfig();
 builder.Services.AddSingleton(creditConfig);
 builder.Services.AddScoped<ICreditService, CreditService>();
+builder.Services.AddScoped<ICreditPolicyService, CreditPolicyService>();
+builder.Services.AddScoped<ICreditAdjustmentService, CreditAdjustmentService>();
 
 // Integration partners (Epic 6)
 builder.Services.AddScoped<IIntegrationPartnerService, IntegrationPartnerService>();
@@ -171,6 +173,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddHostedService<LockCleanupService>();
 builder.Services.AddHostedService<TransferExpirySweepService>();
 builder.Services.AddHostedService<WebhookDeliveryService>();
+builder.Services.AddHostedService<CreditExpirySweepService>();
 
 // Health checks
 builder.Services.AddHealthChecks()

@@ -17,13 +17,15 @@ using NonCash.Infrastructure.Services;
 namespace NonCash.IntegrationTests.Controllers;
 
 /// <summary>
-/// Epic 9 — prepaid credit billing. Uses SQLite in-memory (relational) so that
-/// the POS lock/commit flow (ExecuteUpdate) and unique index enforcement work.
+/// Epic 10 — prepaid credit billing on the batch model. Uses SQLite in-memory (relational)
+/// so that the POS lock/commit flow (ExecuteUpdate), FK constraints and the unique
+/// voucher-consumption index are enforced.
 /// </summary>
 public class CreditsControllerTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly ApplicationDbContext _context;
+    private readonly StubPolicyService _policyStub;
     private readonly CreditService _creditService;
 
     private readonly Guid _brandAId = Guid.NewGuid();
@@ -44,7 +46,20 @@ public class CreditsControllerTests : IDisposable
 
         _context = new ApplicationDbContext(options);
         _context.Database.EnsureCreated();
-        _creditService = new CreditService(_context, NullLogger<CreditService>.Instance);
+
+        // PolicyId = null → CreditConfig-fallback pricing, no FK row needed.
+        _policyStub = new StubPolicyService(new ResolvedCreditPolicy(
+            PolicyId: null,
+            Name: "Test Policy",
+            Scope: null,
+            PricePerCreditVnd: 5000m,
+            CreditExpiryMonths: 12,
+            WelcomeCredits: 500,
+            WelcomeCreditExpiryMonths: 12,
+            LowBalanceWarningPct: 20,
+            ExpiryWarningDays: 30,
+            AdjustmentApprovalThreshold: 1000));
+        _creditService = new CreditService(_context, _policyStub, NullLogger<CreditService>.Instance);
 
         Seed();
     }
@@ -107,7 +122,7 @@ public class CreditsControllerTests : IDisposable
 
     private CreditsController CreateController(string role, Guid? brandId)
     {
-        return new CreditsController(_creditService, new FakeCurrentUserService(role, brandId));
+        return new CreditsController(_creditService, _policyStub, new FakeCurrentUserService(role, brandId));
     }
 
     private VoucherPlanHeader SeedPlan(Guid brandId, VoucherType voucherType, int voucherCount, bool memberOwned = false)
@@ -151,12 +166,12 @@ public class CreditsControllerTests : IDisposable
         return plan;
     }
 
-    // ----- balance & ledger scoping -----
+    // ----- balance & batch scoping -----
 
     [Fact]
     public async Task GetBalance_BrandUser_ReturnsOwnBrandBalance()
     {
-        await _creditService.TopUpAsync(_brandAId, 500, CreditEntryType.Grant, "welcome", null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 500, "welcome", null, null);
         var controller = CreateController("BrandManager", _brandAId);
 
         var result = await controller.GetBalance(null, CancellationToken.None);
@@ -180,7 +195,7 @@ public class CreditsControllerTests : IDisposable
     [Fact]
     public async Task GetBalance_Admin_CanQueryAnyBrand()
     {
-        await _creditService.TopUpAsync(_brandBId, 42, CreditEntryType.Purchase, null, null);
+        await _creditService.CreatePurchaseAsync(_brandBId, 42, null, null, null);
         var controller = CreateController("Admin", null);
 
         var result = await controller.GetBalance(_brandBId, CancellationToken.None);
@@ -192,21 +207,35 @@ public class CreditsControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetLedger_BrandUser_SeesOwnEntriesOnly()
+    public async Task GetBatches_BrandUser_SeesOwnBatchesOnly()
     {
-        await _creditService.TopUpAsync(_brandAId, 500, CreditEntryType.Grant, null, null);
-        await _creditService.TopUpAsync(_brandBId, 999, CreditEntryType.Grant, null, null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 500, null, null, null);
+        await _creditService.CreatePurchaseAsync(_brandBId, 999, null, null, null);
         var controller = CreateController("BrandManager", _brandAId);
 
-        var result = await controller.GetLedger(null, null, null, null, 1, 50, CancellationToken.None);
+        var result = await controller.GetBatches(null, null, null, null, 1, 50, CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var response = ok.Value.Should().BeOfType<CreditLedgerResponse>().Subject;
-        response.Entries.Should().OnlyContain(e => e.BrandId == _brandAId);
+        var response = ok.Value.Should().BeOfType<CreditBatchListResponse>().Subject;
+        response.Batches.Should().OnlyContain(b => b.BrandId == _brandAId);
         response.TotalCount.Should().Be(1);
     }
 
-    // ----- top-up -----
+    [Fact]
+    public async Task GetPricing_ReturnsResolvedPolicy()
+    {
+        var controller = CreateController("BrandManager", _brandAId);
+
+        var result = await controller.GetPricing(null, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = ok.Value.Should().BeOfType<ResolvedPolicyResponse>().Subject;
+        response.PricePerCreditVnd.Should().Be(5000m);
+        response.CreditExpiryMonths.Should().Be(12);
+        response.Name.Should().Be("Test Policy");
+    }
+
+    // ----- top-up (purchase) -----
 
     [Fact]
     public void TopUp_IsRestrictedToAdminRole()
@@ -220,38 +249,42 @@ public class CreditsControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task TopUp_Admin_CreatesLedgerEntry()
+    public async Task TopUp_Admin_CreatesPurchaseBatchWithPriceSnapshot()
     {
         var controller = CreateController("Admin", null);
-        var request = new CreditTopUpRequest(_brandAId, 300, "Purchase", "bank transfer #7");
+        var request = new CreditPurchaseRequest(_brandAId, 300, "bank transfer #7", "https://msa/slip-7.jpg");
 
         var result = await controller.TopUp(request, CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var entry = ok.Value.Should().BeOfType<CreditLedgerEntryDto>().Subject;
-        entry.EntryType.Should().Be("Purchase");
-        entry.Amount.Should().Be(300);
+        var batch = ok.Value.Should().BeOfType<CreditBatchDto>().Subject;
+        batch.BatchType.Should().Be("Purchase");
+        batch.OriginalAmount.Should().Be(300);
+        batch.RemainingAmount.Should().Be(300);
+        batch.PricePerCreditVnd.Should().Be(5000m);
+        batch.TotalPaidVnd.Should().Be(1500000m);
+        batch.EvidenceImageUrl.Should().Be("https://msa/slip-7.jpg");
         (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(300);
     }
 
     [Fact]
-    public async Task TopUp_WithConsumptionType_ReturnsBadRequest()
+    public async Task TopUp_WithNonPositiveAmount_ReturnsBadRequest()
     {
         var controller = CreateController("Admin", null);
-        var request = new CreditTopUpRequest(_brandAId, -1, "Consumption", null);
 
-        var result = await controller.TopUp(request, CancellationToken.None);
+        var zero = await controller.TopUp(new CreditPurchaseRequest(_brandAId, 0, null, null), CancellationToken.None);
+        var negative = await controller.TopUp(new CreditPurchaseRequest(_brandAId, -10, null, null), CancellationToken.None);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        zero.Result.Should().BeOfType<BadRequestObjectResult>();
+        negative.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
-    public async Task TopUp_WithNegativePurchase_ReturnsBadRequest()
+    public async Task TopUp_WithEmptyBrandId_ReturnsBadRequest()
     {
         var controller = CreateController("Admin", null);
-        var request = new CreditTopUpRequest(_brandAId, -10, "Purchase", null);
 
-        var result = await controller.TopUp(request, CancellationToken.None);
+        var result = await controller.TopUp(new CreditPurchaseRequest(Guid.Empty, 10, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -281,7 +314,7 @@ public class CreditsControllerTests : IDisposable
     [Fact]
     public async Task ConfirmGiftPayment_ChargesOneCreditPerVoucher()
     {
-        await _creditService.TopUpAsync(_brandAId, 10, CreditEntryType.Grant, "welcome", null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 3);
         var purchaseService = CreatePurchaseService();
 
@@ -293,18 +326,18 @@ public class CreditsControllerTests : IDisposable
 
         payResult.Success.Should().BeTrue();
         payResult.AllocatedCount.Should().Be(2);
-        var consumptions = await _context.CreditLedgerEntries
-            .Where(c => c.BrandId == _brandAId && c.EntryType == CreditEntryType.Consumption)
+        var consumptions = await _context.CreditConsumptions
+            .Where(c => c.BrandId == _brandAId)
             .ToListAsync();
         consumptions.Should().HaveCount(2);
-        consumptions.Should().OnlyContain(c => c.Amount == -1 && c.VoucherDetailId != null);
+        consumptions.Select(c => c.VoucherDetailId).Distinct().Should().HaveCount(2);
         (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(8);
     }
 
     [Fact]
     public async Task ConfirmGiftPayment_ReplayedConfirm_DoesNotDoubleCharge()
     {
-        await _creditService.TopUpAsync(_brandAId, 10, CreditEntryType.Grant, null, null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, null, null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 2);
         var purchaseService = CreatePurchaseService();
         var orderResult = await purchaseService.CreateOrderAsync(
@@ -313,15 +346,13 @@ public class CreditsControllerTests : IDisposable
         await purchaseService.ConfirmPaymentAsync(orderResult.Order!.Id);
         await purchaseService.ConfirmPaymentAsync(orderResult.Order!.Id); // idempotent replay
 
-        var consumptionCount = await _context.CreditLedgerEntries
-            .CountAsync(c => c.EntryType == CreditEntryType.Consumption);
-        consumptionCount.Should().Be(1);
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(1);
     }
 
     [Fact]
     public async Task PosCommit_Complimentary_ChargesOneCreditToIssuingBrand()
     {
-        await _creditService.TopUpAsync(_brandAId, 5, CreditEntryType.Grant, null, null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 5, null, null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Complimentary, voucherCount: 1, memberOwned: true);
         var detail = await _context.VoucherPlanDetails.SingleAsync(d => d.ParentId == plan.Id);
         var code = new VoucherCodeService().GenerateCode(detail.Id, detail.VoucherCodeSecret);
@@ -341,9 +372,7 @@ public class CreditsControllerTests : IDisposable
         var commitResult = await posService.CommitAsync(lockResult.LockId!.Value, "TXN-COMP-1", 50000m, _outletId);
 
         commitResult.Status.Should().Be("Success");
-        var consumptions = await _context.CreditLedgerEntries
-            .Where(c => c.EntryType == CreditEntryType.Consumption)
-            .ToListAsync();
+        var consumptions = await _context.CreditConsumptions.ToListAsync();
         consumptions.Should().ContainSingle();
         consumptions[0].BrandId.Should().Be(_brandAId);
         consumptions[0].VoucherDetailId.Should().Be(detail.Id);
@@ -353,7 +382,7 @@ public class CreditsControllerTests : IDisposable
     [Fact]
     public async Task PosCommit_Gift_CreatesNoNewConsumption()
     {
-        await _creditService.TopUpAsync(_brandAId, 5, CreditEntryType.Grant, null, null);
+        await _creditService.CreatePurchaseAsync(_brandAId, 5, null, null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 1, memberOwned: true);
         var detail = await _context.VoucherPlanDetails.SingleAsync(d => d.ParentId == plan.Id);
         var code = new VoucherCodeService().GenerateCode(detail.Id, detail.VoucherCodeSecret);
@@ -371,9 +400,7 @@ public class CreditsControllerTests : IDisposable
 
         // Gift was charged at sale, never at redemption.
         commitResult.Status.Should().Be("Success");
-        var consumptionCount = await _context.CreditLedgerEntries
-            .CountAsync(c => c.EntryType == CreditEntryType.Consumption);
-        consumptionCount.Should().Be(0);
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
     }
 
     // ----- guards -----
@@ -429,5 +456,37 @@ public class CreditsControllerTests : IDisposable
         public string? GetCurrentUserRole() => _role;
         public bool IsInRole(string role) => role == _role;
         public Guid? GetCurrentCustomerId() => null;
+    }
+
+    /// <summary>Policy stub — the credit flows only call ResolveForBrandAsync.</summary>
+    private sealed class StubPolicyService : ICreditPolicyService
+    {
+        public ResolvedCreditPolicy Policy { get; set; }
+
+        public StubPolicyService(ResolvedCreditPolicy policy) => Policy = policy;
+
+        public Task<ResolvedCreditPolicy> ResolveForBrandAsync(Guid brandId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Policy);
+
+        public Task<IReadOnlyList<CreditPricingPolicy>> GetPoliciesAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<CreditPricingPolicy?> GetPolicyAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<CreditPricingPolicy> CreatePolicyAsync(CreditPricingPolicy policy, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<CreditPricingPolicy> UpdatePolicyAsync(Guid id, CreditPricingPolicy changes, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task DeactivatePolicyAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<IReadOnlyList<BrandGroup>> GetGroupsAsync(CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<BrandGroup?> GetGroupAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<BrandGroup> CreateGroupAsync(string name, string? description, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<BrandGroup> UpdateGroupAsync(Guid id, string name, string? description, bool isActive, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task SetGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> brandIds, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 }

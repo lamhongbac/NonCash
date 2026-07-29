@@ -42,6 +42,15 @@
                 <MudNavLink Href="/admin/businesses" Icon="@Icons.Material.Filled.AccountBalance">Businesses</MudNavLink>
                 <MudNavLink Href="/admin/brands" Icon="@Icons.Material.Filled.Business">Brands</MudNavLink>
                 <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+                <MudNavLink Href="/admin/credits" Icon="@Icons.Material.Filled.Toll">Credit Management</MudNavLink>
+                <MudNavLink Href="/admin/credit-policies" Icon="@Icons.Material.Filled.Policy">Pricing Policies</MudNavLink>
+                <MudNavLink Href="/admin/credit-adjustments" Icon="@Icons.Material.Filled.Rule">Credit Adjustments</MudNavLink>
+                <MudDivider Class="my-2" />
+            }
+            @if (AuthState.IsLoggedIn && AuthState.Role == "FinancialController")
+            {
+                <MudText Typo="Typo.caption" Class="px-4">Financial Controller</MudText>
+                <MudNavLink Href="/admin/credit-adjustments" Icon="@Icons.Material.Filled.Rule">Adjustment Approvals</MudNavLink>
                 <MudDivider Class="my-2" />
             }
             @if (AuthState.IsLoggedIn && AuthState.Role == "BrandManager")
@@ -50,6 +59,7 @@
                 <MudNavLink Href="/brandmanager/plans" Icon="@Icons.Material.Filled.Assignment">Voucher Plans</MudNavLink>
                 <MudNavLink Href="/brandmanager/outlets" Icon="@Icons.Material.Filled.Store">Outlets</MudNavLink>
                 <MudNavLink Href="/brandmanager/customers" Icon="@Icons.Material.Filled.Contacts">Customers</MudNavLink>
+                <MudNavLink Href="/brandmanager/credits" Icon="@Icons.Material.Filled.Toll">My Credits</MudNavLink>
                 <MudNavLink Href="/pos/redeem" Icon="@Icons.Material.Filled.PointOfSale">POS Redemption</MudNavLink>
                 <MudDivider Class="my-2" />
             }

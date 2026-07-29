@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NonCash.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NonCash.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729063438_AddCreditPolicyBatchAdjustment")]
+    partial class AddCreditPolicyBatchAdjustment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -402,10 +405,6 @@ namespace NonCash.Infrastructure.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
-
-                    b.Property<DateTime?>("ExpiryWarningSentAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expiry_warning_sent_at");
 
                     b.Property<int>("OriginalAmount")
                         .HasColumnType("integer")

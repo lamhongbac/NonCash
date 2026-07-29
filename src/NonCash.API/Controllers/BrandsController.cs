@@ -19,6 +19,7 @@ public class BrandsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = "Admin,FinancialController")] // FC needs the brand list for the adjustment queue
     public async Task<ActionResult<PagedResult<BrandResponse>>> GetBrands(
         [FromQuery] string? name,
         [FromQuery] string? status,

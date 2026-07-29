@@ -78,6 +78,65 @@ public class EmailNotificationService : INotificationService
         }
     }
 
+    public async Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (notification.ApproverEmails.Count == 0)
+        {
+            _logger.LogWarning("Adjustment {RequestId} pending approval but no FinancialController emails found.", notification.RequestId);
+            return;
+        }
+
+        var subject = $"Credit adjustment pending approval: {notification.AdjustmentType} {notification.Amount:N0} for {notification.BrandName}";
+        var body = $"A credit adjustment request requires your approval.\n\n" +
+                   $"Brand: {notification.BrandName}\n" +
+                   $"Type: {notification.AdjustmentType}\n" +
+                   $"Amount: {notification.Amount:N0} credit(s)\n" +
+                   $"Requested by: {notification.RequestedByName}\n" +
+                   $"Request ID: {notification.RequestId}\n\n" +
+                   $"Please review it in the admin portal (Credit Adjustments queue).";
+
+        foreach (var email in notification.ApproverEmails)
+        {
+            await SendAsync(email, subject, body, cancellationToken);
+        }
+    }
+
+    public Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.RequesterEmail))
+        {
+            _logger.LogInformation("Adjustment {RequestId} reviewed but requester has no email on file.", notification.RequestId);
+            return Task.CompletedTask;
+        }
+
+        var outcome = notification.Approved ? "APPROVED" : "REJECTED";
+        var subject = $"Credit adjustment {outcome}: {notification.AdjustmentType} {notification.Amount:N0} for {notification.BrandName}";
+        var body = $"Your credit adjustment request has been {outcome.ToLowerInvariant()}.\n\n" +
+                   $"Brand: {notification.BrandName}\n" +
+                   $"Type: {notification.AdjustmentType}\n" +
+                   $"Amount: {notification.Amount:N0} credit(s)\n" +
+                   $"Request ID: {notification.RequestId}\n" +
+                   (string.IsNullOrWhiteSpace(notification.ReviewNote) ? "" : $"Reviewer note: {notification.ReviewNote}\n");
+        return SendAsync(notification.RequesterEmail, subject, body, cancellationToken);
+    }
+
+    public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Credit expiry warning skipped for {BrandName}: no contact email.", notification.BrandName);
+            return Task.CompletedTask;
+        }
+
+        var subject = $"NonCash credits expiring soon: {notification.ExpiringCredits:N0} credit(s) on {notification.ExpiresAt:yyyy-MM-dd}";
+        var body = $"Dear {notification.BrandName},\n\n" +
+                   $"{notification.ExpiringCredits:N0} credit(s) in your NonCash account will expire in {notification.DaysLeft} day(s), " +
+                   $"on {notification.ExpiresAt:yyyy-MM-dd}.\n\n" +
+                   $"Unused credits are forfeited at expiry. Log in to review your balance and plan your voucher distributions.\n\n" +
+                   $"Best regards,\nNonCash Team";
+        return SendAsync(notification.BrandEmail, subject, body, cancellationToken);
+    }
+
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromAddress))

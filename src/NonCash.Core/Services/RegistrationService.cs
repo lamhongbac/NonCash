@@ -244,12 +244,10 @@ public class RegistrationService : IRegistrationService
             _brandRepository.Update(brand);
             await _brandRepository.SaveChangesAsync(cancellationToken);
 
-            // Epic 9: welcome credit grant when the brand is activated on approval (free period).
-            if (approve && _creditService != null && _creditConfig.WelcomeCredits > 0)
+            // Epic 10: welcome credit grant when the brand is activated on approval (policy-driven).
+            if (approve && _creditService != null)
             {
-                await _creditService.TopUpAsync(
-                    brand.Id, _creditConfig.WelcomeCredits, CreditEntryType.Grant,
-                    "Welcome credits", reviewerUserId, cancellationToken);
+                await _creditService.GrantWelcomeAsync(brand.Id, cancellationToken);
             }
         }
 

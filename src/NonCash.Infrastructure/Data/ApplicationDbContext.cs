@@ -35,6 +35,13 @@ public class ApplicationDbContext : DbContext
     public DbSet<VoucherEvent> VoucherEvents => Set<VoucherEvent>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
     public DbSet<CreditLedgerEntry> CreditLedgerEntries => Set<CreditLedgerEntry>();
+    public DbSet<CreditPricingPolicy> CreditPricingPolicies => Set<CreditPricingPolicy>();
+    public DbSet<BrandGroup> BrandGroups => Set<BrandGroup>();
+    public DbSet<BrandGroupMember> BrandGroupMembers => Set<BrandGroupMember>();
+    public DbSet<CreditBatch> CreditBatches => Set<CreditBatch>();
+    public DbSet<CreditConsumption> CreditConsumptions => Set<CreditConsumption>();
+    public DbSet<CreditExpiryLog> CreditExpiryLogs => Set<CreditExpiryLog>();
+    public DbSet<CreditAdjustmentRequest> CreditAdjustmentRequests => Set<CreditAdjustmentRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

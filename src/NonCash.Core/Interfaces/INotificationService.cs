@@ -23,10 +23,40 @@ public record VoucherReceivedNotification(
     DateTime ExpiryDate,
     NotificationChannel Channels);
 
+/// <summary>Payload sent to FinancialControllers when an adjustment awaits approval (Epic 10).</summary>
+public record AdjustmentPendingNotification(
+    Guid RequestId,
+    string BrandName,
+    string AdjustmentType,
+    int Amount,
+    string RequestedByName,
+    IReadOnlyList<string> ApproverEmails);
+
+/// <summary>Payload sent to the requester after an adjustment is approved or rejected (Epic 10).</summary>
+public record AdjustmentReviewedNotification(
+    Guid RequestId,
+    string BrandName,
+    string AdjustmentType,
+    int Amount,
+    bool Approved,
+    string? ReviewNote,
+    string? RequesterEmail);
+
+/// <summary>Payload warning a brand that a credit batch expires soon (Epic 10).</summary>
+public record CreditsExpiringNotification(
+    string? BrandEmail,
+    string BrandName,
+    int ExpiringCredits,
+    DateTime ExpiresAt,
+    int DaysLeft);
+
 public interface INotificationService
 {
     Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default);
     Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, CancellationToken cancellationToken = default);
     Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default);
     Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default);
 }

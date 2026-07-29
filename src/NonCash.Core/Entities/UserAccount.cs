@@ -5,7 +5,9 @@ public enum UserRole
     Admin,
     BrandManager,
     Planner,
-    Approver
+    Approver,
+    /// <summary>Approves maker-checker credit adjustments (Epic 10). Cannot self-approve.</summary>
+    FinancialController
 }
 
 public enum UserStatus
