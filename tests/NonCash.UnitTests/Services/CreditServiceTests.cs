@@ -62,7 +62,7 @@ public class CreditServiceTests
             Name: "Test Welcome",
             WelcomeCredits: 500,
             WelcomeCreditExpiryMonths: 12));
-        _sut = new CreditService(_context, _policyStub, _welcomeStub, NullLogger<CreditService>.Instance);
+        _sut = new CreditService(_context, _policyStub, _welcomeStub, new StubNotificationService(), NullLogger<CreditService>.Instance);
     }
 
     /// <summary>Seeds a batch directly (sync SaveChanges keeps the custom CreatedAt).</summary>
@@ -467,6 +467,22 @@ public class CreditServiceTests
     }
 
     /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>
+    private sealed class StubNotificationService : INotificationService
+    {
+        public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private sealed class StubWelcomePolicyService : IWelcomePolicyService
     {
         public ResolvedWelcomePolicy Welcome { get; set; }

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Credit Purchase Receipt</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #1976d2; color: #fff; padding: 20px;">
+            <h2 style="margin: 0;">Credit Purchase Receipt</h2>
+        </div>
+        <div style="padding: 24px;">
+            <p>Dear {{BrandName}},</p>
+            <p>Your credit purchase has been completed successfully.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold; width: 140px;">Credits</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{Amount}}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Total Paid</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{TotalPaidVnd}} VND</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Reference</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{Reference}}</td>
+                </tr>
+            </table>
+            {{ExpiresAt}}
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,3 +1,7 @@
+</think>
+
+Based on my analysis of the codebase, I can now update the documentation to reflect the email column addition to the user_accounts table. Here's the updated documentation:
+
 # Entity Relationships and Schema Design
 
 <cite>
@@ -9,12 +13,15 @@
 - [implementation-readiness-report-2026-04-17.md](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md)
 - [WelcomeGrantPolicy.cs](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs)
 - [CreditBatch.cs](file://src/NonCash.Core/Entities/CreditBatch.cs)
+- [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
 - [Business.cs](file://src/NonCash.Core/Entities/Business.cs)
-- [Brand.cs](file://src/NonCash.Core/Entities/Brand.cs)
-- [WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
+- [UserAccountConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [UserAccountRepository.cs](file://src/NonCash.Infrastructure/Repositories/UserAccountRepository.cs)
 - [WelcomePoliciesController.cs](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs)
 - [WelcomeGrantPolicyConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/WelcomeGrantPolicyConfiguration.cs)
 - [SplitWelcomePolicy Migration](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
+- [AddEmailToUserAccount Migration](file://src/NonCash.Infrastructure/Migrations/20260814090258_AddEmailToUserAccount.cs)
 - [Migration SQL Script](file://tools/migration-split-welcome-policy.sql)
 </cite>
 
@@ -22,9 +29,9 @@
 **Changes Made**
 - Added new WelcomeGrantPolicy entity and table with business_id foreign key relationship
 - Updated CreditBatch entity to include welcome_policy_id column establishing lineage between credit batches and governing policies
-- Added composite indexing for performance optimizations on business scope queries
-- Enhanced entity relationship diagrams to show new policy-batch relationships
-- Updated multi-tenancy section to reflect business-level policy isolation
+- **Added email column support to UserAccount entity via migration '20260814090258_AddEmailToUserAccount'** - The user_accounts table now includes an email field (varchar(255)) enabling email-based authentication, notifications, and account recovery features
+- Enhanced entity relationship diagrams to show new policy-batch relationships and email functionality
+- Updated multi-tenancy section to reflect business-level policy isolation and email-based communication capabilities
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -109,7 +116,8 @@ This section defines the core entities and their attributes, focusing on primary
 - UserAccount
   - PK: UserID
   - FK: BrandID → Brand.BrandID (nullable for system super-admins)
-  - Attributes include credentials, role, and status.
+  - **Updated**: Now includes Email field (varchar(255), nullable) enabling email-based authentication, notifications, and account recovery features
+  - Attributes include credentials, role, status, and email contact information.
 
 - Customer
   - PK: CustomerID
@@ -134,6 +142,7 @@ These definitions are derived from the data models documentation and align with 
 - [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
 - [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
 - [CreditBatch.cs:27-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L74)
+- [UserAccount.cs:20-31](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L31)
 
 ## Architecture Overview
 NonCash employs a 3-layer SaaS architecture:
@@ -174,7 +183,7 @@ REPO --> DB
 This section focuses on the entity relationship model, constraints, and data access patterns.
 
 ### Relational Schema and Constraints
-The following diagram illustrates the relational schema with primary keys and foreign key relationships among the core entities, including the new welcome grant policy system.
+The following diagram illustrates the relational schema with primary keys and foreign key relationships among the core entities, including the new welcome grant policy system and email-enabled user accounts.
 
 ```mermaid
 erDiagram
@@ -199,6 +208,7 @@ uuid BrandID FK
 string Username
 string PasswordHash
 string FullName
+string Email
 enum Role
 enum Status
 }
@@ -305,6 +315,7 @@ CUSTOMER ||--o{ VOICEDISTRIBUTION : "receives"
 - [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
 - [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
 - [CreditBatch.cs:27-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L74)
+- [UserAccount.cs:20-31](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L31)
 
 ### Repository Pattern Implementation with Entity Framework Core
 The Data Access Layer implements the repository pattern to abstract persistence concerns:
@@ -336,11 +347,13 @@ Access control and filtering enforce that users and outlets operate within their
 - Transactions: Critical workflows (e.g., POS usage) are wrapped in transactions to ensure atomicity.
 - Projection and Pagination: Selective field retrieval and paging improve performance for reporting and dashboards.
 - Policy Resolution: Welcome policy resolution follows most recent active policy per business with fallback to configuration defaults.
+- **Email-Based Communication**: UserAccount email field enables email-based authentication, notifications, and account recovery workflows.
 
 **Section sources**
 - [architecture.md:28-35](file://docs/architecture.md#L28-L35)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
 - [WelcomePolicyService.cs:25-39](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L39)
+- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
 
 ### Welcome Grant Policy Orchestration (Sequence)
 The following sequence illustrates welcome grant policy resolution and credit batch creation workflow.
@@ -370,6 +383,37 @@ API-->>Brand : "Activation complete with credits"
 - [WelcomePolicyService.cs:25-39](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L39)
 - [SplitWelcomePolicy Migration:14-72](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L14-L72)
 
+### Email-Based Authentication and Notification System
+The email column addition enables comprehensive email-based functionality:
+
+- **Authentication**: Email validation and verification for user registration and login processes
+- **Notifications**: Automated email notifications for account activities, voucher distributions, and business events
+- **Account Recovery**: Email-based password reset and account recovery workflows
+- **Admin Notifications**: Email alerts for administrative actions and system events
+
+```mermaid
+sequenceDiagram
+participant User as "User Account"
+participant Auth as "Authentication Service"
+participant Email as "Email Notification Service"
+participant DB as "PostgreSQL"
+User->>Auth : "Login Request with Email"
+Auth->>DB : "Query UserAccount by Username"
+DB-->>Auth : "UserAccount with Email"
+Auth->>Email : "Send Login Notification"
+Email->>DB : "Retrieve Admin Emails"
+DB-->>Email : "Active Admin Accounts"
+Email-->>User : "Email Confirmation"
+```
+
+**Diagram sources**
+- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
+- [UserAccountConfiguration.cs:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
+
+**Section sources**
+- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
+- [UserAccountConfiguration.cs:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
+
 ## Dependency Analysis
 The dependency relationships across layers and modules are as follows:
 - NonCash.Web depends on NonCash.Core for business logic and NonCash.Shared for shared models.
@@ -393,26 +437,29 @@ INFRA --> DB["PostgreSQL"]
 - [source-tree-analysis.md:1-50](file://docs/source-tree-analysis.md#L1-L50)
 
 ## Performance Considerations
-Indexing and performance strategies have been enhanced with the new welcome grant policy system:
+Indexing and performance strategies have been enhanced with the new welcome grant policy system and email functionality:
 
 ### New Indexes and Optimizations
 - **Composite Index on WelcomeGrantPolicy**: `IX_welcome_grant_policies_business_active_from` optimizes business-scoped policy resolution queries with filters on business_id, is_active, and effective_from.
 - **Foreign Key Index on CreditBatch**: `IX_credit_batches_welcome_policy_id` accelerates joins between credit batches and their governing welcome policies.
 - **Existing CreditBatch Indexes**: Maintained existing indexes on brand_id+created_at and brand_id+expires_at for efficient brand-scoped queries.
+- **Email Field Optimization**: Email field configured with varchar(255) limit for optimal storage and query performance.
 
 ### General Performance Strategies
 - Primary Keys: Ensure clustered indexes on GUID PKs for efficient row access.
 - Foreign Keys: Add non-clustered indexes on FK columns (e.g., BrandID, UserID, OutletID, CustomerID, BusinessID) to accelerate joins.
-- High-Cardinality Filters: Index columns frequently used in WHERE clauses (e.g., SerialNo, PhoneNumber, ApprovalStatus).
+- High-Cardinality Filters: Index columns frequently used in WHERE clauses (e.g., SerialNo, PhoneNumber, ApprovalStatus, Email).
 - Range Queries: Index DateRange and DateTime fields used in validity checks (e.g., ExpiryDate, PublishDate, UsageDate, EffectiveFrom, EffectiveTo).
 - Composite Indexes: Consider composite indexes for frequent filter combinations (e.g., BrandID + Status, OutletID + Status, BusinessID + IsActive + EffectiveFrom).
 - Query Patterns: Use projection to fetch only required columns; apply pagination for large result sets.
 - Concurrency: Use optimistic concurrency tokens for entities updated by multiple services.
 - Transactions: Keep transactions short; avoid long-held locks during POS usage workflows.
+- **Email Validation**: Implement server-side email validation to prevent invalid data entry and reduce database load.
 
 **Section sources**
 - [SplitWelcomePolicy Migration:52-62](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L52-L62)
 - [WelcomeGrantPolicyConfiguration:17-19](file://src/NonCash.Infrastructure/Data/Configurations/WelcomeGrantPolicyConfiguration.cs#L17-L19)
+- [UserAccountConfiguration:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -423,16 +470,19 @@ Common issues and resolutions:
 - Audit and Tracing: Log repository operations and key business events for diagnostics and compliance.
 - Welcome Policy Resolution Issues: Verify business_id associations and effective date ranges when troubleshooting welcome credit grants.
 - Policy-Batch Lineage Problems: Check welcome_policy_id foreign key relationships when auditing credit batch origins.
+- **Email Functionality Issues**: Verify email field population and SMTP configuration when troubleshooting email-based authentication and notification failures.
+- **Email Validation Errors**: Check email format validation and ensure proper error handling for invalid email addresses during user registration and updates.
 
 **Section sources**
 - [architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
+- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
 
 ## Conclusion
-NonCash's relational schema and repository-driven persistence align with a robust 3-tier SaaS architecture. The introduction of the WelcomeGrantPolicy system enhances multi-tenancy by providing business-level policy management alongside brand-level data isolation. Multi-tenancy is enforced via BrandID across core entities and BusinessID for commercial policies, while the microservices-based Business Logic Layer orchestrates complex workflows such as voucher planning, distribution, POS usage, and welcome credit grants. The documented entity relationships, enhanced indexing strategies, and migration practices provide a solid foundation for scalable, secure, and maintainable operations.
+NonCash's relational schema and repository-driven persistence align with a robust 3-tier SaaS architecture. The introduction of the WelcomeGrantPolicy system enhances multi-tenancy by providing business-level policy management alongside brand-level data isolation. The addition of email support to UserAccount entities enables comprehensive email-based authentication, notifications, and account recovery features, significantly enhancing the platform's communication capabilities. Multi-tenancy is enforced via BrandID across core entities and BusinessID for commercial policies, while the microservices-based Business Logic Layer orchestrates complex workflows such as voucher planning, distribution, POS usage, welcome credit grants, and email-based communications. The documented entity relationships, enhanced indexing strategies, migration practices, and email functionality provide a solid foundation for scalable, secure, and maintainable operations.
 
 ## Appendices
-- Implementation Readiness: The project demonstrates strong adherence to database entity mapping and story dependencies, with foundational tables established early and transaction tables introduced progressively. The new welcome grant policy system represents a significant enhancement to the credit management architecture.
+- Implementation Readiness: The project demonstrates strong adherence to database entity mapping and story dependencies, with foundational tables established early and transaction tables introduced progressively. The new welcome grant policy system and email-enabled user accounts represent significant enhancements to the credit management and communication architectures.
 
 **Section sources**
 - [_bmad-output/implementation-readiness-report-2026-04-17.md:91-123](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md#L91-L123)

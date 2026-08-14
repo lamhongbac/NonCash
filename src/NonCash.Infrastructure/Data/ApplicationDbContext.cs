@@ -43,6 +43,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<CreditConsumption> CreditConsumptions => Set<CreditConsumption>();
     public DbSet<CreditExpiryLog> CreditExpiryLogs => Set<CreditExpiryLog>();
     public DbSet<CreditAdjustmentRequest> CreditAdjustmentRequests => Set<CreditAdjustmentRequest>();
+    public DbSet<EmailLog> EmailLogs => Set<EmailLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

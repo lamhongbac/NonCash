@@ -203,11 +203,10 @@ public class CreditAdjustmentService : ICreditAdjustmentService
                 .Select(u => u.FullName)
                 .FirstOrDefaultAsync(cancellationToken) ?? "(unknown user)";
 
-            // Usernames double as emails when they contain '@' (no dedicated email field yet).
             var approverEmails = await _db.UserAccounts
                 .AsNoTracking()
-                .Where(u => u.Role == UserRole.FinancialController && u.Status == UserStatus.Active && u.Username.Contains("@"))
-                .Select(u => u.Username)
+                .Where(u => u.Role == UserRole.FinancialController && u.Status == UserStatus.Active && !string.IsNullOrEmpty(u.Email))
+                .Select(u => u.Email!)
                 .ToListAsync(cancellationToken);
 
             await _notificationService.NotifyAdjustmentPendingAsync(new AdjustmentPendingNotification(
@@ -233,8 +232,8 @@ public class CreditAdjustmentService : ICreditAdjustmentService
 
             var requesterEmail = await _db.UserAccounts
                 .AsNoTracking()
-                .Where(u => u.Id == request.RequestedBy && u.Username.Contains("@"))
-                .Select(u => u.Username)
+                .Where(u => u.Id == request.RequestedBy && !string.IsNullOrEmpty(u.Email))
+                .Select(u => u.Email)
                 .FirstOrDefaultAsync(cancellationToken);
 
             await _notificationService.NotifyAdjustmentReviewedAsync(new AdjustmentReviewedNotification(

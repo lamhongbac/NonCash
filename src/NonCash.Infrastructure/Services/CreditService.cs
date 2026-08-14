@@ -18,13 +18,20 @@ public class CreditService : ICreditService
     private readonly ApplicationDbContext _context;
     private readonly ICreditPolicyService _policyService;
     private readonly IWelcomePolicyService _welcomePolicyService;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<CreditService> _logger;
 
-    public CreditService(ApplicationDbContext context, ICreditPolicyService policyService, IWelcomePolicyService welcomePolicyService, ILogger<CreditService> logger)
+    public CreditService(
+        ApplicationDbContext context,
+        ICreditPolicyService policyService,
+        IWelcomePolicyService welcomePolicyService,
+        INotificationService notificationService,
+        ILogger<CreditService> logger)
     {
         _context = context;
         _policyService = policyService;
         _welcomePolicyService = welcomePolicyService;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -82,6 +89,8 @@ public class CreditService : ICreditService
                 return;
             }
 
+            var balanceBefore = await GetBalanceAsync(brandId, cancellationToken);
+
             batch.RemainingAmount -= 1;
 
             _context.CreditConsumptions.Add(new CreditConsumption
@@ -93,6 +102,7 @@ public class CreditService : ICreditService
             });
 
             await _context.SaveChangesAsync(cancellationToken);
+            await NotifyLowBalanceAsync(brandId, balanceBefore, cancellationToken);
         }
         catch (DbUpdateException ex)
         {
@@ -140,6 +150,8 @@ public class CreditService : ICreditService
 
         _context.CreditBatches.Add(batch);
         await _context.SaveChangesAsync(cancellationToken);
+
+        await NotifyCreditPurchasedAsync(brandId, batch, cancellationToken);
         return batch;
     }
 
@@ -183,6 +195,8 @@ public class CreditService : ICreditService
 
         _context.CreditBatches.Add(batch);
         await _context.SaveChangesAsync(cancellationToken);
+
+        await NotifyWelcomeCreditGrantedAsync(brandId, batch, cancellationToken);
         return batch;
     }
 
@@ -291,6 +305,78 @@ public class CreditService : ICreditService
                 && b.ExpiresAt <= cutoff)
             .OrderBy(b => b.ExpiresAt)
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task NotifyWelcomeCreditGrantedAsync(Guid brandId, CreditBatch batch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var brand = await _context.Brands
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == brandId, cancellationToken);
+            if (brand is null) return;
+
+            await _notificationService.NotifyWelcomeCreditGrantedAsync(new WelcomeCreditGrantedNotification(
+                brand.ContactEmail, brand.Name, batch.OriginalAmount, batch.ExpiresAt), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send welcome-credit notification for brand {BrandId}.", brandId);
+        }
+    }
+
+    private async Task NotifyCreditPurchasedAsync(Guid brandId, CreditBatch batch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var brand = await _context.Brands
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == brandId, cancellationToken);
+            if (brand is null) return;
+
+            await _notificationService.NotifyCreditPurchasedAsync(new CreditPurchasedNotification(
+                brand.ContactEmail, brand.Name, batch.OriginalAmount, batch.TotalPaidVnd, batch.ExpiresAt, batch.Reference), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send credit-purchase notification for brand {BrandId}.", brandId);
+        }
+    }
+
+    private async Task NotifyLowBalanceAsync(Guid brandId, int balanceBefore, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var policy = await _policyService.ResolveForBrandAsync(brandId, cancellationToken);
+            if (policy.LowBalanceWarningPct is null or <= 0)
+                return;
+
+            var totalGranted = await _context.CreditBatches
+                .AsNoTracking()
+                .Where(b => b.BrandId == brandId && b.OriginalAmount > 0)
+                .SumAsync(b => (int?)b.OriginalAmount, cancellationToken) ?? 0;
+
+            if (totalGranted <= 0)
+                return;
+
+            var threshold = (int)Math.Ceiling(totalGranted * policy.LowBalanceWarningPct.Value / 100m);
+            var balanceAfter = balanceBefore - 1;
+
+            if (balanceBefore > threshold && balanceAfter <= threshold)
+            {
+                var brand = await _context.Brands
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == brandId, cancellationToken);
+                if (brand is null) return;
+
+                await _notificationService.NotifyLowCreditBalanceAsync(new LowCreditBalanceNotification(
+                    brand.ContactEmail, brand.Name, balanceAfter, threshold, totalGranted), cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send low-balance notification for brand {BrandId}.", brandId);
+        }
     }
 
     private static DateTime? ToExpiry(int? months)

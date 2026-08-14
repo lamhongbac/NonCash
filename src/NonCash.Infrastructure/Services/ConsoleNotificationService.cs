@@ -51,4 +51,35 @@ public class ConsoleNotificationService : INotificationService
                           $"on {notification.ExpiresAt:yyyy-MM-dd}. Email: {notification.BrandEmail ?? "n/a"}.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}' granted {notification.CreditsGranted:N0} welcome credit(s). Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}' purchased {notification.Amount:N0} credit(s) for {notification.TotalPaidVnd:N0} VND. Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}' low balance: {notification.CurrentBalance:N0} remaining (threshold {notification.Threshold:N0}). Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}' forfeited {notification.ForfeitedCredits:N0} credit(s) on {notification.ExpiredAt:yyyy-MM-dd}. Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default)
+    {
+        var outcome = notification.Approved ? "APPROVED" : "REJECTED";
+        Console.WriteLine($"[NOTIFICATION] Plan '{notification.PlanDisplayName}' {outcome}. Email: {notification.CreatorEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
 }

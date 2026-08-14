@@ -28,6 +28,7 @@ else if (_users is not null)
         <HeaderContent>
             <MudTh>Username</MudTh>
             <MudTh>Full Name</MudTh>
+            <MudTh>Email</MudTh>
             <MudTh>Role</MudTh>
             <MudTh>Brand</MudTh>
             <MudTh>Status</MudTh>
@@ -36,6 +37,7 @@ else if (_users is not null)
         <RowTemplate>
             <MudTd DataLabel="Username">@context.Username</MudTd>
             <MudTd DataLabel="Name">@context.FullName</MudTd>
+            <MudTd DataLabel="Email">@(!string.IsNullOrEmpty(context.Email) ? context.Email : "-")</MudTd>
             <MudTd DataLabel="Role">
                 <MudChip T="string" Color="@GetRoleColor(context.Role)" Size="Size.Small">@context.Role</MudChip>
             </MudTd>
@@ -67,11 +69,13 @@ else if (_users is not null)
             <MudTextField @bind-Value="_model.Username" Label="Username" Required="true" RequiredError="Username is required" Disabled="_isEdit" />
             <MudTextField @bind-Value="_model.Password" Label="@(_isEdit ? "New Password (leave blank to keep current)" : "Password")" Required="@(!_isEdit)" RequiredError="Password is required (min 8 chars)" InputType="InputType.Password" />
             <MudTextField @bind-Value="_model.FullName" Label="Full Name" Required="true" RequiredError="Full name is required" />
+            <MudTextField @bind-Value="_model.Email" Label="Email" InputType="InputType.Email" Placeholder="user@example.com" />
             <MudSelect @bind-Value="_model.Role" Label="Role" Required="true">
                 <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
                 <MudSelectItem Value="@("BrandManager")">BrandManager</MudSelectItem>
                 <MudSelectItem Value="@("Planner")">Planner</MudSelectItem>
                 <MudSelectItem Value="@("Approver")">Approver</MudSelectItem>
+                <MudSelectItem Value="@("FinancialController")">FinancialController</MudSelectItem>
             </MudSelect>
             @if (_model.Role != "Admin")
             {
@@ -192,6 +196,7 @@ else if (_users is not null)
         {
             Username = user.Username,
             FullName = user.FullName,
+            Email = user.Email,
             Role = user.Role,
             BrandId = user.BrandId
         };
@@ -219,7 +224,7 @@ else if (_users is not null)
 
             if (_isEdit)
             {
-                var request = new { _model.FullName, _model.Role, _model.BrandId, _model.Password };
+                var request = new { _model.FullName, _model.Role, _model.BrandId, _model.Password, _model.Email };
                 var httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/users/{_editUserId}") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
                     httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -227,7 +232,7 @@ else if (_users is not null)
             }
             else
             {
-                var request = new { _model.Username, _model.Password, _model.FullName, _model.Role, _model.BrandId };
+                var request = new { _model.Username, _model.Password, _model.FullName, _model.Role, _model.BrandId, _model.Email };
                 var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/users") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
                     httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -296,6 +301,7 @@ else if (_users is not null)
         "BrandManager" => Color.Primary,
         "Planner" => Color.Info,
         "Approver" => Color.Success,
+        "FinancialController" => Color.Warning,
         _ => Color.Default
     };
 
@@ -311,6 +317,7 @@ else if (_users is not null)
         public Guid Id { get; set; }
         public string Username { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
+        public string? Email { get; set; }
         public string Role { get; set; } = string.Empty;
         public Guid? BrandId { get; set; }
         public string Status { get; set; } = string.Empty;
@@ -323,6 +330,7 @@ else if (_users is not null)
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
+        public string? Email { get; set; }
         public string Role { get; set; } = "BrandManager";
         public Guid? BrandId { get; set; }
     }

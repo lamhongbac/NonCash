@@ -7,16 +7,22 @@ public class ApprovalService : IApprovalService
 {
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IRepository<VoucherReview> _reviewRepository;
+    private readonly IUserAccountRepository _userAccountRepository;
+    private readonly INotificationService _notificationService;
 
     private static readonly HashSet<string> AllowedRoles =
         new(StringComparer.OrdinalIgnoreCase) { "Approver", "Admin", "BrandManager" };
 
     public ApprovalService(
         IVoucherPlanRepository planRepository,
-        IRepository<VoucherReview> reviewRepository)
+        IRepository<VoucherReview> reviewRepository,
+        IUserAccountRepository userAccountRepository,
+        INotificationService notificationService)
     {
         _planRepository = planRepository;
         _reviewRepository = reviewRepository;
+        _userAccountRepository = userAccountRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<ApprovalResult> ApproveAsync(Guid planId, Guid approverId, Guid brandId, string approverRole, DateTime? publishDate, CancellationToken cancellationToken = default)
@@ -41,7 +47,7 @@ public class ApprovalService : IApprovalService
         plan.ApprovalStatus = ApprovalStatus.Approved;
         plan.ApproverId = approverId;
         if (publishDate.HasValue)
-            plan.PublishDate = publishDate.Value;
+            plan.PublishDate = DateTime.SpecifyKind(publishDate.Value, DateTimeKind.Utc);
 
         // AC3: Insert review record
         var review = new VoucherReview
@@ -50,13 +56,14 @@ public class ApprovalService : IApprovalService
             ApproverId = approverId,
             ReviewDate = DateTime.UtcNow,
             Decision = ReviewDecision.Approved,
-            PublishDate = publishDate
+            PublishDate = publishDate.HasValue ? DateTime.SpecifyKind(publishDate.Value, DateTimeKind.Utc) : null
         };
 
         _planRepository.Update(plan);
         await _reviewRepository.AddAsync(review, cancellationToken);
         await _reviewRepository.SaveChangesAsync(cancellationToken);
 
+        await NotifyPlanReviewedAsync(plan, approved: true, reviewNotes: null, cancellationToken);
         return new ApprovalResult(true, Plan: plan);
     }
 
@@ -95,7 +102,29 @@ public class ApprovalService : IApprovalService
         await _reviewRepository.AddAsync(review, cancellationToken);
         await _reviewRepository.SaveChangesAsync(cancellationToken);
 
+        await NotifyPlanReviewedAsync(plan, approved: false, reviewNotes: reviewNotes.Trim(), cancellationToken);
         return new ApprovalResult(true, Plan: plan);
+    }
+
+    private async Task NotifyPlanReviewedAsync(VoucherPlanHeader plan, bool approved, string? reviewNotes, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var creator = await _userAccountRepository.GetByIdAsync(plan.CreatorId, cancellationToken);
+            if (string.IsNullOrWhiteSpace(creator?.Email))
+                return;
+
+            await _notificationService.NotifyPlanReviewedAsync(new PlanReviewedNotification(
+                creator.Email,
+                plan.DisplayName ?? "(unnamed plan)",
+                approved,
+                reviewNotes,
+                approved ? plan.PublishDate : null), cancellationToken);
+        }
+        catch
+        {
+            // Notifications must never fail the approval workflow.
+        }
     }
 
     public async Task<IReadOnlyList<VoucherReview>> GetReviewHistoryAsync(Guid planId, Guid brandId, CancellationToken cancellationToken = default)

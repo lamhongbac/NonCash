@@ -63,7 +63,7 @@ public class CreditsControllerTests : IDisposable
             Name: "Test Welcome",
             WelcomeCredits: 500,
             WelcomeCreditExpiryMonths: 12));
-        _creditService = new CreditService(_context, _policyStub, _welcomeStub, NullLogger<CreditService>.Instance);
+        _creditService = new CreditService(_context, _policyStub, _welcomeStub, new StubNotificationService(), NullLogger<CreditService>.Instance);
 
         Seed();
     }
@@ -492,6 +492,23 @@ public class CreditsControllerTests : IDisposable
             => throw new NotSupportedException();
         public Task SetGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> brandIds, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    /// <summary>No-op notification stub so CreditService unit tests are not affected by SMTP.</summary>
+    private sealed class StubNotificationService : INotificationService
+    {
+        public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>

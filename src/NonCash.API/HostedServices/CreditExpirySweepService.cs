@@ -33,7 +33,7 @@ public class CreditExpirySweepService : BackgroundService
                 var policyService = scope.ServiceProvider.GetRequiredService<ICreditPolicyService>();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-                await ExpireBatchesAsync(db, stoppingToken);
+                await ExpireBatchesAsync(db, notificationService, stoppingToken);
                 await SendExpiryWarningsAsync(db, policyService, notificationService, stoppingToken);
             }
             catch (OperationCanceledException)
@@ -56,7 +56,7 @@ public class CreditExpirySweepService : BackgroundService
         }
     }
 
-    private async Task ExpireBatchesAsync(ApplicationDbContext db, CancellationToken cancellationToken)
+    private async Task ExpireBatchesAsync(ApplicationDbContext db, INotificationService notificationService, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
 
@@ -81,6 +81,30 @@ public class CreditExpirySweepService : BackgroundService
 
         await db.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("CreditExpirySweepService expired {Count} batch(es).", expiredBatches.Count);
+
+        // Notify brands about forfeited credits.
+        var brandIds = expiredBatches.Select(b => b.BrandId).Distinct().ToList();
+        var brands = await db.Brands
+            .AsNoTracking()
+            .Where(b => brandIds.Contains(b.Id))
+            .ToDictionaryAsync(b => b.Id, cancellationToken);
+
+        foreach (var group in expiredBatches.GroupBy(b => b.BrandId))
+        {
+            try
+            {
+                if (!brands.TryGetValue(group.Key, out var brand))
+                    continue;
+
+                var forfeited = group.Sum(b => b.RemainingAmount);
+                await notificationService.NotifyCreditsForfeitedAsync(new CreditsForfeitedNotification(
+                    brand.ContactEmail, brand.Name, forfeited, now), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send forfeiture notification for brand {BrandId}.", group.Key);
+            }
+        }
     }
 
     private async Task SendExpiryWarningsAsync(

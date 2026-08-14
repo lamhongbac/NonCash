@@ -50,6 +50,45 @@ public record CreditsExpiringNotification(
     DateTime ExpiresAt,
     int DaysLeft);
 
+/// <summary>Payload sent to a brand after welcome credits are granted on activation.</summary>
+public record WelcomeCreditGrantedNotification(
+    string? BrandEmail,
+    string BrandName,
+    int CreditsGranted,
+    DateTime? ExpiresAt);
+
+/// <summary>Payload sent to a brand after a credit purchase batch is created.</summary>
+public record CreditPurchasedNotification(
+    string? BrandEmail,
+    string BrandName,
+    int Amount,
+    decimal TotalPaidVnd,
+    DateTime? ExpiresAt,
+    string? Reference);
+
+/// <summary>Payload sent to a brand when its remaining credit balance drops below the warning threshold.</summary>
+public record LowCreditBalanceNotification(
+    string? BrandEmail,
+    string BrandName,
+    int CurrentBalance,
+    int Threshold,
+    int? TotalGranted);
+
+/// <summary>Payload sent to a brand after credits are forfeited due to batch expiry.</summary>
+public record CreditsForfeitedNotification(
+    string? BrandEmail,
+    string BrandName,
+    int ForfeitedCredits,
+    DateTime ExpiredAt);
+
+/// <summary>Payload sent to a voucher plan creator after the plan is approved or rejected.</summary>
+public record PlanReviewedNotification(
+    string? CreatorEmail,
+    string PlanDisplayName,
+    bool Approved,
+    string? ReviewNotes,
+    DateTime? PublishDate);
+
 public interface INotificationService
 {
     Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default);
@@ -59,4 +98,9 @@ public interface INotificationService
     Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default);
     Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default);
 }

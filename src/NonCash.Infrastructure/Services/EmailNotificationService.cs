@@ -20,20 +20,24 @@ public class SmtpOptions
 
 public class EmailNotificationService : INotificationService
 {
+    private const int MaxRetries = 3;
     private readonly SmtpOptions _smtpOptions;
     private readonly IUserAccountRepository _userAccountRepository;
     private readonly IEmailTemplateRenderer _templateRenderer;
+    private readonly IRepository<EmailLog> _emailLogRepository;
     private readonly ILogger<EmailNotificationService> _logger;
 
     public EmailNotificationService(
         IOptions<SmtpOptions> smtpOptions,
         IUserAccountRepository userAccountRepository,
         IEmailTemplateRenderer templateRenderer,
+        IRepository<EmailLog> emailLogRepository,
         ILogger<EmailNotificationService> logger)
     {
         _smtpOptions = smtpOptions.Value;
         _userAccountRepository = userAccountRepository ?? throw new ArgumentNullException(nameof(userAccountRepository));
         _templateRenderer = templateRenderer ?? throw new ArgumentNullException(nameof(templateRenderer));
+        _emailLogRepository = emailLogRepository;
         _logger = logger;
     }
 
@@ -58,7 +62,7 @@ public class EmailNotificationService : INotificationService
 
         foreach (var admin in admins)
         {
-            await SendAsync(admin.Email!, subject, body, cancellationToken);
+            await SendAsync(admin.Email!, subject, body, cancellationToken, "AdminNewRegistration", "NewRegistration");
         }
     }
 
@@ -86,7 +90,7 @@ public class EmailNotificationService : INotificationService
             ["ReviewNote"] = reviewNoteHtml
         }, cancellationToken);
 
-        await SendAsync(user.Email, subject, body, cancellationToken);
+        await SendAsync(user.Email, subject, body, cancellationToken, "ApplicantReviewResult", "RegistrationReview");
     }
 
     public async Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
@@ -98,7 +102,7 @@ public class EmailNotificationService : INotificationService
             ["RequestId"] = requestId.ToString()
         }, cancellationToken);
 
-        await SendAsync(email, subject, body, cancellationToken);
+        await SendAsync(email, subject, body, cancellationToken, "ApplicantRegistrationSubmitted", "RegistrationConfirmation");
     }
 
     public async Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default)
@@ -122,7 +126,7 @@ public class EmailNotificationService : INotificationService
             ["PhoneNumber"] = notification.PhoneNumber
         }, cancellationToken);
 
-        await SendAsync(notification.Email, subject, body, cancellationToken);
+        await SendAsync(notification.Email, subject, body, cancellationToken, "VoucherReceived", "VoucherDistribution");
 
         if (notification.Channels.HasFlag(NotificationChannel.Zalo))
         {
@@ -151,7 +155,7 @@ public class EmailNotificationService : INotificationService
 
         foreach (var email in notification.ApproverEmails)
         {
-            await SendAsync(email, subject, body, cancellationToken);
+            await SendAsync(email, subject, body, cancellationToken, "AdjustmentPending", "AdjustmentPending");
         }
     }
 
@@ -181,7 +185,7 @@ public class EmailNotificationService : INotificationService
             ["ReviewNote"] = reviewNoteHtml
         }, cancellationToken);
 
-        await SendAsync(notification.RequesterEmail, subject, body, cancellationToken);
+        await SendAsync(notification.RequesterEmail, subject, body, cancellationToken, "AdjustmentReviewed", "AdjustmentReviewed");
     }
 
     public async Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default)
@@ -201,10 +205,126 @@ public class EmailNotificationService : INotificationService
             ["ExpiresAt"] = notification.ExpiresAt.ToString("yyyy-MM-dd")
         }, cancellationToken);
 
-        await SendAsync(notification.BrandEmail, subject, body, cancellationToken);
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "CreditsExpiring", "CreditsExpiring");
     }
 
-    private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken)
+    public async Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Welcome credit notification skipped for {BrandName}: no contact email.", notification.BrandName);
+            return;
+        }
+
+        var expiresAtHtml = notification.ExpiresAt.HasValue
+            ? $"<p><strong>Expires at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
+            : string.Empty;
+
+        var subject = $"Welcome to NonCash: {notification.CreditsGranted:N0} credit(s) granted";
+        var body = await _templateRenderer.RenderAsync("WelcomeCreditGranted", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["CreditsGranted"] = notification.CreditsGranted.ToString("N0"),
+            ["ExpiresAt"] = expiresAtHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "WelcomeCreditGranted", "WelcomeCreditGranted");
+    }
+
+    public async Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Credit purchase receipt skipped for {BrandName}: no contact email.", notification.BrandName);
+            return;
+        }
+
+        var expiresAtHtml = notification.ExpiresAt.HasValue
+            ? $"<p><strong>Expires at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
+            : string.Empty;
+
+        var subject = $"Credit purchase receipt: {notification.Amount:N0} credit(s)";
+        var body = await _templateRenderer.RenderAsync("CreditPurchased", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["Amount"] = notification.Amount.ToString("N0"),
+            ["TotalPaidVnd"] = notification.TotalPaidVnd.ToString("N0"),
+            ["Reference"] = notification.Reference ?? "N/A",
+            ["ExpiresAt"] = expiresAtHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "CreditPurchased", "CreditPurchased");
+    }
+
+    public async Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Low balance warning skipped for {BrandName}: no contact email.", notification.BrandName);
+            return;
+        }
+
+        var subject = $"Low credit balance warning: {notification.CurrentBalance:N0} credit(s) remaining";
+        var body = await _templateRenderer.RenderAsync("LowCreditBalance", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["CurrentBalance"] = notification.CurrentBalance.ToString("N0"),
+            ["Threshold"] = notification.Threshold.ToString("N0")
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "LowCreditBalance", "LowCreditBalance");
+    }
+
+    public async Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Credits forfeited notification skipped for {BrandName}: no contact email.", notification.BrandName);
+            return;
+        }
+
+        var subject = $"Credits forfeited: {notification.ForfeitedCredits:N0} credit(s) expired";
+        var body = await _templateRenderer.RenderAsync("CreditsForfeited", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["ForfeitedCredits"] = notification.ForfeitedCredits.ToString("N0"),
+            ["ExpiredAt"] = notification.ExpiredAt.ToString("yyyy-MM-dd")
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "CreditsForfeited", "CreditsForfeited");
+    }
+
+    public async Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.CreatorEmail))
+        {
+            _logger.LogInformation("Plan review notification skipped for {PlanDisplayName}: creator has no email.", notification.PlanDisplayName);
+            return;
+        }
+
+        var outcome = notification.Approved ? "Approved" : "Rejected";
+        var headerColor = notification.Approved ? "#388e3c" : "#d32f2f";
+        var publishDateHtml = notification.Approved && notification.PublishDate.HasValue
+            ? $"<p><strong>Publish date:</strong> {notification.PublishDate.Value:yyyy-MM-dd}</p>"
+            : string.Empty;
+        var reviewNotesHtml = string.IsNullOrWhiteSpace(notification.ReviewNotes)
+            ? string.Empty
+            : $"<p><strong>Reviewer note:</strong> {HtmlEncode(notification.ReviewNotes)}</p>";
+
+        var subject = $"Voucher plan {outcome.ToLowerInvariant()}: {notification.PlanDisplayName}";
+        var body = await _templateRenderer.RenderAsync("PlanReviewed", new Dictionary<string, string?>
+        {
+            ["Outcome"] = outcome,
+            ["HeaderColor"] = headerColor,
+            ["PlanDisplayName"] = notification.PlanDisplayName,
+            ["PublishDate"] = publishDateHtml,
+            ["ReviewNotes"] = reviewNotesHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.CreatorEmail, subject, body, cancellationToken, "PlanReviewed", "PlanReviewed");
+    }
+
+    private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken, string templateName = "", string notificationType = "")
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromAddress))
         {
@@ -212,28 +332,86 @@ public class EmailNotificationService : INotificationService
             return;
         }
 
+        var retryCount = 0;
+        Exception? lastException = null;
+
+        for (retryCount = 0; retryCount <= MaxRetries; retryCount++)
+        {
+            try
+            {
+                if (retryCount > 0)
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, retryCount));
+                    _logger.LogInformation("Retrying email to {ToAddress} (attempt {Attempt}/{MaxRetries}) after {Delay}s.", toAddress, retryCount, MaxRetries, delay.TotalSeconds);
+                    await Task.Delay(delay, cancellationToken);
+                }
+
+                using var client = new SmtpClient(_smtpOptions.Host, _smtpOptions.Port)
+                {
+                    EnableSsl = _smtpOptions.EnableSsl,
+                    Credentials = new NetworkCredential(_smtpOptions.Username, _smtpOptions.Password)
+                };
+
+                var from = new MailAddress(_smtpOptions.FromAddress, _smtpOptions.FromDisplayName);
+                var message = new MailMessage(from, new MailAddress(toAddress))
+                {
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+
+                await client.SendMailAsync(message, cancellationToken);
+                _logger.LogInformation("Email sent to {ToAddress}: {Subject}", toAddress, subject);
+
+                await LogEmailAsync(toAddress, subject, templateName, notificationType, success: true, errorMessage: null, retryCount, cancellationToken);
+                return;
+            }
+            catch (SmtpException ex) when (IsTransient(ex.StatusCode))
+            {
+                lastException = ex;
+                _logger.LogWarning(ex, "Transient SMTP error sending to {ToAddress}. Retry {Attempt}/{MaxRetries}.", toAddress, retryCount + 1, MaxRetries);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send email to {ToAddress}.", toAddress);
+                await LogEmailAsync(toAddress, subject, templateName, notificationType, success: false, errorMessage: ex.Message, retryCount, cancellationToken);
+                return;
+            }
+        }
+
+        // All retries exhausted
+        _logger.LogError(lastException, "Failed to send email to {ToAddress} after {MaxRetries} retries.", toAddress, MaxRetries);
+        await LogEmailAsync(toAddress, subject, templateName, notificationType, success: false, errorMessage: $"Failed after {MaxRetries} retries: {lastException?.Message}", retryCount - 1, cancellationToken);
+    }
+
+    private static bool IsTransient(SmtpStatusCode statusCode) =>
+        statusCode is SmtpStatusCode.ServiceNotAvailable
+            or SmtpStatusCode.ServiceClosingTransmissionChannel
+            or SmtpStatusCode.GeneralFailure;
+
+    private async Task LogEmailAsync(string toAddress, string subject, string templateName, string notificationType, bool success, string? errorMessage, int retryCount, CancellationToken cancellationToken)
+    {
         try
         {
-            using var client = new SmtpClient(_smtpOptions.Host, _smtpOptions.Port)
+            var log = new EmailLog
             {
-                EnableSsl = _smtpOptions.EnableSsl,
-                Credentials = new NetworkCredential(_smtpOptions.Username, _smtpOptions.Password)
-            };
-
-            var from = new MailAddress(_smtpOptions.FromAddress, _smtpOptions.FromDisplayName);
-            var message = new MailMessage(from, new MailAddress(toAddress))
-            {
+                ToAddress = toAddress,
                 Subject = subject,
-                Body = body,
-                IsBodyHtml = true
+                TemplateName = templateName,
+                NotificationType = notificationType,
+                Success = success,
+                ErrorMessage = errorMessage?.Length > 2000 ? errorMessage[..2000] : errorMessage,
+                RetryCount = retryCount,
+                SentAt = DateTime.UtcNow
             };
 
-            await client.SendMailAsync(message, cancellationToken);
-            _logger.LogInformation("Email sent to {ToAddress}: {Subject}", toAddress, subject);
+            await _emailLogRepository.AddAsync(log, cancellationToken);
+            await _emailLogRepository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {ToAddress}.", toAddress);
+            // Logging failures must never break the notification flow.
+            _logger.LogError(ex, "Failed to persist email log for {ToAddress}.", toAddress);
         }
     }
 
