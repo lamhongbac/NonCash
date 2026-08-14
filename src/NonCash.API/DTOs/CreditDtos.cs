@@ -59,8 +59,6 @@ public record ResolvedPolicyResponse(
     string? Scope,
     decimal PricePerCreditVnd,
     int? CreditExpiryMonths,
-    int WelcomeCredits,
-    int? WelcomeCreditExpiryMonths,
     int? LowBalanceWarningPct,
     int? ExpiryWarningDays,
     int? AdjustmentApprovalThreshold
@@ -78,8 +76,6 @@ public record CreditPolicyDto(
     string? BrandName,
     decimal PricePerCreditVnd,
     int? CreditExpiryMonths,
-    int WelcomeCredits,
-    int? WelcomeCreditExpiryMonths,
     int? LowBalanceWarningPct,
     int? ExpiryWarningDays,
     int? AdjustmentApprovalThreshold,
@@ -96,14 +92,49 @@ public record SaveCreditPolicyRequest(
     Guid? BrandId,
     decimal PricePerCreditVnd,
     int? CreditExpiryMonths,
-    int WelcomeCredits,
-    int? WelcomeCreditExpiryMonths,
     int? LowBalanceWarningPct,
     int? ExpiryWarningDays,
     int? AdjustmentApprovalThreshold,
     DateTime EffectiveFrom,
     DateTime? EffectiveTo,
     bool IsActive
+);
+
+// ----- Welcome-grant policies (Admin, Business-scoped) -----
+
+public record WelcomePolicyDto(
+    Guid Id,
+    string Name,
+    Guid BusinessId,
+    string? BusinessName,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths,
+    DateTime EffectiveFrom,
+    DateTime? EffectiveTo,
+    bool IsActive,
+    DateTime CreatedAt
+);
+
+public record SaveWelcomePolicyRequest(
+    string Name,
+    Guid BusinessId,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths,
+    DateTime EffectiveFrom,
+    DateTime? EffectiveTo,
+    bool IsActive
+);
+
+public record ResolvedWelcomePolicyResponse(
+    Guid? PolicyId,
+    string Name,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths
+);
+
+public record BusinessLookupDto(
+    Guid Id,
+    string BusinessName
 );
 
 // ----- Brand groups (Admin) -----

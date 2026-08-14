@@ -36,6 +36,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
     public DbSet<CreditLedgerEntry> CreditLedgerEntries => Set<CreditLedgerEntry>();
     public DbSet<CreditPricingPolicy> CreditPricingPolicies => Set<CreditPricingPolicy>();
+    public DbSet<WelcomeGrantPolicy> WelcomeGrantPolicies => Set<WelcomeGrantPolicy>();
     public DbSet<BrandGroup> BrandGroups => Set<BrandGroup>();
     public DbSet<BrandGroupMember> BrandGroupMembers => Set<BrandGroupMember>();
     public DbSet<CreditBatch> CreditBatches => Set<CreditBatch>();

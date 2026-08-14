@@ -18,25 +18,37 @@
 - [src/NonCash.Core/Entities/SettlementEntry.cs](file://src/NonCash.Core/Entities/SettlementEntry.cs)
 - [src/NonCash.Core/Entities/CreditLedgerEntry.cs](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs)
 - [src/NonCash.Core/Entities/PaymentTransaction.cs](file://src/NonCash.Core/Entities/PaymentTransaction.cs)
+- [src/NonCash.Core/Entities/CreditBatch.cs](file://src/NonCash.Core/Entities/CreditBatch.cs)
+- [src/NonCash.Core/Entities/CreditPricingPolicy.cs](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs)
+- [src/NonCash.Core/Entities/CreditAdjustmentRequest.cs](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs)
+- [src/NonCash.Core/Entities/CreditConsumption.cs](file://src/NonCash.Core/Entities/CreditConsumption.cs)
+- [src/NonCash.Core/Entities/CreditExpiryLog.cs](file://src/NonCash.Core/Entities/CreditExpiryLog.cs)
 - [src/NonCash.Core/Interfaces/ISettlementService.cs](file://src/NonCash.Core/Interfaces/ISettlementService.cs)
 - [src/NonCash.Core/Interfaces/ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
+- [src/NonCash.Core/Interfaces/ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
 - [src/NonCash.API/Controllers/SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [src/NonCash.API/Controllers/CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [src/NonCash.API/Controllers/CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [src/NonCash.API/Controllers/CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [src/NonCash.API/Controllers/PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs](file://src/NonCash.Infrastructure/Services/SettlementService.cs)
 - [src/NonCash.Infrastructure/Services/CreditService.cs](file://src/NonCash.Infrastructure/Services/CreditService.cs)
+- [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs)
+- [src/NonCash.Infrastructure/Services/CreditPolicyService.cs](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs)
+- [src/NonCash.API/HostedServices/CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
 - [src/NonCash.Core/Entities/IntegrationPartner.cs](file://src/NonCash.Core/Entities/IntegrationPartner.cs)
 - [src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs](file://src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added new section on Cross-Tenant Settlement Processing with settlement ledger, netting reports, and manual settlement workflows
-- Added new section on Credit Ledger Management covering prepaid credit billing, consumption tracking, and balance management
-- Added new section on Payment Processing Integration including ZaloPay integration, webhook handling, and payment lifecycle
-- Enhanced POS Redemption Security section with settlement integration and credit consumption
-- Added new section on Loyalty App Integrations covering partner onboarding, member wallet APIs, and display data handling
-- Updated existing workflows to reflect enhanced display data handling through VoucherDisplayHelper
+- Major architectural shift from Epic 9's simple ledger model to Epic 10's sophisticated batch-based credit system
+- Added comprehensive credit management with batch lifecycle, pricing policies, and adjustment workflows
+- Enhanced credit consumption tracking with FIFO batch draining and idempotent voucher charging
+- Implemented maker-checker approval workflow for credit adjustments with threshold-based approval matrix
+- Added automated credit expiry sweep service with warning notifications
+- Updated settlement processing to integrate with new batch-based credit system
+- Enhanced reporting capabilities for credit batches, adjustments, and policy management
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -44,19 +56,22 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
-7. [Credit Ledger Management](#credit-ledger-management)
-8. [Payment Processing Integration](#payment-processing-integration)
-9. [Loyalty App Integrations](#loyalty-app-integrations)
-10. [Enhanced Display Data Handling](#enhanced-display-data-handling)
-11. [Dependency Analysis](#dependency-analysis)
-12. [Performance Considerations](#performance-considerations)
-13. [Troubleshooting Guide](#troubleshooting-guide)
-14. [Conclusion](#conclusion)
-15. [Appendices](#appendices)
+6. [Epic 10 Batch-Based Credit System](#epic-10-batch-based-credit-system)
+7. [Credit Pricing Policy Management](#credit-pricing-policy-management)
+8. [Maker-Checker Adjustment Workflow](#maker-checker-adjustment-workflow)
+9. [Automated Credit Expiry Management](#automated-credit-expiry-management)
+10. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
+11. [Payment Processing Integration](#payment-processing-integration)
+12. [Loyalty App Integrations](#loyalty-app-integrations)
+13. [Enhanced Display Data Handling](#enhanced-display-data-handling)
+14. [Dependency Analysis](#dependency-analysis)
+15. [Performance Considerations](#performance-considerations)
+16. [Troubleshooting Guide](#troubleshooting-guide)
+17. [Conclusion](#conclusion)
+18. [Appendices](#appendices)
 
 ## Introduction
-This document explains the NonCash business logic and workflows across production planning, distribution, POS redemption, customer and brand management, approvals, reporting, and the newly added cross-tenant settlement processing, credit ledger management, payment processing integration, and loyalty app integrations. It synthesizes the project's functional requirements, architecture, and API contracts into a cohesive guide for both technical and non-technical stakeholders. Practical scenarios and edge cases are included to illustrate real-world usage.
+This document explains the NonCash business logic and workflows across production planning, distribution, POS redemption, customer and brand management, approvals, reporting, and the newly implemented Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. It synthesizes the project's functional requirements, architecture, and API contracts into a cohesive guide for both technical and non-technical stakeholders. Practical scenarios and edge cases are included to illustrate real-world usage.
 
 ## Project Structure
 The NonCash project is organized around a 3-layer SaaS architecture with microservices for planning, approval, distribution, usage, identity, tenant management, settlement processing, credit management, and payment integration. The repository includes:
@@ -124,7 +139,7 @@ NonCash organizes business capabilities into microservices aligned with function
 - Usage Service: POS redemption workflow (Lock → Commit/Rollback)
 - Identity & Tenant Service: RBAC for UserAccount, multi-tenancy for Brand and Outlet, and Customer profile management
 - Settlement Service: Cross-tenant settlement ledger and netting reports
-- Credit Service: Prepaid credit billing and consumption tracking
+- **Enhanced Credit Service**: Batch-based prepaid credit billing with FIFO consumption, pricing policies, and maker-checker workflows
 - Payment Service: Payment gateway integration and transaction management
 - Integration Service: Loyalty app partner management and member wallet APIs
 
@@ -150,9 +165,10 @@ API --> BLL
 API --> DAL
 BLL --> DAL
 SETTLEMENT["Settlement Service"] --> DAL
-CREDIT["Credit Service"] --> DAL
+CREDIT["Enhanced Credit Service<br/>Batch-Based System"] --> DAL
 PAYMENT["Payment Service"] --> DAL
 INTEGRATION["Integration Service"] --> DAL
+EXPIRY["Credit Expiry Sweep Service"] --> DAL
 ```
 
 **Diagram sources**
@@ -225,10 +241,10 @@ Dist-->>Mem : "Vouchers Available in My Vouchers"
 - [docs/data-models.md:55-62](file://docs/data-models.md#L55-L62)
 
 ### POS Redemption Security and Transaction Lifecycle
-POS redemption enforces transaction integrity with lock/commit/rollback, now enhanced with settlement processing and credit consumption:
+POS redemption enforces transaction integrity with lock/commit/rollback, now enhanced with settlement processing and Epic 10 batch-based credit consumption:
 - Verify: Check validity without changing state
 - Lock: Transition to In-Use and bind to a transaction context
-- Commit: Finalize usage, persist VoucherUsage, mark Complete, create settlement entry if cross-tenant, consume credit
+- Commit: Finalize usage, persist VoucherUsage, mark Complete, create settlement entry if cross-tenant, consume credit from FIFO batch
 - Rollback: Release lock, revert to Pending
 
 ```mermaid
@@ -237,7 +253,7 @@ participant POS as "POS Terminal"
 participant API as "NonCash.API"
 participant SVC as "Usage Service"
 participant SETTLE as "Settlement Service"
-participant CREDIT as "Credit Service"
+participant CREDIT as "Enhanced Credit Service"
 participant DB as "PostgreSQL"
 POS->>API : "POST /pos/verify"
 API->>SVC : "Validate and return info"
@@ -256,8 +272,8 @@ API->>SVC : "Commit usage"
 SVC->>DB : "Insert VoucherUsage + Mark Complete"
 SVC->>SETTLE : "Create settlement if cross-tenant"
 SETTLE->>DB : "Create SettlementEntry"
-SVC->>CREDIT : "Consume credit"
-CREDIT->>DB : "Create CreditLedgerEntry"
+SVC->>CREDIT : "Consume 1 credit from FIFO batch"
+CREDIT->>DB : "Update batch RemainingAmount + Create Consumption"
 DB-->>SVC : "OK"
 SVC-->>API : "Success"
 API-->>POS : "Success"
@@ -274,7 +290,7 @@ API-->>POS : "Released"
 - [docs/data-models.md:46-54](file://docs/data-models.md#L46-L54)
 - [docs/data-models.md:34-43](file://docs/data-models.md#L34-L43)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs:20-48](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L20-L48)
-- [src/NonCash.Infrastructure/Services/CreditService.cs:38-79](file://src/NonCash.Infrastructure/Services/CreditService.cs#L38-L79)
+- [src/NonCash.Infrastructure/Services/CreditService.cs:43-109](file://src/NonCash.Infrastructure/Services/CreditService.cs#L43-L109)
 
 **Section sources**
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
@@ -361,29 +377,228 @@ Pub --> Gen["Generate VoucherPlanDetail"]
 - POS usage audit trail stored in VoucherUsage with POSID, TransactionID, and timestamps
 - Plan approval history preserved for traceability
 - Settlement ledger provides financial reconciliation between brands
-- Credit ledger tracks prepaid credit consumption and balances
+- **Enhanced credit ledger tracks batch-based credit consumption, adjustments, and expiry events**
 
 ```mermaid
 flowchart TD
 DistLogs["VoucherDistribution Logs"] --> Dash["Distribution Dashboard"]
 UsageLogs["VoucherUsage Logs"] --> Audit["Audit Trail"]
 SettlementLogs["Settlement Entries"] --> Financial["Financial Reconciliation"]
-CreditLogs["Credit Ledger Entries"] --> Billing["Billing Reports"]
+CreditLogs["Credit Batch & Consumption Logs"] --> Billing["Enhanced Billing Reports"]
 Dash --> Metrics["Volume vs Targets"]
 Audit --> Compliance["Compliance & Reconciliation"]
 Financial --> Netting["Netting Reports"]
-Billing --> Balance["Balance Tracking"]
+Billing --> Balance["Batch Balance Tracking"]
 ```
 
 **Diagram sources**
 - [_bmad-output/planning-artifacts/epics.md:244-256](file://_bmad-output/planning-artifacts/epics.md#L244-L256)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 - [src/NonCash.Core/Entities/SettlementEntry.cs:1-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L1-L49)
-- [src/NonCash.Core/Entities/CreditLedgerEntry.cs:1-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L1-L42)
+- [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
+- [src/NonCash.Core/Entities/CreditConsumption.cs:1-23](file://src/NonCash.Core/Entities/CreditConsumption.cs#L1-L23)
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:244-256](file://_bmad-output/planning-artifacts/epics.md#L244-L256)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
+
+## Epic 10 Batch-Based Credit System
+
+**Updated** Major architectural shift from simple ledger model to sophisticated batch-based credit system with FIFO consumption, pricing policies, and automated lifecycle management.
+
+The Epic 10 credit system replaces the previous simple ledger approach with a comprehensive batch-based model where each credit top-up creates a separate batch with its own price, expiry, and lifecycle. Balance calculation sums remaining amounts across all non-expired batches, while consumption drains credits FIFO from the oldest available batch.
+
+### Credit Batch Model
+Each credit batch represents a distinct credit acquisition event with:
+- **Batch Type**: Purchase, WelcomeGrant, Grant, Compensation, Correction, Clawback, or Reinstatement
+- **Original Amount**: Credits granted by this batch (negative for clawbacks)
+- **Remaining Amount**: Credits still available (0..OriginalAmount)
+- **Price Per Credit**: Unit price snapshot at purchase time (0 for free grants)
+- **Total Paid VND**: Actual amount paid (Purchase only)
+- **Expires At**: When remaining credits expire (null = never expires)
+- **Evidence Image URL**: Supporting documentation for manual operations
+
+```mermaid
+flowchart TD
+Purchase["Brand Purchases Credits"] --> CreateBatch["Create CreditBatch<br/>(Purchase Type)"]
+CreateBatch --> SetPrice["Set PricePerCreditVnd<br/>from Policy"]
+SetPrice --> SetExpiry["Set ExpiresAt<br/>from Policy"]
+Welcome["Brand Activation"] --> WelcomeBatch["Create WelcomeBatch<br/>(WelcomeGrant Type)"]
+WelcomeBatch --> FreePrice["Free Credits<br/>(Price = 0)"]
+FreePrice --> WelcomeExpiry["Apply Welcome Expiry"]
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
+- [src/NonCash.Infrastructure/Services/CreditService.cs:111-173](file://src/NonCash.Infrastructure/Services/CreditService.cs#L111-L173)
+
+### FIFO Consumption Algorithm
+Credit consumption follows strict FIFO (First-In-First-Out) principles:
+- Consumption queries for oldest non-expired batch with remaining credits
+- Grace overdraft allows newest batch to go negative when no valid batches exist
+- Idempotent per voucher detail ID (enforced by unique index)
+- Each voucher consumes exactly 1 credit regardless of batch size
+
+```mermaid
+sequenceDiagram
+participant POS as "POS System"
+participant CREDIT as "Credit Service"
+participant DB as "Database"
+POS->>CREDIT : "TryConsumeAsync(brandId, voucherDetailId)"
+CREDIT->>DB : "Check if already charged"
+DB-->>CREDIT : "Already charged? No"
+CREDIT->>DB : "Find oldest non-expired batch with credits"
+DB-->>CREDIT : "Oldest batch found"
+CREDIT->>DB : "Decrease RemainingAmount by 1"
+CREDIT->>DB : "Create CreditConsumption record"
+DB-->>CREDIT : "Success"
+CREDIT-->>POS : "Consumption successful"
+```
+
+**Diagram sources**
+- [src/NonCash.Infrastructure/Services/CreditService.cs:43-109](file://src/NonCash.Infrastructure/Services/CreditService.cs#L43-L109)
+
+**Section sources**
+- [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
+- [src/NonCash.Core/Entities/CreditConsumption.cs:1-23](file://src/NonCash.Core/Entities/CreditConsumption.cs#L1-L23)
+- [src/NonCash.Infrastructure/Services/CreditService.cs:1-200](file://src/NonCash.Infrastructure/Services/CreditService.cs#L1-L200)
+
+## Credit Pricing Policy Management
+
+**New** Comprehensive pricing policy system with scope-based resolution and time-bound effectiveness.
+
+Credit pricing policies define unit prices, expiry rules, welcome credits, and approval thresholds. Policies can be scoped globally, to brand groups, or to individual brands, with resolution priority following Brand → BrandGroup → Global hierarchy.
+
+### Policy Resolution Engine
+The policy resolution engine implements sophisticated scoping logic:
+- **Brand-scoped policies**: Override all other policies for specific brands
+- **BrandGroup-scoped policies**: Apply to all brands within a group
+- **Global policies**: Default policies when no specific scope matches
+- **Time-bound effectiveness**: Policies have EffectiveFrom and EffectiveTo dates
+- **Fallback mechanism**: Falls back to CreditConfig defaults when no DB policy matches
+
+```mermaid
+flowchart TD
+BrandQuery["Resolve for Brand"] --> CheckBrand["Check Brand-scoped policy"]
+CheckBrand --> |Found| UseBrand["Use Brand Policy"]
+CheckBrand --> |Not Found| CheckGroup["Check BrandGroup policy"]
+CheckGroup --> |Found| UseGroup["Use Group Policy"]
+CheckGroup --> |Not Found| CheckGlobal["Check Global policy"]
+CheckGlobal --> |Found| UseGlobal["Use Global Policy"]
+CheckGlobal --> |Not Found| UseConfig["Use CreditConfig Fallback"]
+UseBrand --> Resolve["Return Resolved Policy"]
+UseGroup --> Resolve
+UseGlobal --> Resolve
+UseConfig --> Resolve
+```
+
+**Diagram sources**
+- [src/NonCash.Infrastructure/Services/CreditPolicyService.cs:25-60](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs#L25-L60)
+
+### Policy Configuration Options
+Policies support comprehensive configuration options:
+- **Price Per Credit VND**: Flat unit price for purchased credits
+- **Credit Expiry Months**: Months until purchased credits expire (null = never)
+- **Welcome Credits**: Free credits granted on brand activation
+- **Welcome Credit Expiry**: Expiry period for welcome credits
+- **Low Balance Warning**: Percentage threshold for balance warnings
+- **Expiry Warning Days**: Days before batch expiry to send warnings
+- **Adjustment Approval Threshold**: Amount requiring FinancialController approval
+
+**Section sources**
+- [src/NonCash.Core/Entities/CreditPricingPolicy.cs:1-65](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L1-L65)
+- [src/NonCash.Core/Interfaces/ICreditPolicyService.cs:1-23](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs#L1-L23)
+- [src/NonCash.Infrastructure/Services/CreditPolicyService.cs:1-149](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs#L1-L149)
+- [src/NonCash.API/Controllers/CreditPoliciesController.cs:1-204](file://src/NonCash.API/Controllers/CreditPoliciesController.cs#L1-L204)
+
+## Maker-Checker Adjustment Workflow
+
+**New** Sophisticated maker-checker approval workflow for credit adjustments with threshold-based authorization.
+
+The maker-checker system ensures proper authorization for credit adjustments through a two-person control mechanism where requests are created by makers and approved by checkers (FinancialControllers).
+
+### Adjustment Types and Approval Matrix
+Different adjustment types follow specific approval requirements:
+- **Always Approval Required**: Correction, Clawback, Reinstatement (always need approval)
+- **Threshold-Based Approval**: Grant, Compensation (approval required when amount ≥ threshold)
+- **No Approval Needed**: Purchase, WelcomeGrant (handled through separate flows)
+- **Self-Approval Prevention**: Requester cannot approve their own requests
+
+```mermaid
+flowchart TD
+Request["Adjustment Request"] --> CheckType{"Adjustment Type"}
+CheckType --> |Correction/Clawback/Reinstatement| AlwaysApprove["Requires Approval"]
+CheckType --> |Grant/Compensation| CheckThreshold["Check Amount vs Threshold"]
+CheckThreshold --> |Above Threshold| RequiresApprove["Requires Approval"]
+CheckThreshold --> |Below Threshold| AutoApply["Auto-apply"]
+AlwaysApprove --> NotifyFC["Notify FinancialController"]
+RequiresApprove --> NotifyFC
+AutoApply --> CreateBatch["Create Adjustment Batch"]
+NotifyFC --> WaitApproval["Wait for FC Approval"]
+WaitApproval --> Approve{"FC Decision"}
+Approve --> |Approve| CreateBatch
+Approve --> |Reject| RejectFlow["Reject Request"]
+```
+
+**Diagram sources**
+- [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs:16-24](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs#L16-L24)
+- [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs:46-107](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs#L46-L107)
+
+### Adjustment Request Lifecycle
+Adjustment requests follow a complete lifecycle with full audit trail:
+- **PendingApproval**: Initial state after request creation
+- **Approved**: FinancialController has approved the request
+- **Rejected**: FinancialController has rejected with mandatory review note
+- **Applied**: Adjustment has been applied and resulting batch created
+
+**Section sources**
+- [src/NonCash.Core/Entities/CreditAdjustmentRequest.cs:1-71](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L1-L71)
+- [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs:1-250](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs#L1-L250)
+- [src/NonCash.API/Controllers/CreditAdjustmentsController.cs:1-167](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs#L1-L167)
+
+## Automated Credit Expiry Management
+
+**New** Background service that automatically manages credit batch expiry with warning notifications.
+
+The CreditExpirySweepService runs daily to handle credit batch expiry management, including zeroing out expired batches and sending advance warnings to brands.
+
+### Expiry Processing
+The sweep service performs two main functions:
+- **Batch Expiration**: Zeroes out remaining credits in batches past their ExpiresAt date
+- **Warning Notifications**: Sends one-time expiry warnings based on policy-defined warning periods
+
+```mermaid
+sequenceDiagram
+participant SWEEP as "CreditExpirySweepService"
+participant DB as "Database"
+participant POLICY as "Policy Service"
+participant NOTIFY as "Notification Service"
+loop Every 24 hours
+SWEEP->>DB : "Find expired batches"
+DB-->>SWEEP : "Expired batches"
+SWEEP->>DB : "Zero out RemainingAmount"
+SWEEP->>DB : "Create CreditExpiryLog"
+SWEEP->>DB : "Find batches expiring soon"
+DB-->>SWEEP : "Expiring batches"
+SWEEP->>POLICY : "Get warning days for brand"
+POLICY-->>SWEEP : "Warning configuration"
+SWEEP->>NOTIFY : "Send expiry warning"
+end
+```
+
+**Diagram sources**
+- [src/NonCash.API/HostedServices/CreditExpirySweepService.cs:25-107](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs#L25-L107)
+
+### Expiry Logging and Audit
+Every expired batch generates a CreditExpiryLog record containing:
+- **BatchId**: Reference to the expired batch
+- **BrandId**: Brand that owns the expired credits
+- **ExpiredCredits**: Number of credits forfeited
+- **ExpiredAt**: Timestamp when expiry was processed
+
+**Section sources**
+- [src/NonCash.API/HostedServices/CreditExpirySweepService.cs:1-107](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs#L1-L107)
+- [src/NonCash.Core/Entities/CreditExpiryLog.cs:1-22](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L1-L22)
 
 ## Cross-Tenant Settlement Processing
 Cross-tenant settlement processing automatically tracks financial obligations when vouchers sponsored by one brand are redeemed at another brand's outlet. The system creates settlement entries that record who owes whom and how much, enabling automatic financial reconciliation between sponsoring and redeeming brands.
@@ -437,52 +652,6 @@ SETTLE->>DB : "Record SettledAt and SettledBy"
 - [src/NonCash.Core/Interfaces/ISettlementService.cs:1-50](file://src/NonCash.Core/Interfaces/ISettlementService.cs#L1-L50)
 - [src/NonCash.API/Controllers/SettlementsController.cs:1-138](file://src/NonCash.API/Controllers/SettlementsController.cs#L1-L138)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs:1-123](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L1-L123)
-
-## Credit Ledger Management
-Credit ledger management implements a prepaid credit billing system where each brand maintains a credit balance used to fund voucher campaigns. The system uses an append-only ledger approach where balance equals the sum of all credit entries for a brand.
-
-### Credit Balance Management
-Each brand's credit balance is calculated as the sum of all CreditLedgerEntry amounts:
-- **Positive amounts**: Grant, Purchase, or Adjustment entries increase the balance
-- **Negative amounts**: Consumption entries decrease the balance
-- **Grace overdraft**: Balance may go negative during consumption, but upstream actions can be blocked based on business rules
-
-### Consumption Tracking and Idempotency
-Credit consumption is tightly integrated with voucher usage:
-- Each voucher consumes exactly 1 credit at its value moment
-- Consumption is idempotent per voucher detail ID (enforced by unique index)
-- Consumption entries are created automatically during POS redemption
-- Failed consumption attempts don't block the business operation (grace policy)
-
-### Manual Credit Operations
-Administrators can perform manual credit operations:
-- **Top-up**: Add credits through bank transfer confirmation flow
-- **Adjustment**: Make corrections to credit balances
-- **Grant**: Award promotional credits
-- **Ledger queries**: View complete transaction history with filtering options
-
-```mermaid
-flowchart TD
-Purchase["Brand Purchases Credits"] --> TopUp["Create CreditLedgerEntry<br/>(Purchase/Grant/Adjustment)"]
-TopUp --> Balance["Balance = SUM(Amount)"]
-Redemption["Voucher Redemption"] --> Consume["Consume 1 Credit"]
-Consume --> Consumption["Create Consumption Entry<br/>(Amount = -1)"]
-Consumption --> Balance
-Balance --> HasCredit{"Has Credit?"}
-HasCredit --> |Yes| Allow["Allow Upstream Actions"]
-HasCredit --> |No| Block["Block Upstream Actions"]
-```
-
-**Diagram sources**
-- [src/NonCash.Infrastructure/Services/CreditService.cs:38-79](file://src/NonCash.Infrastructure/Services/CreditService.cs#L38-L79)
-- [src/NonCash.API/Controllers/CreditsController.cs:23-121](file://src/NonCash.API/Controllers/CreditsController.cs#L23-L121)
-- [src/NonCash.Core/Entities/CreditLedgerEntry.cs:1-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L1-L42)
-
-**Section sources**
-- [src/NonCash.Core/Entities/CreditLedgerEntry.cs:1-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L1-L42)
-- [src/NonCash.Core/Interfaces/ICreditService.cs:1-46](file://src/NonCash.Core/Interfaces/ICreditService.cs#L1-L46)
-- [src/NonCash.API/Controllers/CreditsController.cs:1-143](file://src/NonCash.API/Controllers/CreditsController.cs#L1-L143)
-- [src/NonCash.Infrastructure/Services/CreditService.cs:1-142](file://src/NonCash.Infrastructure/Services/CreditService.cs#L1-L142)
 
 ## Payment Processing Integration
 Payment processing integration enables members to purchase vouchers using external payment gateways, with full lifecycle management from order creation to fulfillment.
@@ -631,9 +800,10 @@ Infra --> DB["PostgreSQL"]
 API --> DB
 Core --> DB
 SETTLEMENT["Settlement Service"] --> DB
-CREDIT["Credit Service"] --> DB
+CREDIT["Enhanced Credit Service"] --> DB
 PAYMENT["Payment Service"] --> DB
 INTEGRATION["Integration Service"] --> DB
+EXPIRY["Credit Expiry Sweep"] --> DB
 ```
 
 **Diagram sources**
@@ -650,9 +820,11 @@ INTEGRATION["Integration Service"] --> DB
 - Apply transaction boundaries around POS redemption steps to ensure atomicity
 - Index frequently queried fields (e.g., VoucherCode, MemberID, OutletID) in PostgreSQL
 - Cache non-sensitive metadata (e.g., brand and outlet info) at the API gateway level
-- Implement pagination for settlement and credit ledger queries to handle large datasets
+- Implement pagination for settlement, credit batch, and adjustment queries to handle large datasets
 - Use async/await patterns throughout to maximize throughput
 - Optimize database queries with proper indexing and query optimization
+- **Optimize FIFO credit consumption queries with appropriate indexes on CreatedAt and ExpiresAt**
+- **Implement efficient policy resolution caching to reduce database queries**
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -662,9 +834,12 @@ Common issues and resolutions:
 - Distribution failures: Check VoucherDistribution logs and reconcile with plan detail generation
 - Blacklisted customer errors: Validate customer status before transfer or purchase
 - Settlement discrepancies: Verify cross-tenant detection logic and settlement entry creation
-- Credit balance issues: Check credit ledger entries and consumption idempotency
+- **Credit balance issues**: Check credit batch RemainingAmount calculations and FIFO consumption logic
+- **Adjustment approval failures**: Verify maker-checker workflow and self-approval prevention
+- **Expiry warning not sent**: Check CreditExpirySweepService execution and policy configuration
 - Payment webhook failures: Verify webhook signatures and retry failed deliveries
 - Integration partner access: Confirm partner-brand authorization and API key validity
+- **Policy resolution conflicts**: Check effective date ranges and scope precedence
 
 **Section sources**
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
@@ -672,7 +847,7 @@ Common issues and resolutions:
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ## Conclusion
-NonCash provides a secure, scalable SaaS platform for voucher production and redemption with enhanced capabilities for cross-tenant settlement processing, credit ledger management, payment processing integration, and loyalty app integrations. Its 3-layer architecture, microservices design, and robust API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, comprehensive financial reconciliation, and seamless third-party integrations. The documented workflows, data models, and planning artifacts form a complete blueprint for implementation and operations.
+NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, and loyalty app integrations, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, and operational automation.
 
 ## Appendices
 
@@ -689,16 +864,25 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
   - Prevent transfer initiation if the recipient is blacklisted; notify sender accordingly
 - Edge: Cross-tenant settlement
   - When a voucher sponsored by Brand A is redeemed at Brand B's outlet, automatically create settlement entry for financial reconciliation
-- Edge: Credit consumption failure
-  - Graceful handling allows POS redemption to proceed even if credit consumption fails due to system issues
-- Edge: Payment webhook processing
+- **Edge: Credit batch exhaustion**
+  - When all credit batches are exhausted, grace overdraft allows newest batch to go negative while maintaining FIFO consumption order
+- **Edge: Adjustment approval threshold**
+  - Grant/Compensation adjustments below threshold auto-apply; above threshold require FinancialController approval
+- **Edge: Policy scope conflict**
+  - Brand-scoped policies override BrandGroup and Global policies; resolve using effective date ranges
+- **Edge: Credit expiry during consumption**
+  - FIFO algorithm prioritizes oldest non-expired batches; expired batches are skipped automatically
+- **Edge: Maker-checker self-approval**
+  - System prevents users from approving their own adjustment requests regardless of role
+- **Edge: Payment webhook processing**
   - Idempotent webhook processing prevents duplicate order fulfillment on network retries
-- Edge: Integration partner brand scoping
+- **Edge: Integration partner brand scoping**
   - Only return vouchers from brands explicitly authorized to the integration partner
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs:20-48](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L20-L48)
-- [src/NonCash.Infrastructure/Services/CreditService.cs:38-79](file://src/NonCash.Infrastructure/Services/CreditService.cs#L38-L79)
+- [src/NonCash.Infrastructure/Services/CreditService.cs:43-109](file://src/NonCash.Infrastructure/Services/CreditService.cs#L43-L109)
+- [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs:46-107](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs#L46-L107)
 - [src/NonCash.API/Controllers/PaymentsController.cs:108-163](file://src/NonCash.API/Controllers/PaymentsController.cs#L108-L163)

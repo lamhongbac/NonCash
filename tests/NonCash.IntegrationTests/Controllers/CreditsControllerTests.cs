@@ -26,6 +26,7 @@ public class CreditsControllerTests : IDisposable
     private readonly SqliteConnection _connection;
     private readonly ApplicationDbContext _context;
     private readonly StubPolicyService _policyStub;
+    private readonly StubWelcomePolicyService _welcomeStub;
     private readonly CreditService _creditService;
 
     private readonly Guid _brandAId = Guid.NewGuid();
@@ -54,12 +55,15 @@ public class CreditsControllerTests : IDisposable
             Scope: null,
             PricePerCreditVnd: 5000m,
             CreditExpiryMonths: 12,
-            WelcomeCredits: 500,
-            WelcomeCreditExpiryMonths: 12,
             LowBalanceWarningPct: 20,
             ExpiryWarningDays: 30,
             AdjustmentApprovalThreshold: 1000));
-        _creditService = new CreditService(_context, _policyStub, NullLogger<CreditService>.Instance);
+        _welcomeStub = new StubWelcomePolicyService(new ResolvedWelcomePolicy(
+            PolicyId: null,
+            Name: "Test Welcome",
+            WelcomeCredits: 500,
+            WelcomeCreditExpiryMonths: 12));
+        _creditService = new CreditService(_context, _policyStub, _welcomeStub, NullLogger<CreditService>.Instance);
 
         Seed();
     }
@@ -487,6 +491,28 @@ public class CreditsControllerTests : IDisposable
         public Task<BrandGroup> UpdateGroupAsync(Guid id, string name, string? description, bool isActive, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
         public Task SetGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> brandIds, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
+
+    /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>
+    private sealed class StubWelcomePolicyService : IWelcomePolicyService
+    {
+        public ResolvedWelcomePolicy Welcome { get; set; }
+
+        public StubWelcomePolicyService(ResolvedWelcomePolicy welcome) => Welcome = welcome;
+
+        public Task<ResolvedWelcomePolicy> ResolveForBusinessAsync(Guid businessId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Welcome);
+
+        public Task<IReadOnlyList<WelcomeGrantPolicy>> GetPoliciesAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy?> GetPolicyAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy> CreatePolicyAsync(WelcomeGrantPolicy policy, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy> UpdatePolicyAsync(Guid id, WelcomeGrantPolicy changes, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task DeactivatePolicyAsync(Guid id, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }
 }

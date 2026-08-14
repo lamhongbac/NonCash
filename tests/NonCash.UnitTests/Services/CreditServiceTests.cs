@@ -16,8 +16,10 @@ public class CreditServiceTests
 {
     private readonly ApplicationDbContext _context;
     private readonly StubPolicyService _policyStub;
+    private readonly StubWelcomePolicyService _welcomeStub;
     private readonly CreditService _sut;
     private readonly Guid _brandId = Guid.NewGuid();
+    private readonly Guid _businessId = Guid.NewGuid();
 
     public CreditServiceTests()
     {
@@ -25,18 +27,42 @@ public class CreditServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _context = new ApplicationDbContext(options);
+
+        // GrantWelcomeAsync resolves the brand's BusinessId, then the business's welcome
+        // policy — seed a Business + Brand so that lookup resolves for welcome-dependent tests.
+        _context.Businesses.Add(new Business
+        {
+            Id = _businessId,
+            BusinessName = "Test Business",
+            TaxCode = "TB-US",
+            Address = "Test Address",
+            IsActive = true
+        });
+        _context.Brands.Add(new Brand
+        {
+            Id = _brandId,
+            BusinessId = _businessId,
+            Name = "Test Brand",
+            TaxCode = "TBR",
+            Status = BrandStatus.Active
+        });
+        _context.SaveChanges();
+
         _policyStub = new StubPolicyService(new ResolvedCreditPolicy(
             PolicyId: Guid.NewGuid(),
             Name: "Test Policy",
             Scope: PolicyScope.Global,
             PricePerCreditVnd: 5000m,
             CreditExpiryMonths: 12,
-            WelcomeCredits: 500,
-            WelcomeCreditExpiryMonths: 12,
             LowBalanceWarningPct: 20,
             ExpiryWarningDays: 30,
             AdjustmentApprovalThreshold: 1000));
-        _sut = new CreditService(_context, _policyStub, NullLogger<CreditService>.Instance);
+        _welcomeStub = new StubWelcomePolicyService(new ResolvedWelcomePolicy(
+            PolicyId: Guid.NewGuid(),
+            Name: "Test Welcome",
+            WelcomeCredits: 500,
+            WelcomeCreditExpiryMonths: 12));
+        _sut = new CreditService(_context, _policyStub, _welcomeStub, NullLogger<CreditService>.Instance);
     }
 
     /// <summary>Seeds a batch directly (sync SaveChanges keeps the custom CreatedAt).</summary>
@@ -265,7 +291,7 @@ public class CreditServiceTests
     [Fact]
     public async Task GrantWelcomeAsync_ZeroWelcomeCredits_ReturnsNull()
     {
-        _policyStub.Policy = _policyStub.Policy with { WelcomeCredits = 0 };
+        _welcomeStub.Welcome = _welcomeStub.Welcome with { WelcomeCredits = 0 };
 
         var batch = await _sut.GrantWelcomeAsync(_brandId);
 
@@ -336,10 +362,16 @@ public class CreditServiceTests
     public async Task GetBatchesAsync_FiltersByBrandAndType_AndPaginates()
     {
         var otherBrandId = Guid.NewGuid();
-        // GetBatchesAsync includes the Brand navigation — seed brand rows for the join.
-        _context.Brands.AddRange(
-            new Brand { Id = _brandId, Name = "Brand A", TaxCode = "TAX-A" },
-            new Brand { Id = otherBrandId, Name = "Brand B", TaxCode = "TAX-B" });
+        // GetBatchesAsync includes the Brand navigation — _brandId is seeded in the ctor;
+        // add the second brand row for the join.
+        _context.Brands.Add(new Brand
+        {
+            Id = otherBrandId,
+            BusinessId = _businessId,
+            Name = "Brand B",
+            TaxCode = "TAX-B",
+            Status = BrandStatus.Active
+        });
         await _context.SaveChangesAsync();
         SeedBatch(_brandId, 500, DateTime.UtcNow.AddDays(-3), type: CreditBatchType.WelcomeGrant);
         SeedBatch(_brandId, 100, DateTime.UtcNow.AddDays(-2), type: CreditBatchType.Purchase);
@@ -431,6 +463,28 @@ public class CreditServiceTests
         public Task<BrandGroup> UpdateGroupAsync(Guid id, string name, string? description, bool isActive, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
         public Task SetGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> brandIds, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+    }
+
+    /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>
+    private sealed class StubWelcomePolicyService : IWelcomePolicyService
+    {
+        public ResolvedWelcomePolicy Welcome { get; set; }
+
+        public StubWelcomePolicyService(ResolvedWelcomePolicy welcome) => Welcome = welcome;
+
+        public Task<ResolvedWelcomePolicy> ResolveForBusinessAsync(Guid businessId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Welcome);
+
+        public Task<IReadOnlyList<WelcomeGrantPolicy>> GetPoliciesAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy?> GetPolicyAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy> CreatePolicyAsync(WelcomeGrantPolicy policy, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicy> UpdatePolicyAsync(Guid id, WelcomeGrantPolicy changes, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task DeactivatePolicyAsync(Guid id, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
     }
 }

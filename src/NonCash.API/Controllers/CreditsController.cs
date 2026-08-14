@@ -116,8 +116,6 @@ public class CreditsController : ControllerBase
             policy.Scope?.ToString(),
             policy.PricePerCreditVnd,
             policy.CreditExpiryMonths,
-            policy.WelcomeCredits,
-            policy.WelcomeCreditExpiryMonths,
             policy.LowBalanceWarningPct,
             policy.ExpiryWarningDays,
             policy.AdjustmentApprovalThreshold));

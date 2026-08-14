@@ -35,7 +35,6 @@
                         <MudTh>Target</MudTh>
                         <MudTh Style="text-align:right">Price (₫)</MudTh>
                         <MudTh Style="text-align:right">Expiry (mo)</MudTh>
-                        <MudTh Style="text-align:right">Welcome</MudTh>
                         <MudTh Style="text-align:right">Threshold</MudTh>
                         <MudTh>Effective</MudTh>
                         <MudTh>Status</MudTh>
@@ -49,7 +48,6 @@
                         <MudTd DataLabel="Target">@(context.BrandName ?? context.BrandGroupName ?? "All brands")</MudTd>
                         <MudTd DataLabel="Price" Style="text-align:right">@context.PricePerCreditVnd.ToString("N0")</MudTd>
                         <MudTd DataLabel="Expiry" Style="text-align:right">@(context.CreditExpiryMonths?.ToString() ?? "never")</MudTd>
-                        <MudTd DataLabel="Welcome" Style="text-align:right">@context.WelcomeCredits</MudTd>
                         <MudTd DataLabel="Threshold" Style="text-align:right">@(context.AdjustmentApprovalThreshold?.ToString() ?? "always")</MudTd>
                         <MudTd DataLabel="Effective">
                             @context.EffectiveFrom.ToString("yyyy-MM-dd")@(context.EffectiveTo.HasValue ? $" → {context.EffectiveTo.Value:yyyy-MM-dd}" : " →")
@@ -114,12 +112,6 @@
                     </MudItem>
                     <MudItem xs="6" sm="2">
                         <MudNumericField @bind-Value="_editingPolicy.CreditExpiryMonths" Label="Expiry (months)" Variant="Variant.Outlined" Min="1" Clearable="true" />
-                    </MudItem>
-                    <MudItem xs="6" sm="2">
-                        <MudNumericField @bind-Value="_editingPolicy.WelcomeCredits" Label="Welcome credits" Variant="Variant.Outlined" Min="0" />
-                    </MudItem>
-                    <MudItem xs="6" sm="2">
-                        <MudNumericField @bind-Value="_editingPolicy.WelcomeCreditExpiryMonths" Label="Welcome expiry (mo)" Variant="Variant.Outlined" Min="1" Clearable="true" />
                     </MudItem>
                     <MudItem xs="6" sm="2">
                         <MudNumericField @bind-Value="_editingPolicy.LowBalanceWarningPct" Label="Low-balance warn %" Variant="Variant.Outlined" Min="1" Max="100" Clearable="true" />
@@ -321,8 +313,6 @@
             BrandId = p.BrandId,
             PricePerCreditVnd = p.PricePerCreditVnd,
             CreditExpiryMonths = p.CreditExpiryMonths,
-            WelcomeCredits = p.WelcomeCredits,
-            WelcomeCreditExpiryMonths = p.WelcomeCreditExpiryMonths,
             LowBalanceWarningPct = p.LowBalanceWarningPct,
             ExpiryWarningDays = p.ExpiryWarningDays,
             AdjustmentApprovalThreshold = p.AdjustmentApprovalThreshold,
@@ -357,8 +347,6 @@
                 BrandId = _editingPolicy.Scope == "Brand" ? _editingPolicy.BrandId : null,
                 _editingPolicy.PricePerCreditVnd,
                 _editingPolicy.CreditExpiryMonths,
-                _editingPolicy.WelcomeCredits,
-                _editingPolicy.WelcomeCreditExpiryMonths,
                 _editingPolicy.LowBalanceWarningPct,
                 _editingPolicy.ExpiryWarningDays,
                 _editingPolicy.AdjustmentApprovalThreshold,
@@ -533,8 +521,6 @@
         public string? BrandName { get; set; }
         public decimal PricePerCreditVnd { get; set; }
         public int? CreditExpiryMonths { get; set; }
-        public int WelcomeCredits { get; set; }
-        public int? WelcomeCreditExpiryMonths { get; set; }
         public int? LowBalanceWarningPct { get; set; }
         public int? ExpiryWarningDays { get; set; }
         public int? AdjustmentApprovalThreshold { get; set; }
@@ -553,8 +539,6 @@
         public Guid? BrandId { get; set; }
         public decimal PricePerCreditVnd { get; set; } = 5000m;
         public int? CreditExpiryMonths { get; set; } = 12;
-        public int WelcomeCredits { get; set; }
-        public int? WelcomeCreditExpiryMonths { get; set; } = 12;
         public int? LowBalanceWarningPct { get; set; } = 20;
         public int? ExpiryWarningDays { get; set; } = 30;
         public int? AdjustmentApprovalThreshold { get; set; } = 1000;

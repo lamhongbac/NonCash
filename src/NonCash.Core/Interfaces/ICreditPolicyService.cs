@@ -37,8 +37,6 @@ public record ResolvedCreditPolicy(
     PolicyScope? Scope,
     decimal PricePerCreditVnd,
     int? CreditExpiryMonths,
-    int WelcomeCredits,
-    int? WelcomeCreditExpiryMonths,
     int? LowBalanceWarningPct,
     int? ExpiryWarningDays,
     int? AdjustmentApprovalThreshold);

@@ -23,6 +23,12 @@
 - [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
+- [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
+- [ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
+- [ICreditAdjustmentService.cs](file://src/NonCash.Core/Interfaces/ICreditAdjustmentService.cs)
+- [ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
@@ -32,15 +38,11 @@
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive new API endpoints for Epic 6 (Loyalty App Integration) including partner management, segment distribution, member wallet queries, event history, and campaign performance
-- Added Epic 7 (Cross-Tenant Settlement) APIs for settlement ledger management, netting reports, and settlement marking
-- Added Epic 8 (Voucher Display) support with rich display fields and presentation data
-- Enhanced Credit Ledger API with balance queries, ledger entries, and admin top-up functionality
-- Added Payment Processing API with ZaloPay integration, webhook handling, and transaction management
-- Added Image Upload API for media asset management with CDN integration
-- Expanded Member Transfers API with inbox/outbox management, accept/reject/cancel operations
-- Added Business Management API for administrative business entity operations
-- Added Integration Partners API for partner lifecycle management and API key generation
+- Enhanced CreditsController with new batch-focused endpoints: /batches, /consumptions, /pricing, /expiring for comprehensive credit management
+- Added CreditAdjustmentsController with full maker-checker workflow for credit adjustments (create, approve, reject)
+- Added CreditPoliciesController with complete CRUD operations for credit pricing policies and brand group management
+- Updated Credit Ledger API section with expanded functionality for batch operations, consumption tracking, and policy resolution
+- Enhanced security model with role-based access control for financial operations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -62,9 +64,11 @@ This document provides comprehensive API contracts and integration guidance for 
 - Voucher Planning API: Plan creation, approval workflows, and version management
 - Distribution and Reporting API: Batch promotion distribution and comprehensive reporting
 - Store API: Gift voucher catalog and purchase functionality
+- **Enhanced**: Credit Ledger API: Prepaid billing system with balance management, batch operations, consumption tracking, and policy resolution
+- **New**: Credit Adjustment API: Maker-checker workflow for credit corrections and adjustments
+- **New**: Credit Policy API: Administrative management of pricing policies and brand groups
 - **New**: Loyalty App Integration API: External partner integration for segment distribution, member wallet access, and campaign analytics
 - **New**: Cross-Tenant Settlement API: Financial settlement tracking between sponsoring and redeeming brands
-- **New**: Credit Ledger API: Prepaid billing system with balance management and transaction tracking
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
 - **New**: Business Management API: Administrative operations for business entities
@@ -77,7 +81,7 @@ The repository organizes API-related knowledge across several documentation file
 - Architecture describes the 3-layer SaaS design and security posture
 - Data Models outline core entities and relationships
 - Index and scan report provide project metadata and current state
-- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, and payment handling
+- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, and enhanced credit management
 
 ```mermaid
 graph TB
@@ -100,21 +104,25 @@ M["StoreController"]
 N["VoucherGenerationController"]
 O["VoucherPlansController"]
 end
+subgraph "Enhanced Credit Management"
+P["CreditsController"]
+Q["CreditAdjustmentsController"]
+R["CreditPoliciesController"]
+end
 subgraph "New Epic Controllers"
-P["IntegrationController"]
-Q["SettlementsController"]
-R["CreditsController"]
-S["PaymentsController"]
-T["ImageUploadController"]
-U["MemberTransfersController"]
-V["BusinessesController"]
-W["IntegrationPartnersController"]
+S["IntegrationController"]
+T["SettlementsController"]
+U["PaymentsController"]
+V["ImageUploadController"]
+W["MemberTransfersController"]
+X["BusinessesController"]
+Y["IntegrationPartnersController"]
 end
 subgraph "Planning Artifacts"
-X["_bmad-output/planning-artifacts/epics.md"]
+Z["_bmad-output/planning-artifacts/epics.md"]
 end
 subgraph "Business Rules"
-Y["Key Functionalities.txt"]
+AA["Key Functionalities.txt"]
 end
 A --> B
 A --> C
@@ -122,8 +130,8 @@ A --> D
 A --> E
 C --> B
 D --> B
-X --> B
-Y --> B
+Z --> B
+AA --> B
 F --> B
 G --> B
 H --> B
@@ -142,6 +150,8 @@ T --> B
 U --> B
 V --> B
 W --> B
+X --> B
+Y --> B
 ```
 
 **Diagram sources**
@@ -152,9 +162,11 @@ W --> B
 - [project-scan-report.json](file://docs/project-scan-report.json)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 - [Key Functionalities.txt](file://Key%20Functionalities.txt)
+- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
-- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
@@ -173,9 +185,11 @@ W --> B
 - Distribution API: Supports batch promotion distribution with CSV upload capabilities
 - Reporting API: Provides comprehensive distribution summaries and CSV exports
 - Store API: Offers gift voucher catalog and purchase functionality
+- **Enhanced**: Credit Ledger API: Comprehensive prepaid billing system with balance management, batch operations, consumption tracking, policy resolution, and admin top-up functionality
+- **New**: Credit Adjustment API: Maker-checker workflow for credit corrections with approval matrix and threshold controls
+- **New**: Credit Policy API: Administrative management of pricing policies and brand groups with scope-based resolution
 - **New**: Loyalty App Integration API: External partner integration for segment distribution, member wallet queries, event history, and campaign performance
 - **New**: Settlement API: Cross-tenant financial settlement tracking and netting reports
-- **New**: Credit Ledger API: Prepaid billing system with balance management and transaction tracking
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
 - **New**: Business Management API: Administrative operations for business entities
@@ -207,6 +221,8 @@ Security highlights:
 - Role-Based Access Control (RBAC) with JWT claims for business operations
 - Brand scoping middleware for tenant isolation
 - Partner API key management for external loyalty apps
+- **Enhanced**: Financial controls with maker-checker workflow for credit adjustments
+- **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
 
 ```mermaid
 graph TB
@@ -219,6 +235,8 @@ AK["API Key Auth for POS"]
 JWT["JWT Auth with RBAC"]
 BS["Brand Scope Middleware"]
 PK["Partner API Key Management"]
+MC["Maker-Checker Workflow"]
+PA["Policy-Based Authorization"]
 end
 BLL --> MT
 BLL --> DS
@@ -226,6 +244,8 @@ BLL --> AK
 BLL --> JWT
 BLL --> BS
 BLL --> PK
+BLL --> MC
+BLL --> PA
 ```
 
 **Diagram sources**
@@ -508,6 +528,165 @@ Access Control:
 **Section sources**
 - [RegistrationReviewController.cs](file://src/NonCash.API/Controllers/RegistrationReviewController.cs)
 
+### **Enhanced**: Credit Ledger API
+
+#### Balance Management API
+Endpoints:
+- Get Balance: GET /credits/balance?brandId=GUID (Authenticated)
+- Get Ledger: GET /credits/ledger?brandId=GUID&type=Grant|Purchase|Consumption|Adjustment&from=2026-07-01&to=2026-07-31&page=1&pageSize=20 (Authenticated)
+- Top Up: POST /credits/topup (Admin only)
+
+Balance Guard Behavior:
+- When balance ≤ 0, voucher generation, distribution, and purchases fail with InsufficientCredits
+- POS redemption continues (grace overdraft allowed)
+
+Top Up Request:
+```json
+{
+  "brandId": "GUID",
+  "amount": 1000,
+  "type": "Purchase",
+  "reference": "Bank transfer #TX-2026-0728"
+}
+```
+
+#### **New**: Batch Operations API
+Endpoints:
+- Get Batches: GET /credits/batches?brandId=GUID&type=Grant|Purchase|Consumption|Adjustment&from=2026-07-01&to=2026-07-31&page=1&pageSize=50 (Authenticated)
+- Get Consumptions: GET /credits/consumptions?brandId=GUID&page=1&pageSize=50 (Authenticated)
+- Get Expiring: GET /credits/expiring?brandId=GUID&withinDays=30 (Authenticated)
+
+Batch Query Parameters:
+- brandId: Target brand (Admin can specify any brand, others scoped to own brand)
+- type: Filter by batch type (Grant, Purchase, Consumption, Adjustment)
+- from/to: Date range filters for batch creation dates
+- page/pageSize: Pagination parameters
+
+Consumption Tracking:
+- Per-voucher consumption history with batch linkage
+- Reference tracking for audit trail
+- Timestamped consumption records
+
+Expiry Management:
+- Batches with remaining credits expiring within specified window
+- Default 30-day window, configurable via withinDays parameter
+- Proactive expiry monitoring for credit management
+
+#### **New**: Pricing Policy Resolution API
+Endpoints:
+- Get Pricing: GET /credits/pricing?brandId=GUID (Authenticated)
+
+Policy Resolution Priority:
+- Brand-scoped policy → BrandGroup-scoped policy → Global policy → Configuration fallback
+- Returns effective pricing policy for the specified brand at current time
+
+Policy Fields:
+- PricePerCreditVnd: Cost per credit in Vietnamese Dong
+- CreditExpiryMonths: Credit lifetime in months
+- WelcomeCredits: Initial welcome credits for new accounts
+- WelcomeCreditExpiryMonths: Welcome credit expiration period
+- LowBalanceWarningPct: Threshold for low balance warnings
+- ExpiryWarningDays: Days before expiry to send warnings
+- AdjustmentApprovalThreshold: Amount threshold requiring approval
+
+**Updated** Enhanced with comprehensive batch operations, consumption tracking, and policy resolution capabilities
+
+**Section sources**
+- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
+- [ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
+
+### **New**: Credit Adjustment API
+
+#### Maker-Checker Workflow API
+Endpoints:
+- Create Adjustment: POST /api/v1/credit-adjustments (Admin/FinancialController)
+- Get Requests: GET /api/v1/credit-adjustments?brandId=GUID&status=PendingApproval|Applied|Rejected&page=1&pageSize=50 (Admin/FinancialController)
+- Get Request: GET /api/v1/credit-adjustments/{id} (Admin/FinancialController)
+- Approve Request: POST /api/v1/credit-adjustments/{id}/approve (FinancialController only)
+- Reject Request: POST /api/v1/credit-adjustments/{id}/reject (FinancialController only)
+
+Adjustment Types:
+- Grant: Adding credits for promotional purposes
+- Compensation: Credits for customer service issues
+- Correction: Fixing accounting errors
+- Clawback: Removing credits due to fraud or violations
+- Reinstatement: Restoring previously removed credits
+
+Approval Matrix:
+- Always requires approval: Clawback, Reinstatement
+- Threshold-based approval: Grant, Compensation, Correction
+- Auto-approval: Small amounts below configured threshold
+
+Request Flow:
+1. Admin/FinancialController creates adjustment request with reason and evidence
+2. System determines if approval required based on type and amount
+3. If approval needed, FinancialController reviews and approves/rejects
+4. Approved adjustments automatically create corresponding credit batches
+5. All actions are auditable with timestamps and user attribution
+
+Evidence Support:
+- EvidenceNote: Supporting documentation reference
+- EvidenceImageUrl: Link to supporting documents/images
+- ReasonText: Mandatory human-readable justification
+
+**New** Complete maker-checker workflow for credit corrections with comprehensive audit trail
+
+**Section sources**
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
+- [ICreditAdjustmentService.cs](file://src/NonCash.Core/Interfaces/ICreditAdjustmentService.cs)
+
+### **New**: Credit Policy API
+
+#### Policy Management API
+Endpoints:
+- Get Policies: GET /api/v1/credit-policies?includeInactive=false (Admin)
+- Get Policy: GET /api/v1/credit-policies/{id} (Admin)
+- Create Policy: POST /api/v1/credit-policies (Admin)
+- Update Policy: PUT /api/v1/credit-policies/{id} (Admin)
+- Deactivate Policy: POST /api/v1/credit-policies/{id}/deactivate (Admin)
+
+Policy Configuration:
+- Name: Descriptive policy name
+- Scope: Global, BrandGroup, or Brand-specific
+- PricePerCreditVnd: Cost per credit in Vietnamese Dong
+- CreditExpiryMonths: Credit lifetime after purchase
+- WelcomeCredits: Initial credits for new accounts
+- WelcomeCreditExpiryMonths: Welcome credit expiration
+- LowBalanceWarningPct: Percentage threshold for low balance alerts
+- ExpiryWarningDays: Days before expiry to send notifications
+- AdjustmentApprovalThreshold: Amount requiring manual approval
+- EffectiveFrom/To: Policy validity period
+- IsActive: Active/inactive status
+
+#### Brand Group Management API
+Endpoints:
+- Get Groups: GET /api/v1/credit-policies/groups (Admin)
+- Get Group: GET /api/v1/credit-policies/groups/{id} (Admin)
+- Create Group: POST /api/v1/credit-policies/groups (Admin)
+- Update Group: PUT /api/v1/credit-policies/groups/{id} (Admin)
+- Set Group Members: PUT /api/v1/credit-policies/groups/{id}/members (Admin)
+
+Group Features:
+- Organize multiple brands under common policy settings
+- Manage group membership dynamically
+- Support for active/inactive group status
+- Inherit policy settings from group level
+
+Policy Resolution:
+- Brand-scoped policies take highest priority
+- BrandGroup policies apply to all member brands
+- Global policies serve as default fallback
+- Configuration-level defaults when no DB policy exists
+
+**New** Complete administrative interface for credit pricing policy management with brand group organization
+
+**Section sources**
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
+- [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
+- [ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
+
 ### **New**: Loyalty App Integration API (Epic 6)
 
 #### Partner Management API
@@ -595,31 +774,6 @@ Netting Report Response:
 
 **Section sources**
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
-
-### **New**: Credit Ledger API
-
-#### Balance Management API
-Endpoints:
-- Get Balance: GET /credits/balance?brandId=GUID (Authenticated)
-- Get Ledger: GET /credits/ledger?brandId=GUID&type=Grant|Purchase|Consumption|Adjustment&from=2026-07-01&to=2026-07-31&page=1&pageSize=20 (Authenticated)
-- Top Up: POST /credits/topup (Admin only)
-
-Balance Guard Behavior:
-- When balance ≤ 0, voucher generation, distribution, and purchases fail with InsufficientCredits
-- POS redemption continues (grace overdraft allowed)
-
-Top Up Request:
-```json
-{
-  "brandId": "GUID",
-  "amount": 1000,
-  "type": "Purchase",
-  "reference": "Bank transfer #TX-2026-0728"
-}
-```
-
-**Section sources**
-- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 
 ### **New**: Payment Processing API
 
@@ -724,9 +878,9 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 - Voucher Planning API depends on VoucherPlanService for plan management and approval workflows
 - Distribution API depends on VoucherGenerationService and PromotionService for batch operations
 - Reporting API depends on DistributionReportService for analytics and insights
+- **Enhanced**: Credit API depends on CreditService for prepaid billing management, ICreditPolicyService for policy resolution, and ICreditAdjustmentService for adjustment workflows
 - **New**: Integration API depends on PromotionService, VoucherEventPublisher, and IntegrationPartnerService
 - **New**: Settlement API depends on SettlementService for cross-tenant financial tracking
-- **New**: Credit API depends on CreditService for prepaid billing management
 - **New**: Payment API depends on PaymentService, PurchaseService, and ZaloPay integration
 - **New**: Image Upload API depends on ImageStorageService for CDN integration
 - **New**: Business API depends on BusinessRepository and BrandRepository
@@ -746,9 +900,11 @@ REPORTS["Reporting API"] --> RSVC["DistributionReportService"]
 STORE["Store API"] --> PSVC
 OUTLETS["Outlets API"] --> OSVC["OutletService"]
 REG["Registration Review API"] --> RSVC2["RegistrationService"]
+CREDITS["Enhanced Credit API"] --> CSVC["CreditService"]
+CREDITS --> CPSVC["CreditPolicyService"]
+CREDITS --> CASVC["CreditAdjustmentService"]
 INTEGRATION["Integration API"] --> PSVC2["PromotionService"]
 SETTLEMENT["Settlement API"] --> SSVC["SettlementService"]
-CREDITS["Credit API"] --> CSVC["CreditService"]
 PAYMENTS["Payment API"] --> PSVC2["PaymentService"]
 UPLOAD["Image Upload API"] --> ISVC["ImageStorageService"]
 BUSINESS["Business API"] --> BR["BusinessRepository"]
@@ -762,9 +918,11 @@ PROMOSVC --> DAL
 RSVC --> DAL
 OSVC --> DAL
 RSVC2 --> DAL
+CSVC --> DAL
+CPSVC --> DAL
+CASVC --> DAL
 PSVC2 --> DAL
 SSVC --> DAL
-CSVC --> DAL
 ISVC --> DAL
 BR --> DAL
 IPSVC --> DAL
@@ -788,6 +946,9 @@ DAL --> DB["PostgreSQL"]
 - Pagination: Use pagination parameters for large datasets (outlets, reports, plans, settlements, credits)
 - CSV processing: Implement streaming for large CSV files to avoid memory issues
 - JWT caching: Cache validated JWT tokens for short periods to reduce authentication overhead
+- **Enhanced**: Batch operations: Leverage paginated batch queries for credit management with efficient filtering
+- **Enhanced**: Policy resolution: Cache resolved policies per brand to minimize database lookups
+- **Enhanced**: Adjustment workflows: Implement efficient approval matrix evaluation with threshold calculations
 - **New**: CDN integration: Leverage CDN for image delivery to reduce server load
 - **New**: Webhook handling: Implement idempotent webhook processing for payment confirmations
 - **New**: Settlement computation: Optimize netting calculations with database indexes for date ranges and brand pairs
@@ -811,6 +972,18 @@ Common issues and strategies:
 - Network interruptions:
   - Implement idempotent request handling for Lock and Redeem using lockID/transactionID deduplication at the client
   - Retry with exponential backoff for transient failures
+- **Enhanced**: Credit management issues:
+  - Verify brand scoping for credit operations (Admin vs non-Admin access)
+  - Check policy resolution hierarchy for pricing inconsistencies
+  - Monitor batch expiry warnings for proactive credit management
+- **New**: Adjustment workflow issues:
+  - Ensure adjustment types are valid (Grant, Compensation, Correction, Clawback, Reinstatement)
+  - Verify approval matrix configuration for automatic vs manual approval
+  - Check that clawback/reinstatement operations have related batch references
+- **New**: Policy management issues:
+  - Validate policy scope assignments (Global, BrandGroup, Brand)
+  - Ensure brand group memberships are correctly configured
+  - Check effective date ranges for policy applicability
 - **New**: Integration partner issues:
   - Verify partner API key is active and associated with requested brand
   - Check partner callback URL configuration for webhook delivery
@@ -834,7 +1007,7 @@ Common issues and strategies:
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 
 ## Conclusion
-NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The expanded controller ecosystem now supports complete voucher lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing, payment processing, and rich media management. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
+NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, and comprehensive credit adjustment workflows with maker-checker controls. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
 
 ## Appendices
 
@@ -898,6 +1071,33 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - POST /api/v1/admin/registration-requests/{requestId}/approve: Header: Authorization: Bearer <JWT> → { message }
 - POST /api/v1/admin/registration-requests/{requestId}/reject: Header: Authorization: Bearer <JWT> → { message }
 
+**Enhanced Credit Ledger API**:
+- GET /credits/balance: Header: Authorization: Bearer <JWT> → CreditBalanceResponse
+- GET /credits/ledger: Header: Authorization: Bearer <JWT> → CreditLedgerResponse
+- POST /credits/topup: Header: Authorization: Bearer <JWT> (Admin) → CreditBatchDto
+- GET /credits/batches: Header: Authorization: Bearer <JWT> → CreditBatchListResponse
+- GET /credits/consumptions: Header: Authorization: Bearer <JWT> → CreditConsumptionListResponse
+- GET /credits/expiring: Header: Authorization: Bearer <JWT> → CreditBatchListResponse
+- GET /credits/pricing: Header: Authorization: Bearer <JWT> → ResolvedPolicyResponse
+
+**Credit Adjustment API**:
+- POST /api/v1/credit-adjustments: Header: Authorization: Bearer <JWT> (Admin/FinancialController) → CreditAdjustmentDto
+- GET /api/v1/credit-adjustments: Header: Authorization: Bearer <JWT> (Admin/FinancialController) → CreditAdjustmentListResponse
+- GET /api/v1/credit-adjustments/{id}: Header: Authorization: Bearer <JWT> (Admin/FinancialController) → CreditAdjustmentDto
+- POST /api/v1/credit-adjustments/{id}/approve: Header: Authorization: Bearer <JWT> (FinancialController) → CreditAdjustmentDto
+- POST /api/v1/credit-adjustments/{id}/reject: Header: Authorization: Bearer <JWT> (FinancialController) → CreditAdjustmentDto
+
+**Credit Policy API**:
+- GET /api/v1/credit-policies: Header: Authorization: Bearer <JWT> (Admin) → List<CreditPolicyDto>
+- GET /api/v1/credit-policies/{id}: Header: Authorization: Bearer <JWT> (Admin) → CreditPolicyDto
+- POST /api/v1/credit-policies: Header: Authorization: Bearer <JWT> (Admin) → CreditPolicyDto
+- PUT /api/v1/credit-policies/{id}: Header: Authorization: Bearer <JWT> (Admin) → CreditPolicyDto
+- POST /api/v1/credit-policies/{id}/deactivate: Header: Authorization: Bearer <JWT> (Admin) → NoContent
+- GET /api/v1/credit-policies/groups: Header: Authorization: Bearer <JWT> (Admin) → List<BrandGroupDto>
+- POST /api/v1/credit-policies/groups: Header: Authorization: Bearer <JWT> (Admin) → BrandGroupDto
+- PUT /api/v1/credit-policies/groups/{id}: Header: Authorization: Bearer <JWT> (Admin) → BrandGroupDto
+- PUT /api/v1/credit-policies/groups/{id}/members: Header: Authorization: Bearer <JWT> (Admin) → NoContent
+
 **Loyalty App Integration API**:
 - POST /integration/distribute: X-API-Key → { distributedCount, skippedCount, errors }
 - GET /integration/member/{phone}/vouchers: X-API-Key → List<IntegrationWalletItem>
@@ -914,11 +1114,6 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - GET /api/v1/settlements: Header: Authorization: Bearer <JWT> → SettlementLedgerResponse
 - PUT /api/v1/settlements/{id}/settle: Header: Authorization: Bearer <JWT> → { message }
 - GET /api/v1/settlements/netting: Header: Authorization: Bearer <JWT> → NettingResponse
-
-**Credit Ledger API**:
-- GET /credits/balance: Header: Authorization: Bearer <JWT> → CreditBalanceResponse
-- GET /credits/ledger: Header: Authorization: Bearer <JWT> → CreditLedgerResponse
-- POST /credits/topup: Header: Authorization: Bearer <JWT> (Admin) → CreditLedgerEntryDto
 
 **Payment Processing API**:
 - POST /api/v1/payments/{orderId}/create: Header: Authorization: Bearer <JWT> → PaymentCreateResponse
@@ -937,9 +1132,11 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
+- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
-- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
@@ -951,9 +1148,11 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - Dynamic codes: Voucher codes rotate to prevent reuse
 - API Key scope: POS clients are restricted to predefined outlet ranges
 - JWT scope: Business API tokens are bound to the requesting user's brand and role
-- Role-Based Access Control: Different endpoints require specific roles (Admin, BrandManager, Planner, Approver)
+- Role-Based Access Control: Different endpoints require specific roles (Admin, BrandManager, Planner, Approver, FinancialController)
 - Brand Scoping: Middleware enforces tenant isolation for non-admin users
 - Request Validation: All endpoints validate input parameters and enforce business rules
+- **Enhanced**: Financial controls with maker-checker workflow for credit adjustments
+- **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
 - **New**: Partner API Key Management: Secure key generation and rotation for external loyalty apps
 - **New**: Webhook Security: Signature validation for payment provider callbacks
 - **New**: File Upload Security: Format validation and size limits for image uploads
@@ -962,6 +1161,8 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [architecture.md](file://docs/architecture.md)
 - [index.md](file://docs/index.md)
 - [Program.cs](file://src/NonCash.API/Program.cs)
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
@@ -980,17 +1181,21 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - Plan approval workflow: Draft → Review → Approve/Reject → Published
 - Batch promotion requires proper authorization and validates phone number formats
 - Reporting is brand-scoped with role-based access controls
+- **Enhanced**: Credit consumption occurs at value moment (gift sale or POS redemption) with batch tracking
+- **Enhanced**: Adjustment workflows follow maker-checker pattern with approval matrices and thresholds
+- **Enhanced**: Policy resolution follows Brand → Group → Global → Config fallback hierarchy
 - **New**: Partner integration requires brand association and API key validation
 - **New**: Settlement tracking occurs automatically for cross-tenant redemptions
-- **New**: Credit consumption occurs at value moment (gift sale or POS redemption)
 - **New**: Payment processing integrates with ZaloPay for B2C purchases
 - **New**: Image uploads support rich voucher display with CDN integration
 
 **Section sources**
 - [Key Functionalities.txt](file://Key%20Functionalities.txt)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
+- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
+- [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
+- [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
-- [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)

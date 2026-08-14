@@ -31,12 +31,6 @@ public class CreditPricingPolicy : BaseEntity
     /// <summary>Months until a purchased credit batch expires. Null = never expires.</summary>
     public int? CreditExpiryMonths { get; set; } = 12;
 
-    /// <summary>Free credits granted on brand activation. 0 = none.</summary>
-    public int WelcomeCredits { get; set; }
-
-    /// <summary>Months until a welcome-grant batch expires. Null = never expires.</summary>
-    public int? WelcomeCreditExpiryMonths { get; set; }
-
     /// <summary>Warn brand when balance falls below this % of last purchase. Null = no warning.</summary>
     public int? LowBalanceWarningPct { get; set; }
 

@@ -36,6 +36,11 @@ public class CreditBatchConfiguration : IEntityTypeConfiguration<CreditBatch>
             .HasForeignKey(b => b.PolicyId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(b => b.WelcomePolicy)
+            .WithMany()
+            .HasForeignKey(b => b.WelcomePolicyId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne(b => b.AdjustmentRequest)
             .WithMany()
             .HasForeignKey(b => b.AdjustmentRequestId)

@@ -49,8 +49,6 @@ public class CreditPolicyService : ICreditPolicyService
                 Scope: null,
                 PricePerCreditVnd: _config.PricePerCreditVnd,
                 CreditExpiryMonths: _config.CreditExpiryMonths,
-                WelcomeCredits: _config.WelcomeCredits,
-                WelcomeCreditExpiryMonths: _config.WelcomeCreditExpiryMonths,
                 LowBalanceWarningPct: _config.LowBalanceWarningPercent,
                 ExpiryWarningDays: _config.ExpiryWarningDays,
                 AdjustmentApprovalThreshold: _config.AdjustmentApprovalThreshold);
@@ -62,8 +60,6 @@ public class CreditPolicyService : ICreditPolicyService
             Scope: policy.Scope,
             PricePerCreditVnd: policy.PricePerCreditVnd,
             CreditExpiryMonths: policy.CreditExpiryMonths,
-            WelcomeCredits: policy.WelcomeCredits,
-            WelcomeCreditExpiryMonths: policy.WelcomeCreditExpiryMonths,
             LowBalanceWarningPct: policy.LowBalanceWarningPct,
             ExpiryWarningDays: policy.ExpiryWarningDays,
             AdjustmentApprovalThreshold: policy.AdjustmentApprovalThreshold);
@@ -118,8 +114,6 @@ public class CreditPolicyService : ICreditPolicyService
         existing.BrandId = changes.BrandId;
         existing.PricePerCreditVnd = changes.PricePerCreditVnd;
         existing.CreditExpiryMonths = changes.CreditExpiryMonths;
-        existing.WelcomeCredits = changes.WelcomeCredits;
-        existing.WelcomeCreditExpiryMonths = changes.WelcomeCreditExpiryMonths;
         existing.LowBalanceWarningPct = changes.LowBalanceWarningPct;
         existing.ExpiryWarningDays = changes.ExpiryWarningDays;
         existing.AdjustmentApprovalThreshold = changes.AdjustmentApprovalThreshold;
@@ -146,8 +140,6 @@ public class CreditPolicyService : ICreditPolicyService
             throw new InvalidOperationException("Policy name is required.");
         if (policy.PricePerCreditVnd < 0)
             throw new InvalidOperationException("Price per credit cannot be negative.");
-        if (policy.WelcomeCredits < 0)
-            throw new InvalidOperationException("Welcome credits cannot be negative.");
         if (policy.Scope == PolicyScope.BrandGroup && policy.BrandGroupId is null)
             throw new InvalidOperationException("BrandGroupId is required for a BrandGroup-scoped policy.");
         if (policy.Scope == PolicyScope.Brand && policy.BrandId is null)

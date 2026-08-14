@@ -1,0 +1,305 @@
+@page "/admin/welcome-policies"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Welcome Policies</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Welcome-Grant Policies</MudText>
+
+<MudText Typo="Typo.body2" Class="mb-4" Color="Color.Surface">
+    Per-business onboarding term: every new brand a business launches receives the policy's
+    welcome credits on activation. Falls back to <code>CreditConfig</code> defaults when a business
+    has no policy.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudSwitch T="bool" @bind-Value="_includeInactive" Color="Color.Primary" Label="Show inactive" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadPolicies">Refresh</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="NewPolicy">New Policy</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_policies" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Business</MudTh>
+                <MudTh Style="text-align:right">Welcome</MudTh>
+                <MudTh Style="text-align:right">Expiry (mo)</MudTh>
+                <MudTh>Effective</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Business">@(context.BusinessName ?? context.BusinessId.ToString())</MudTd>
+                <MudTd DataLabel="Welcome" Style="text-align:right">@context.WelcomeCredits</MudTd>
+                <MudTd DataLabel="Expiry" Style="text-align:right">@(context.WelcomeCreditExpiryMonths?.ToString() ?? "never")</MudTd>
+                <MudTd DataLabel="Effective">
+                    @context.EffectiveFrom.ToString("yyyy-MM-dd")@(context.EffectiveTo.HasValue ? $" → {context.EffectiveTo.Value:yyyy-MM-dd}" : " →")
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditPolicy(context)" />
+                    @if (context.IsActive)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => DeactivatePolicy(context)" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@if (_editingPolicy != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">@(_editingPolicy.Id == Guid.Empty ? "New Policy" : $"Edit Policy — {_editingPolicy.Name}")</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="_editingPolicy.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect @bind-Value="_editingPolicy.BusinessId" Label="Target business" Variant="Variant.Outlined"
+                           ToStringFunc="@(id => _businesses.FirstOrDefault(b => b.Id == id)?.BusinessName ?? id.ToString())">
+                    @foreach (var b in _businesses)
+                    {
+                        <MudSelectItem Value="@b.Id">@b.BusinessName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField @bind-Value="_editingPolicy.WelcomeCredits" Label="Welcome credits" Variant="Variant.Outlined" Min="0" />
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField @bind-Value="_editingPolicy.WelcomeCreditExpiryMonths" Label="Welcome expiry (mo)" Variant="Variant.Outlined" Min="1" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker @bind-Date="_effectiveFrom" Label="Effective from" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker @bind-Date="_effectiveTo" Label="Effective to (empty = open)" Variant="Variant.Outlined" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_editingPolicy.IsActive" Color="Color.Success" Label="Active" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePolicy" Disabled="_submitting">Save</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _editingPolicy = null">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = false;
+    private bool _submitting = false;
+    private bool _includeInactive = false;
+
+    private List<WelcomePolicyDto> _policies = new();
+    private List<BusinessLookupDto> _businesses = new();
+
+    private WelcomePolicyEditModel? _editingPolicy;
+    private DateTime? _effectiveFrom;
+    private DateTime? _effectiveTo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (AuthState.Role != "Admin")
+        {
+            Snackbar.Add("Access denied — Admin only.", Severity.Error);
+            return;
+        }
+        await LoadBusinesses();
+        await LoadPolicies();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadBusinesses()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/welcome-policies/businesses");
+            if (resp.IsSuccessStatusCode)
+                _businesses = await resp.Content.ReadFromJsonAsync<List<BusinessLookupDto>>() ?? new();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load businesses: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadPolicies()
+    {
+        _loading = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/welcome-policies?includeInactive={_includeInactive}");
+            if (resp.IsSuccessStatusCode)
+                _policies = await resp.Content.ReadFromJsonAsync<List<WelcomePolicyDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load policies.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private void NewPolicy()
+    {
+        _editingPolicy = new WelcomePolicyEditModel();
+        _effectiveFrom = DateTime.UtcNow.Date;
+        _effectiveTo = null;
+    }
+
+    private void EditPolicy(WelcomePolicyDto p)
+    {
+        _editingPolicy = new WelcomePolicyEditModel
+        {
+            Id = p.Id,
+            Name = p.Name,
+            BusinessId = p.BusinessId,
+            WelcomeCredits = p.WelcomeCredits,
+            WelcomeCreditExpiryMonths = p.WelcomeCreditExpiryMonths,
+            IsActive = p.IsActive
+        };
+        _effectiveFrom = p.EffectiveFrom;
+        _effectiveTo = p.EffectiveTo;
+    }
+
+    private async Task SavePolicy()
+    {
+        if (_editingPolicy == null) return;
+        if (string.IsNullOrWhiteSpace(_editingPolicy.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+        if (_editingPolicy.BusinessId == Guid.Empty)
+        {
+            Snackbar.Add("Target business is required.", Severity.Warning);
+            return;
+        }
+        if (_effectiveFrom == null)
+        {
+            Snackbar.Add("Effective-from date is required.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                _editingPolicy.Name,
+                BusinessId = _editingPolicy.BusinessId,
+                _editingPolicy.WelcomeCredits,
+                _editingPolicy.WelcomeCreditExpiryMonths,
+                EffectiveFrom = DateTime.SpecifyKind(_effectiveFrom.Value, DateTimeKind.Utc),
+                EffectiveTo = _effectiveTo.HasValue ? DateTime.SpecifyKind(_effectiveTo.Value, DateTimeKind.Utc) : (DateTime?)null,
+                _editingPolicy.IsActive
+            };
+
+            var resp = _editingPolicy.Id == Guid.Empty
+                ? await SendAsync(HttpMethod.Post, "api/v1/welcome-policies", payload)
+                : await SendAsync(HttpMethod.Put, $"api/v1/welcome-policies/{_editingPolicy.Id}", payload);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Welcome policy saved.", Severity.Success);
+                _editingPolicy = null;
+                await LoadPolicies();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Save failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private async Task DeactivatePolicy(WelcomePolicyDto p)
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/welcome-policies/{p.Id}/deactivate");
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Policy '{p.Name}' deactivated.", Severity.Success);
+                await LoadPolicies();
+            }
+            else
+            {
+                Snackbar.Add("Deactivate failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class BusinessLookupDto
+    {
+        public Guid Id { get; set; }
+        public string BusinessName { get; set; } = "";
+    }
+
+    private class WelcomePolicyDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public Guid BusinessId { get; set; }
+        public string? BusinessName { get; set; }
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; }
+        public DateTime EffectiveFrom { get; set; }
+        public DateTime? EffectiveTo { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class WelcomePolicyEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public Guid BusinessId { get; set; }
+        public int WelcomeCredits { get; set; } = 500;
+        public int? WelcomeCreditExpiryMonths { get; set; } = 12;
+        public bool IsActive { get; set; } = true;
+    }
+}

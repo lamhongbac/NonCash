@@ -99,6 +99,7 @@ var creditConfig = builder.Configuration.GetSection(CreditConfig.SectionName).Ge
 builder.Services.AddSingleton(creditConfig);
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ICreditPolicyService, CreditPolicyService>();
+builder.Services.AddScoped<IWelcomePolicyService, WelcomePolicyService>();
 builder.Services.AddScoped<ICreditAdjustmentService, CreditAdjustmentService>();
 
 // Integration partners (Epic 6)

@@ -17,12 +17,14 @@ public class CreditService : ICreditService
 {
     private readonly ApplicationDbContext _context;
     private readonly ICreditPolicyService _policyService;
+    private readonly IWelcomePolicyService _welcomePolicyService;
     private readonly ILogger<CreditService> _logger;
 
-    public CreditService(ApplicationDbContext context, ICreditPolicyService policyService, ILogger<CreditService> logger)
+    public CreditService(ApplicationDbContext context, ICreditPolicyService policyService, IWelcomePolicyService welcomePolicyService, ILogger<CreditService> logger)
     {
         _context = context;
         _policyService = policyService;
+        _welcomePolicyService = welcomePolicyService;
         _logger = logger;
     }
 
@@ -143,10 +145,22 @@ public class CreditService : ICreditService
 
     public async Task<CreditBatch?> GrantWelcomeAsync(Guid brandId, CancellationToken cancellationToken = default)
     {
-        var policy = await _policyService.ResolveForBrandAsync(brandId, cancellationToken);
-        if (policy.WelcomeCredits <= 0)
+        // Welcome is a per-business commercial term: resolve the brand's business, then
+        // the business's welcome policy (→ CreditConfig fallback).
+        var businessId = await _context.Brands
+            .AsNoTracking()
+            .Where(b => b.Id == brandId)
+            .Select(b => b.BusinessId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (businessId == Guid.Empty)
             return null;
 
+        var welcome = await _welcomePolicyService.ResolveForBusinessAsync(businessId, cancellationToken);
+        if (welcome.WelcomeCredits <= 0)
+            return null;
+
+        // Idempotent per brand: one welcome batch per brand, ever.
         var alreadyGranted = await _context.CreditBatches
             .AsNoTracking()
             .AnyAsync(b => b.BrandId == brandId && b.BatchType == CreditBatchType.WelcomeGrant, cancellationToken);
@@ -157,13 +171,13 @@ public class CreditService : ICreditService
         var batch = new CreditBatch
         {
             BrandId = brandId,
-            PolicyId = policy.PolicyId,
+            WelcomePolicyId = welcome.PolicyId,
             BatchType = CreditBatchType.WelcomeGrant,
-            OriginalAmount = policy.WelcomeCredits,
-            RemainingAmount = policy.WelcomeCredits,
+            OriginalAmount = welcome.WelcomeCredits,
+            RemainingAmount = welcome.WelcomeCredits,
             PricePerCreditVnd = 0m,
             TotalPaidVnd = 0m,
-            ExpiresAt = ToExpiry(policy.WelcomeCreditExpiryMonths),
+            ExpiresAt = ToExpiry(welcome.WelcomeCreditExpiryMonths),
             Reference = "Welcome credits on brand activation"
         };
 

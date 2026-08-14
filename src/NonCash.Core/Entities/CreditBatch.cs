@@ -28,8 +28,11 @@ public class CreditBatch : BaseEntity
 {
     public Guid BrandId { get; set; }
 
-    /// <summary>Policy in force when the batch was created (price/expiry snapshot source).</summary>
+    /// <summary>Pricing policy in force when a Purchase/Adjustment batch was created (price/expiry snapshot source). Null for welcome grants.</summary>
     public Guid? PolicyId { get; set; }
+
+    /// <summary>Welcome-grant policy in force when a WelcomeGrant batch was created. Null for non-welcome batches.</summary>
+    public Guid? WelcomePolicyId { get; set; }
 
     public CreditBatchType BatchType { get; set; }
 
@@ -66,5 +69,6 @@ public class CreditBatch : BaseEntity
     // Navigation
     public Brand? Brand { get; set; }
     public CreditPricingPolicy? Policy { get; set; }
+    public WelcomeGrantPolicy? WelcomePolicy { get; set; }
     public CreditAdjustmentRequest? AdjustmentRequest { get; set; }
 }
