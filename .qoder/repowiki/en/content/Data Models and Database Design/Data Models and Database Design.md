@@ -3,11 +3,38 @@
 <cite>
 **Referenced Files in This Document**
 - [data-models.md](file://docs/data-models.md)
+- [BaseEntity.cs](file://src/NonCash.Core/Entities/BaseEntity.cs)
+- [Brand.cs](file://src/NonCash.Core/Entities/Brand.cs)
+- [Outlet.cs](file://src/NonCash.Core/Entities/Outlet.cs)
+- [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
+- [VoucherDistribution.cs](file://src/NonCash.Core/Entities/VoucherDistribution.cs)
+- [VoucherReview.cs](file://src/NonCash.Core/Entities/VoucherReview.cs)
+- [VoucherUsage.cs](file://src/NonCash.Core/Entities/VoucherUsage.cs)
+- [VoucherPlanHeader.cs](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs)
+- [VoucherPlanDetail.cs](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs)
+- [SettlementEntry.cs](file://src/NonCash.Core/Entities/SettlementEntry.cs)
+- [CreditLedgerEntry.cs](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs)
+- [PaymentTransaction.cs](file://src/NonCash.Core/Entities/PaymentTransaction.cs)
+- [VoucherEvent.cs](file://src/NonCash.Core/Entities/VoucherEvent.cs)
+- [IntegrationPartner.cs](file://src/NonCash.Core/Entities/IntegrationPartner.cs)
+- [VoucherTransfer.cs](file://src/NonCash.Core/Entities/VoucherTransfer.cs)
+- [MemberAccount.cs](file://src/NonCash.Core/Entities/MemberAccount.cs)
+- [Business.cs](file://src/NonCash.Core/Entities/Business.cs)
 - [architecture.md](file://docs/architecture.md)
 - [source-tree-analysis.md](file://docs/source-tree-analysis.md)
 - [Key Functionalities.txt](file://Key Functionalities.txt)
 - [description.txt](file://description.txt)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added new entities: SettlementEntry, CreditLedgerEntry, PaymentTransaction, VoucherEvent, IntegrationPartner, VoucherTransfer, MemberAccount, and Business
+- Enhanced VoucherPlanHeader with display fields (CoverImageUrl, BrandColor, DisplayName, ShortDescription, TermsAndConditions, ValidDaysOfWeek)
+- Split Member entity into MemberAccount for better identity management with Customer relationship
+- Added settlement tracking for cross-tenant voucher redemptions
+- Implemented credit ledger system for prepaid billing model
+- Added integration partner management with webhook delivery system
+- Enhanced voucher transfer functionality with member-based transfers
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -22,7 +49,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. It covers entity definitions, relationships, constraints, and business rules embedded in the schema. It also documents data access patterns using Entity Framework Core, repository pattern implementation, and operational considerations such as lifecycle management, retention, archival, security, privacy, access control, and migration/versioning strategies.
+This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. The platform now includes enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms for voucher management across brands and outlets, settlement tracking for cross-tenant operations, credit ledger management, integration partner support, and improved member identity management.
 
 ## Project Structure
 The NonCash project follows a layered architecture with a clear separation of concerns:
@@ -61,112 +88,305 @@ BLL_CORE --> INFRA_DATA
 ## Core Components
 This section defines the core entities and their attributes, primary keys, foreign keys, and constraints. The entities are derived from the data models documentation and align with the layered architecture.
 
-- VoucherPlanHeader (Plan Header)
-  - Purpose: Captures the strategic plan for a voucher campaign.
-  - Key attributes:
-    - ID: GUID (Primary Key)
-    - PlanDate: DateTime
-    - CreatorID: GUID (Foreign Key to UserAccount)
-    - ApproverID: GUID (Nullable, Foreign Key to UserAccount)
-    - BrandID: GUID (Foreign Key to Brand)
-    - VoucherType: Enum (Complimentary, Gift)
-    - ImageURL: String
-    - IconURL: String
-    - ValueType: Enum (Value, Percentage)
-    - FaceValue: Decimal
-    - NetValue: Decimal
-    - ExpiryDate: DateTime
-    - PublishDate: DateTime
-    - SalesRange: List<OutletID> (Accepted outlet locations)
-    - TimeRange: DateRange (Valid from-to)
-    - TargetQuantity: Integer
-    - Budget: Decimal
-    - TargetDistributed: Integer
-    - TargetUsed: Integer
-    - ApprovalStatus: Enum (Pending, Approved, Rejected)
+### Enhanced Voucher Management Entities
 
-- VoucherPlanDetail (Voucher Detail)
-  - Purpose: Represents individual vouchers generated after plan approval.
+- **VoucherPlanHeader** (Enhanced Plan Header)
+  - Purpose: Captures the strategic plan for a voucher campaign with comprehensive approval workflows, versioning, and display capabilities.
   - Key attributes:
     - ID: GUID (Primary Key)
-    - ParentID: GUID (Foreign Key to VoucherPlanHeader)
+    - PlanDate: DateTime (Creation date)
+    - CreatorId: GUID (Foreign Key to UserAccount)
+    - ApproverId: GUID (Nullable, Foreign Key to UserAccount)
+    - BrandId: GUID (Foreign Key to Brand)
+    - VoucherType: Enum (Complimentary, Gift)
+    - ImageUrl: String (Url for detailed display)
+    - IconUrl: String (Url for grid/logo display)
+    - ValueType: Enum (Value, Percentage)
+    - FaceValue: Decimal (Usage value)
+    - NetValue: Decimal (Reference cost)
+    - ExpiryDate: DateTime (Hard expiry)
+    - PublishDate: DateTime (Availability date)
+    - ValidFrom: DateTime? (Flexible validity period)
+    - ValidTo: DateTime? (Flexible validity period)
+    - TargetQuantity: Integer (Expected volume)
+    - Budget: Decimal (Total cost)
+    - TargetDistributed: Integer (Goal for distribution)
+    - TargetUsed: Integer (Goal for POS usage)
+    - ApprovalStatus: Enum (Pending, Approved, Rejected)
+    - PreviousVersionId: GUID? (Foreign Key to previous version)
+    - VersionNumber: Integer (Version tracking)
+    - SponsorBrandId: GUID? (Cross-tenant sponsorship)
+    - CoverImageUrl: String? (Display image)
+    - TermsAndConditions: String? (Usage terms)
+    - BrandColor: String? (Hex color code)
+    - DisplayName: String? (Marketing name)
+    - ShortDescription: String? (Summary text)
+    - ValidDaysOfWeek: String? (Day restrictions)
+  - **New Features**: Display fields for rich rendering, cross-tenant sponsorship, enhanced approval workflow tracking, versioning support, flexible validity periods
+
+- **VoucherPlanDetail** (Enhanced Voucher Detail)
+  - Purpose: Represents individual vouchers generated after plan approval with enhanced POS lock functionality.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - ParentId: GUID (Foreign Key to VoucherPlanHeader)
     - SerialNo: String (Unique external ID)
-    - VoucherCode: String (Dynamic/JWT-like code for usage)
-    - MemberID: GUID (Nullable, Assigned owner)
+    - VoucherCodeSecret: String (Secure code storage)
+    - MemberId: GUID (Nullable - Assigned owner)
     - UsageStatus: Enum (Pending, In-Use, Complete)
     - UsedDate: DateTime? (Nullable)
+    - LockId: GUID? (POS transaction lock)
+    - LockedAt: DateTime? (Lock timestamp)
+    - BillNumber: String? (POS bill reference)
+    - LockedOutletId: GUID? (Outlet where locked)
+  - **New Features**: POS transaction locking, bill tracking, enhanced security
 
-- VoucherUsage
-  - Purpose: Stores the history of voucher redemptions at POS.
+- **VoucherReview** (Approval Tracking)
+  - Purpose: Comprehensive tracking of approval decisions and review processes.
   - Key attributes:
-    - ID: GUID
-    - VoucherID: GUID (Foreign Key to VoucherPlanDetail)
-    - POSID: String (Redemption location)
-    - TransactionID: String (Link to POS transaction)
+    - ID: GUID (Primary Key)
+    - PlanId: GUID (Foreign Key to VoucherPlanHeader)
+    - ApproverId: GUID (Foreign Key to UserAccount)
+    - ReviewDate: DateTime
+    - ReviewNotes: String? (Approval comments)
+    - Decision: Enum (Approved, Rejected)
+    - PublishDate: DateTime? (Publication decision)
+
+### New Financial and Settlement Entities
+
+- **SettlementEntry** (Cross-Tenant Settlement)
+  - Purpose: Tracks cross-tenant settlement obligations arising from voucher redemptions where sponsor brand differs from redeeming brand.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - SponsorBrandId: GUID? (Brand that sponsored the campaign)
+    - IssuingBrandId: GUID (Brand that issued the voucher)
+    - RedeemBrandId: GUID? (Brand at whose outlet redeemed)
+    - RedeemOutletId: GUID? (Outlet where redeemed)
+    - VoucherUsageId: GUID (Linked VoucherUsage record)
+    - FaceValue: Decimal (Value at redemption time)
+    - Status: Enum (Pending, Settled)
+    - SettledAt: DateTime? (Settlement completion time)
+    - SettledBy: GUID? (User/system that settled)
+
+- **CreditLedgerEntry** (Prepaid Credit Ledger)
+  - Purpose: Append-only prepaid credit ledger for billing model. Balance = SUM(Amount) per brand.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - BrandId: GUID (Brand whose balance affected)
+    - EntryType: Enum (Grant, Purchase, Consumption, Adjustment)
+    - Amount: Integer (Signed: positive for Grant/Purchase, negative for Consumption)
+    - Reference: String? (Free-text reference)
+    - VoucherDetailId: GUID? (Unique when set - enforces 1 voucher = max 1 credit)
+    - CreatedBy: GUID? (User who created entry)
+
+- **PaymentTransaction** (Payment Processing)
+  - Purpose: Records payment transactions for voucher purchases.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - PurchaseOrderId: GUID (Related purchase order)
+    - Gateway: String (Payment gateway name)
+    - GatewayTransactionId: String (External transaction ID)
+    - Amount: Decimal (Transaction amount)
+    - Currency: String (Default: VND)
+    - Status: Enum (Pending, Success, Failed, Cancelled, Refunded)
+    - RequestPayload: String? (Gateway request data)
+    - ResponsePayload: String? (Gateway response data)
+    - WebhookPayload: String? (Webhook data)
+    - GatewayResponseCode: String? (Gateway status code)
+    - CompletedAt: DateTime? (Completion timestamp)
+
+### Integration and Event Management
+
+- **VoucherEvent** (Outbox Pattern Events)
+  - Purpose: Outbox-pattern event record for webhook delivery to integration partners.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - EventType: String (Event type like "voucher.distributed", "voucher.redeemed")
+    - VoucherId: GUID? (Related voucher)
+    - MemberPhone: String? (Member phone for queries)
+    - BrandId: GUID? (Brand context)
+    - PayloadJson: String (JSON payload data)
+
+- **WebhookDelivery** (Event Delivery Tracking)
+  - Purpose: Tracks delivery of events to specific integration partners with retry logic.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - PartnerId: GUID (Target partner)
+    - EventId: GUID (Event being delivered)
+    - HttpStatus: Int? (Last HTTP status code)
+    - RetryCount: Int (Attempt count)
+    - DeliveredAt: DateTime? (Successful delivery time)
+    - NextRetryAt: DateTime? (Next retry schedule)
+    - LastError: String? (Error message)
+
+- **IntegrationPartner** (External System Integration)
+  - Purpose: Represents external loyalty apps or CRM systems integrating with NonCash.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - Name: String (Display name)
+    - ContactEmail: String (Technical contact)
+    - CallbackUrl: String (Webhook endpoint URL)
+    - ApiKeyPrefix: String (First 8 chars for identification)
+    - ApiKeyHash: String (BCrypt hash of full API key)
+    - WebhookSecret: String (HMAC-SHA256 secret)
+    - IsActive: Boolean (Active status)
+
+### Member Identity and Transfer Management
+
+- **MemberAccount** (Enhanced Member Identity)
+  - Purpose: Manages member login credentials and account status, split from Customer for better identity management.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - CustomerId: GUID (FK to Customer)
+    - Username: String (Login username)
+    - PasswordHash: String (Encrypted password)
+    - FullName: String (Display name)
+    - Status: Enum (PendingActivation, Active, Locked)
+
+- **VoucherTransfer** (Voucher Gifting)
+  - Purpose: Manages voucher transfers between members with acceptance workflow.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - SenderId: GUID (FK to MemberAccount)
+    - RecipientId: GUID (FK to MemberAccount)
+    - VoucherId: GUID (FK to VoucherPlanDetail)
+    - Status: Enum (PendingAcceptance, Accepted, Rejected, Expired, Cancelled)
+    - TransferType: Enum (Gift)
+    - InitiatedAt: DateTime (Transfer creation time)
+    - ExpiresAt: DateTime (Transfer expiration)
+    - Note: String? (Transfer note)
+    - RejectReason: String? (Rejection reason)
+    - RespondedAt: DateTime? (Response timestamp)
+
+### Business and Organizational Entities
+
+- **Business** (Organizational Unit)
+  - Purpose: Represents organizational units that own multiple brands.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - BusinessName: String (Organization name)
+    - TaxCode: String (Tax identification)
+    - Address: String (Physical address)
+    - ContactEmail: String? (Contact email)
+    - PhoneNumber: String? (Contact phone)
+    - IsActive: Boolean (Active status)
+
+### Supporting Entities
+
+- **VoucherUsage** (Enhanced Usage Tracking)
+  - Purpose: Stores history of voucher redemptions at POS with improved POS identification.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - VoucherId: GUID (FK to VoucherPlanDetail)
+    - PosId: GUID (FK to Outlet)
+    - TransactionId: String (POS transaction link)
     - UsageDate: DateTime
     - AmountUsed: Decimal
 
-- VoucherDistribution
+- **VoucherDistribution** (Distribution Tracking)
   - Purpose: Tracks how vouchers were sent to customers.
   - Key attributes:
-    - ID: GUID
-    - VoucherID: GUID
-    - MemberID: GUID
+    - ID: GUID (Primary Key)
+    - VoucherId: GUID (FK to VoucherPlanDetail)
+    - MemberId: GUID (FK to Customer)
     - Method: Enum (Sale, Promotion, Transfer)
     - DistributionDate: DateTime
 
-- Brand (Organization / Tenant)
+- **Brand** (Organization / Tenant)
   - Purpose: Represents businesses that create and distribute vouchers.
   - Key attributes:
-    - BrandID: GUID (Primary Key)
+    - ID: GUID (Primary Key)
     - Name: String
     - TaxCode: String
-    - ContactEmail: String
-    - Status: Enum (Active, Suspended)
+    - ContactEmail: String?
+    - Status: Enum (PendingActivation, Active, Suspended)
 
-- Outlet (Point of Sale / Store)
+- **Outlet** (Point of Sale / Store)
   - Purpose: Represents physical or digital stores belonging to a Brand.
   - Key attributes:
-    - OutletID: GUID (Primary Key)
-    - BrandID: GUID (Foreign Key to Brand)
+    - ID: GUID (Primary Key)
+    - BrandId: GUID (FK to Brand)
     - Name: String
-    - Address: String
+    - Address: String?
     - Status: Enum (Active, Closed)
+    - ApiKeyPrefix: String? (POS API access)
 
-- UserAccount (Back-office Users)
+- **UserAccount** (Enhanced Back-office Users)
   - Purpose: Platform access for creating, reviewing, and approving plans.
   - Key attributes:
-    - UserID: GUID (Primary Key)
-    - BrandID: GUID (Nullable, Foreign Key to Brand)
+    - ID: GUID (Primary Key)
+    - BrandId: GUID (Nullable, FK to Brand)
     - Username: String
     - PasswordHash: String
     - FullName: String
-    - Role: Enum (Admin, Planner, Approver)
-    - Status: Enum (Active, Locked)
+    - Role: Enum (Admin, BrandManager, Planner, Approver)
+    - Status: Enum (PendingActivation, Active, Locked)
 
-- Customer (End-User / App Member)
+- **Customer** (End-User / App Member)
   - Purpose: Consumers who hold and use distributed vouchers.
   - Key attributes:
-    - CustomerID: GUID (Primary Key)
-    - PhoneNumber: String (Primary identifier for transfer/login)
+    - ID: GUID (Primary Key)
+    - PhoneNumber: String (Primary identifier)
     - FullName: String
     - Email: String
     - Status: Enum (Active, Blacklisted)
 
+### New Junction Entities
+
+- **PlanOutlet** (Outlet Assignment)
+  - Purpose: Junction table linking voucher plans to specific outlets.
+  - Key attributes:
+    - PlanId: GUID (FK to VoucherPlanHeader)
+    - OutletId: GUID (FK to Outlet)
+
+- **PartnerBrand** (Integration Authorization)
+  - Purpose: Join entity linking IntegrationPartner to authorized Brands.
+  - Key attributes:
+    - PartnerId: GUID (FK to IntegrationPartner)
+    - BrandId: GUID (FK to Brand)
+
 Entity relationships and constraints:
-- VoucherPlanHeader.ID → VoucherPlanDetail.ParentID (1-to-many)
-- VoucherPlanHeader.BrandID → Brand.BrandID (many-to-1)
-- VoucherPlanHeader.CreatorID/UserAccount.UserID (many-to-1)
-- VoucherPlanHeader.ApproverID → UserAccount.UserID (nullable, many-to-1)
-- VoucherPlanDetail.MemberID → Customer.CustomerID (nullable, many-to-1)
-- VoucherUsage.VoucherID → VoucherPlanDetail.ID (many-to-1)
-- VoucherDistribution.VoucherID → VoucherPlanDetail.ID (many-to-1)
-- VoucherDistribution.MemberID → Customer.CustomerID (many-to-1)
-- Outlet.BrandID → Brand.BrandID (many-to-1)
+- VoucherPlanHeader.ID → VoucherPlanDetail.ParentId (1-to-many)
+- VoucherPlanHeader.BrandId → Brand.ID (many-to-1)
+- VoucherPlanHeader.CreatorId/ApproverId → UserAccount.ID (many-to-1)
+- VoucherPlanDetail.MemberId → MemberAccount.ID (nullable, many-to-1)
+- VoucherUsage.VoucherId → VoucherPlanDetail.ID (many-to-1)
+- VoucherUsage.PosId → Outlet.ID (many-to-1)
+- VoucherDistribution.VoucherId → VoucherPlanDetail.ID (many-to-1)
+- VoucherDistribution.MemberId → Customer.ID (many-to-1)
+- SettlementEntry.VoucherUsageId → VoucherUsage.ID (one-to-one)
+- SettlementEntry.SponsorBrandId/IssuingBrandId/RedeemBrandId → Brand.ID (many-to-1)
+- CreditLedgerEntry.BrandId → Brand.ID (many-to-1)
+- PaymentTransaction.PurchaseOrderId → PurchaseOrder.ID (many-to-1)
+- VoucherEvent.VoucherId → VoucherPlanDetail.ID (many-to-1)
+- VoucherEvent.BrandId → Brand.ID (many-to-1)
+- WebhookDelivery.PartnerId → IntegrationPartner.ID (many-to-1)
+- WebhookDelivery.EventId → VoucherEvent.ID (many-to-1)
+- IntegrationPartner.Id → PartnerBrand.PartnerId (one-to-many)
+- VoucherTransfer.SenderId/RecipientId → MemberAccount.ID (many-to-1)
+- VoucherTransfer.VoucherId → VoucherPlanDetail.ID (many-to-1)
+- MemberAccount.CustomerId → Customer.ID (one-to-one)
+- Business.Id → Brand.BusinessId (one-to-many)
+- PlanOutlet.PlanId → VoucherPlanHeader.ID (many-to-1)
+- PlanOutlet.OutletId → Outlet.ID (many-to-1)
 
 **Section sources**
-- [data-models.md:9-98](file://docs/data-models.md#L9-L98)
-- [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
+- [data-models.md:9-113](file://docs/data-models.md#L9-L113)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L21)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
 
 ## Architecture Overview
 The NonCash system employs a relational model managed via Entity Framework Core and PostgreSQL. The Data Access Layer uses the Repository pattern to abstract persistence concerns, enabling decoupling from the Business Logic Layer and supporting schema evolution and technology changes.
@@ -203,28 +423,29 @@ DC --> MIG
 
 ## Detailed Component Analysis
 
-### Entity Relationship Model
-The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities.
+### Enhanced Entity Relationship Model
+The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities. The model now includes enhanced approval workflows, versioning, comprehensive tracking, settlement management, credit ledger, integration partners, and member identity management.
 
 ```mermaid
 erDiagram
 BRAND {
-uuid BrandID PK
+uuid ID PK
 string Name
 string TaxCode
 string ContactEmail
 enum Status
 }
 OUTLET {
-uuid OutletID PK
-uuid BrandID FK
+uuid ID PK
+uuid BrandId FK
 string Name
 string Address
 enum Status
+string ApiKeyPrefix
 }
 USERACCOUNT {
-uuid UserID PK
-uuid BrandID FK
+uuid ID PK
+uuid BrandId FK
 string Username
 string PasswordHash
 string FullName
@@ -232,90 +453,260 @@ enum Role
 enum Status
 }
 CUSTOMER {
-uuid CustomerID PK
+uuid ID PK
 string PhoneNumber
 string FullName
 string Email
 enum Status
 }
-VOICEPLANHEADER {
+MEMBERACCOUNT {
+uuid ID PK
+uuid CustomerId FK
+string Username
+string PasswordHash
+string FullName
+enum Status
+}
+BUSINESS {
+uuid ID PK
+string BusinessName
+string TaxCode
+string Address
+string ContactEmail
+string PhoneNumber
+bool IsActive
+}
+VOUCHERPLANHEADER {
 uuid ID PK
 datetime PlanDate
-uuid CreatorID FK
-uuid ApproverID FK
-uuid BrandID FK
+uuid CreatorId FK
+uuid ApproverId FK
+uuid BrandId FK
+uuid SponsorBrandId FK
 enum VoucherType
-string ImageURL
-string IconURL
+string ImageUrl
+string IconUrl
 enum ValueType
 decimal FaceValue
 decimal NetValue
 datetime ExpiryDate
 datetime PublishDate
-jsonb SalesRange
-daterange TimeRange
+datetime ValidFrom
+datetime ValidTo
 int TargetQuantity
 decimal Budget
 int TargetDistributed
 int TargetUsed
 enum ApprovalStatus
+uuid PreviousVersionId FK
+int VersionNumber
+string CoverImageUrl
+string TermsAndConditions
+string BrandColor
+string DisplayName
+string ShortDescription
+string ValidDaysOfWeek
 }
-VOICEPLANDetail {
+VOUCHERPLANDetail {
 uuid ID PK
-uuid ParentID FK
+uuid ParentId FK
 string SerialNo
-string VoucherCode
-uuid MemberID FK
+string VoucherCodeSecret
+uuid MemberId FK
 enum UsageStatus
 datetime UsedDate
+uuid LockId
+datetime LockedAt
+string BillNumber
+uuid LockedOutletId
 }
-VOICEUSAGE {
+VOUCHERREVIEW {
 uuid ID PK
-uuid VoucherID FK
-string POSID
-string TransactionID
-datetime UsageDate
-decimal AmountUsed
+uuid PlanId FK
+uuid ApproverId FK
+datetime ReviewDate
+string ReviewNotes
+enum Decision
+datetime PublishDate
 }
 VOICEDISTRIBUTION {
 uuid ID PK
-uuid VoucherID FK
-uuid MemberID FK
+uuid VoucherId FK
+uuid MemberId FK
 enum Method
 datetime DistributionDate
 }
+VOUCHERUSAGE {
+uuid ID PK
+uuid VoucherId FK
+uuid PosId FK
+string TransactionId
+datetime UsageDate
+decimal AmountUsed
+}
+SETTLEMENTENTRY {
+uuid ID PK
+uuid SponsorBrandId FK
+uuid IssuingBrandId FK
+uuid RedeemBrandId FK
+uuid RedeemOutletId FK
+uuid VoucherUsageId FK
+decimal FaceValue
+enum Status
+datetime SettledAt
+uuid SettledBy
+}
+CREDITLEDGERENTRY {
+uuid ID PK
+uuid BrandId FK
+enum EntryType
+int Amount
+string Reference
+uuid VoucherDetailId
+uuid CreatedBy
+}
+PAYMENTTRANSACTION {
+uuid ID PK
+uuid PurchaseOrderId FK
+string Gateway
+string GatewayTransactionId
+decimal Amount
+string Currency
+enum Status
+string RequestPayload
+string ResponsePayload
+string WebhookPayload
+string GatewayResponseCode
+datetime CompletedAt
+}
+VOUCHEVENT {
+uuid ID PK
+string EventType
+uuid VoucherId FK
+string MemberPhone
+uuid BrandId FK
+string PayloadJson
+}
+WEBHOOKDELIVERY {
+uuid ID PK
+uuid PartnerId FK
+uuid EventId FK
+int HttpStatus
+int RetryCount
+datetime DeliveredAt
+datetime NextRetryAt
+string LastError
+}
+INTEGRATIONPARTNER {
+uuid ID PK
+string Name
+string ContactEmail
+string CallbackUrl
+string ApiKeyPrefix
+string ApiKeyHash
+string WebhookSecret
+bool IsActive
+}
+VOUCHERTRANSFER {
+uuid ID PK
+uuid SenderId FK
+uuid RecipientId FK
+uuid VoucherId FK
+enum Status
+enum TransferType
+datetime InitiatedAt
+datetime ExpiresAt
+string Note
+string RejectReason
+datetime RespondedAt
+}
+PLANOUTLET {
+uuid PlanId FK
+uuid OutletId FK
+}
+PARTNERBRAND {
+uuid PartnerId FK
+uuid BrandId FK
+}
 BRAND ||--o{ OUTLET : "owns"
-BRAND ||--o{ VOICEPLANHEADER : "creates"
-USERACCOUNT ||--o{ VOICEPLANHEADER : "creates/approves"
+BRAND ||--o{ VOUCHERPLANHEADER : "creates"
+BRAND ||--o{ SETTLEMENTENTRY : "sponsor/issue/redeem"
+BRAND ||--o{ CREDITLEDGERENTRY : "balance"
+BRAND ||--o{ PARTNERBRAND : "authorized"
+BUSINESS ||--o{ BRAND : "owns"
+USERACCOUNT ||--o{ VOUCHERPLANHEADER : "creates/approves"
+USERACCOUNT ||--o{ VOUCHERREVIEW : "reviews"
 CUSTOMER ||--o{ VOICEDISTRIBUTION : "receives"
-CUSTOMER ||--o{ VOICEPLANDetail : "assigned"
-VOICEPLANHEADER ||--o{ VOICEDISTRIBUTION : "generates"
-VOICEPLANHEADER ||--o{ VOICEPLANDetail : "produces"
-VOICEPLANDetail ||--o{ VOICEUSAGE : "consumed"
+CUSTOMER ||--o{ MEMBERACCOUNT : "has account"
+MEMBERACCOUNT ||--o{ VOUCHERPLANDetail : "assigned"
+MEMBERACCOUNT ||--o{ VOUCHERTRANSFER : "sender/recipient"
+VOUCHERPLANHEADER ||--o{ VOICEDISTRIBUTION : "generates"
+VOUCHERPLANHEADER ||--o{ VOUCHEPLANDetail : "produces"
+VOUCHERPLANHEADER ||--o{ VOUCHERREVIEW : "undergoes"
+VOUCHERPLANHEADER ||--o{ PLANOUTLET : "assigns"
+VOUCHERPLANDetail ||--o{ VOUCHEUSAGE : "consumed"
+VOUCHERUSAGE ||--o{ SETTLEMENTENTRY : "triggers"
+VOUCHEREVENT ||--o{ WEBHOOKDELIVERY : "delivered to"
+INTEGRATIONPARTNER ||--o{ WEBHOOKDELIVERY : "receives"
+VOUCHERTRANSFER ||--o{ VOUCHEPLANDetail : "transfers"
 ```
 
 **Diagram sources**
-- [data-models.md:9-98](file://docs/data-models.md#L9-L98)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L21)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
 
-### Data Validation and Business Rules Embedded in Schema
-- Multi-tenancy isolation: BrandID ensures tenant boundaries across entities.
-- Approval workflow: VoucherPlanHeader tracks ApprovalStatus and links approver via ApproverID.
-- Dynamic security: VoucherPlanDetail.VoucherCode is designed as a rotating, JWT-like code to prevent reuse.
-- POS integration controls: VoucherUsage records POSID and TransactionID for auditability and reconciliation.
-- Outlet acceptance: VoucherPlanHeader.SalesRange restricts voucher usage to designated Outlets.
-- Time-bound validity: VoucherPlanHeader.TimeRange and ExpiryDate enforce temporal constraints.
-- Distribution tracking: VoucherDistribution.Method categorizes how vouchers reached customers.
-- User roles: UserAccount.Role defines access levels (Admin, Planner, Approver).
+### Enhanced Data Validation and Business Rules Embedded in Schema
+- **Multi-tenancy isolation**: BrandId ensures tenant boundaries across entities.
+- **Comprehensive approval workflow**: VoucherPlanHeader tracks ApprovalStatus with VoucherReview providing detailed audit trail.
+- **Versioning support**: VoucherPlanHeader includes PreviousVersionId and VersionNumber for plan evolution tracking.
+- **Enhanced security**: VoucherPlanDetail.VoucherCodeSecret provides secure code storage with POS transaction locking.
+- **Improved POS integration**: VoucherUsage now uses Outlet ID for precise POS identification and transaction tracking.
+- **Flexible validity periods**: VoucherPlanHeader supports both fixed ExpiryDate and flexible ValidFrom/ValidTo ranges.
+- **Outlet assignment flexibility**: PlanOutlet junction table enables granular outlet targeting for campaigns.
+- **Enhanced user roles**: UserAccount includes BrandManager role for improved multi-tenancy management.
+- **POS transaction control**: VoucherPlanDetail includes LockId, LockedAt, and LockedOutletId for transaction integrity.
+- **Cross-tenant settlement tracking**: SettlementEntry manages financial obligations between different brands.
+- **Credit ledger integrity**: CreditLedgerEntry enforces unique consumption per voucher with filtered unique index.
+- **Integration partner security**: IntegrationPartner uses BCrypt hashing for API keys and HMAC-SHA256 for webhooks.
+- **Member identity separation**: MemberAccount separates authentication from customer data for better security.
+- **Voucher transfer lifecycle**: VoucherTransfer manages complete transfer workflow with expiration and rejection handling.
 
 **Section sources**
-- [data-models.md:9-98](file://docs/data-models.md#L9-L98)
-- [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
-- [architecture.md:36-41](file://docs/architecture.md#L36-L41)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
 
-### Data Access Patterns Using Entity Framework Core and Repository Pattern
+### Enhanced Data Access Patterns Using Entity Framework Core and Repository Pattern
 - DbContext encapsulates all entity sets and manages change tracking and transactions.
 - Repository pattern abstracts CRUD operations, enabling testability and technology flexibility.
-- Transactions for POS usage ensure atomicity during redemption and updates to dependent entities.
+- **Enhanced transaction handling**: POS usage operations now include voucher locking and transaction integrity.
+- **Version-aware queries**: Repository methods handle plan versioning and approval status filtering.
+- **Approval workflow integration**: Services coordinate between VoucherPlanHeader, VoucherReview, and approval processes.
+- **Settlement processing**: SettlementService manages cross-tenant financial settlements with proper auditing.
+- **Credit ledger operations**: CreditService handles append-only ledger entries with balance calculations.
+- **Integration partner management**: IntegrationPartnerService manages API keys, webhooks, and brand authorizations.
+- **Event-driven architecture**: VoucherEvent and WebhookDelivery enable reliable webhook delivery with retry logic.
 - Migrations manage schema evolution and version control for PostgreSQL.
 
 ```mermaid
@@ -327,12 +718,14 @@ participant Repo as "Repository"
 participant DB as "DbContext/DB"
 Client->>API : "POST /api/usage"
 API->>Service : "VerifyAndApply(voucherCode, posId, amount)"
-Service->>Repo : "GetByCode(voucherCode)"
-Repo->>DB : "Query VoucherPlanDetail"
-DB-->>Repo : "Voucher entity"
-Repo-->>Service : "Voucher"
-Service->>Repo : "Update(UsageStatus, UsedDate)"
+Service->>Repo : "GetByCodeWithLock(voucherCode)"
+Repo->>DB : "Query VoucherPlanDetail with Lock"
+DB-->>Repo : "Locked voucher entity"
+Service->>Repo : "Update(UsageStatus, UsedDate, Unlock)"
 Service->>Repo : "Create(VoucherUsage)"
+Service->>Repo : "Create(SettlementEntry if cross-tenant)"
+Service->>Repo : "Create(CreditLedgerEntry for consumption)"
+Service->>Repo : "Create(VoucherEvent for webhooks)"
 Repo->>DB : "Begin Transaction"
 DB-->>Repo : "Commit"
 Repo-->>Service : "Success"
@@ -348,29 +741,62 @@ API-->>Client : "Response"
 - [architecture.md:28-52](file://docs/architecture.md#L28-L52)
 - [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
-### Sample Data Examples
-Below are representative rows illustrating typical data entries across entities. These examples illustrate relationships and constraints without exposing sensitive information.
+### Enhanced Sample Data Examples
+Below are representative rows illustrating typical data entries across entities with the enhanced functionality. These examples illustrate relationships and constraints without exposing sensitive information.
 
-- Brand
-  - BrandID: [GUID], Name: "The Coffee House", TaxCode: "THC-12345", ContactEmail: "admin@thecoffeehouse.example", Status: Active
-- Outlet
-  - OutletID: [GUID], BrandID: [Brand GUID], Name: "Downtown Store", Address: "123 Main St", Status: Active
-- UserAccount
-  - UserID: [GUID], BrandID: [Brand GUID], Username: "planner_user", PasswordHash: "[hash]", FullName: "Jane Planner", Role: Planner, Status: Active
-- Customer
-  - CustomerID: [GUID], PhoneNumber: "+8490xxxxxxx", FullName: "John Doe", Email: "john.doe@example", Status: Active
-- VoucherPlanHeader
-  - ID: [GUID], PlanDate: 2026-06-01, CreatorID: [User GUID], ApproverID: [User GUID], BrandID: [Brand GUID], VoucherType: Complimentary, ValueType: Value, FaceValue: 100000, NetValue: 80000, ExpiryDate: 2026-12-31, PublishDate: 2026-06-15, SalesRange: ["[Outlet GUID 1]","[Outlet GUID 2]"], TimeRange: ["2026-06-15","2026-12-31"), TargetQuantity: 1000, Budget: 80000000, TargetDistributed: 800, TargetUsed: 800, ApprovalStatus: Approved
-- VoucherPlanDetail
-  - ID: [GUID], ParentID: [Plan GUID], SerialNo: "VC2026-001", VoucherCode: "dyn-code-abc123", MemberID: [Customer GUID], UsageStatus: In-Use, UsedDate: null
-- VoucherDistribution
-  - ID: [GUID], VoucherID: [Detail GUID], MemberID: [Customer GUID], Method: Sale, DistributionDate: 2026-06-16
-- VoucherUsage
-  - ID: [GUID], VoucherID: [Detail GUID], POSID: "POS-101", TransactionID: "TXN-2026-001", UsageDate: 2026-06-17, AmountUsed: 100000
+- **Business**
+  - ID: [GUID], BusinessName: "Giga Mall Group", TaxCode: "GMG-12345", Address: "456 Corporate Blvd", ContactEmail: "admin@gigamall.example", PhoneNumber: "+8490xxxxxxx", IsActive: true
+- **Brand**
+  - ID: [GUID], Name: "The Coffee House", TaxCode: "THC-12345", ContactEmail: "admin@thecoffeehouse.example", Status: Active
+- **Outlet**
+  - ID: [GUID], BrandId: [Brand GUID], Name: "Downtown Store", Address: "123 Main St", Status: Active, ApiKeyPrefix: "POS-101"
+- **UserAccount**
+  - ID: [GUID], BrandId: [Brand GUID], Username: "brand_manager", PasswordHash: "[hash]", FullName: "Jane Brand Manager", Role: BrandManager, Status: Active
+- **Customer**
+  - ID: [GUID], PhoneNumber: "+8490xxxxxxx", FullName: "John Doe", Email: "john.doe@example", Status: Active
+- **MemberAccount**
+  - ID: [GUID], CustomerId: [Customer GUID], Username: "johndoe", PasswordHash: "[hash]", FullName: "John Doe", Status: Active
+- **IntegrationPartner**
+  - ID: [GUID], Name: "Giga Mall App", ContactEmail: "tech@gigamall.example", CallbackUrl: "https://gigamall.example/webhook", ApiKeyPrefix: "abc12345", ApiKeyHash: "[bcrypt-hash]", WebhookSecret: "[secret]", IsActive: true
+- **VoucherPlanHeader** *(Enhanced)*
+  - ID: [GUID], PlanDate: 2026-06-01, CreatorId: [User GUID], ApproverId: [User GUID], BrandId: [Brand GUID], VoucherType: Complimentary, ValueType: Value, FaceValue: 100000, NetValue: 80000, ExpiryDate: 2026-12-31, PublishDate: 2026-06-15, ValidFrom: 2026-06-15, ValidTo: 2026-12-31, TargetQuantity: 1000, Budget: 80000000, TargetDistributed: 800, TargetUsed: 800, ApprovalStatus: Approved, PreviousVersionId: null, VersionNumber: 1, SponsorBrandId: null, CoverImageUrl: "/images/voucher_cover.jpg", TermsAndConditions: "Valid at participating outlets only", BrandColor: "#E53935", DisplayName: "Weekend Treat 200K", ShortDescription: "Enjoy 200K off your weekend coffee", ValidDaysOfWeek: "Sat,Sun"
+- **VoucherPlanDetail** *(Enhanced)*
+  - ID: [GUID], ParentId: [Plan GUID], SerialNo: "VC2026-001", VoucherCodeSecret: "secret-hash-abc123", MemberId: [Member GUID], UsageStatus: InUse, UsedDate: null, LockId: [GUID], LockedAt: 2026-06-17T10:30:00Z, BillNumber: "BILL-001", LockedOutletId: [Outlet GUID]
+- **VoucherReview**
+  - ID: [GUID], PlanId: [Plan GUID], ApproverId: [User GUID], ReviewDate: 2026-06-15T14:30:00Z, ReviewNotes: "Approved with conditions", Decision: Approved, PublishDate: 2026-06-15T15:00:00Z
+- **VoucherDistribution**
+  - ID: [GUID], VoucherId: [Detail GUID], MemberId: [Customer GUID], Method: Sale, DistributionDate: 2026-06-16
+- **VoucherUsage** *(Enhanced)*
+  - ID: [GUID], VoucherId: [Detail GUID], PosId: [Outlet GUID], TransactionId: "TXN-2026-001", UsageDate: 2026-06-17, AmountUsed: 100000
+- **SettlementEntry** *(New)*
+  - ID: [GUID], SponsorBrandId: [Brand GUID], IssuingBrandId: [Brand GUID], RedeemBrandId: [Brand GUID], RedeemOutletId: [Outlet GUID], VoucherUsageId: [Usage GUID], FaceValue: 100000, Status: Pending, SettledAt: null, SettledBy: null
+- **CreditLedgerEntry** *(New)*
+  - ID: [GUID], BrandId: [Brand GUID], EntryType: Consumption, Amount: -1, Reference: "Voucher redemption", VoucherDetailId: [Detail GUID], CreatedBy: null
+- **PaymentTransaction** *(New)*
+  - ID: [GUID], PurchaseOrderId: [Purchase GUID], Gateway: "ZaloPay", GatewayTransactionId: "zp-123456", Amount: 100000, Currency: "VND", Status: Success, RequestPayload: "{...}", ResponsePayload: "{...}", WebhookPayload: "{...}", GatewayResponseCode: "00", CompletedAt: 2026-06-16T10:00:00Z
+- **VoucherEvent** *(New)*
+  - ID: [GUID], EventType: "voucher.redeemed", VoucherId: [Detail GUID], MemberPhone: "+8490xxxxxxx", BrandId: [Brand GUID], PayloadJson: "{\"amount\":100000,\"outlet\":\"store1\"}"
+- **WebhookDelivery** *(New)*
+  - ID: [GUID], PartnerId: [Partner GUID], EventId: [Event GUID], HttpStatus: 200, RetryCount: 0, DeliveredAt: 2026-06-17T10:31:00Z, NextRetryAt: null, LastError: null
+- **VoucherTransfer** *(New)*
+  - ID: [GUID], SenderId: [Member GUID], RecipientId: [Member GUID], VoucherId: [Detail GUID], Status: PendingAcceptance, TransferType: Gift, InitiatedAt: 2026-06-16T15:00:00Z, ExpiresAt: 2026-06-23T15:00:00Z, Note: "Birthday gift!", RejectReason: null, RespondedAt: null
+- **PlanOutlet**
+  - PlanId: [Plan GUID], OutletId: [Outlet GUID]
 
 **Section sources**
-- [data-models.md:9-98](file://docs/data-models.md#L9-L98)
-- [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
+- [data-models.md:9-113](file://docs/data-models.md#L9-L113)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
 
 ## Dependency Analysis
 The following diagram highlights dependencies among layers and components relevant to data modeling and access.
@@ -391,93 +817,169 @@ CORE --> INFRA
 - [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
 ## Performance Considerations
-- Indexing strategy:
-  - VoucherPlanHeader: Index on BrandID, ApprovalStatus, PublishDate, ExpiryDate, SalesRange.
-  - VoucherPlanDetail: Index on ParentID, VoucherCode, MemberID, UsageStatus.
-  - VoucherUsage: Index on VoucherID, POSID, UsageDate, TransactionID.
-  - VoucherDistribution: Index on VoucherID, MemberID, Method, DistributionDate.
-  - Brand/Outlet/UserAccount/Customer: Index on primary keys and frequently filtered columns (e.g., Status).
-- Query patterns:
-  - Use projection queries to avoid loading unnecessary columns.
-  - Batch operations for bulk distribution and usage updates.
-  - Partitioning by time for VoucherUsage and VoucherDistribution to improve historical query performance.
-- Concurrency:
-  - Optimistic concurrency with row versioning for entities updated by multiple users.
-  - Isolation levels set appropriately for POS transactions to prevent phantom reads.
-- Caching:
-  - Cache static reference data (e.g., enums, Brand/Outlet lists) with invalidation on change.
-- Monitoring:
-  - Track slow queries and long-running transactions; alert on unusual spikes.
-
-[No sources needed since this section provides general guidance]
+- **Enhanced indexing strategy**:
+  - VoucherPlanHeader: Index on BrandId, ApprovalStatus, PublishDate, ExpiryDate, ValidFrom/ValidTo, PreviousVersionId, SponsorBrandId
+  - VoucherPlanDetail: Index on ParentId, VoucherCodeSecret, MemberId, UsageStatus, LockId, LockedOutletId
+  - VoucherUsage: Index on VoucherId, PosId, UsageDate, TransactionId
+  - VoucherDistribution: Index on VoucherId, MemberId, Method, DistributionDate
+  - VoucherReview: Index on PlanId, ApproverId, ReviewDate, Decision
+  - SettlementEntry: Index on SponsorBrandId, IssuingBrandId, RedeemBrandId, Status, VoucherUsageId (unique), CreatedAt
+  - CreditLedgerEntry: Index on BrandId, CreatedAt, VoucherDetailId (unique filtered)
+  - PaymentTransaction: Index on PurchaseOrderId, Status, CompletedAt
+  - VoucherEvent: Index on EventType, VoucherId, BrandId, CreatedAt
+  - WebhookDelivery: Index on PartnerId, EventId, NextRetryAt, HttpStatus
+  - IntegrationPartner: Index on ApiKeyPrefix, IsActive
+  - VoucherTransfer: Index on SenderId, RecipientId, VoucherId, Status, ExpiresAt
+  - MemberAccount: Index on CustomerId, Username
+  - Brand/Outlet/UserAccount/Customer: Index on primary keys and frequently filtered columns
+  - PlanOutlet: Composite index on PlanId, OutletId
+  - PartnerBrand: Composite index on PartnerId, BrandId
+- **Enhanced query patterns**:
+  - Use projection queries to avoid loading unnecessary columns
+  - Batch operations for bulk distribution and usage updates
+  - Partitioning by time for VoucherUsage, VoucherDistribution, and CreditLedgerEntry to improve historical query performance
+  - **New**: Support for plan versioning queries, approval workflow filtering, settlement reporting, credit balance calculations, webhook delivery optimization
+- **Enhanced concurrency**:
+  - Optimistic concurrency with row versioning for entities updated by multiple users
+  - **New**: POS transaction locking prevents concurrent usage conflicts
+  - Isolation levels set appropriately for POS transactions to prevent phantom reads
+  - **New**: Settlement entry uniqueness on VoucherUsageId prevents duplicate settlements
+  - **New**: Credit ledger unique constraint on VoucherDetailId prevents double consumption
+- **Enhanced caching**:
+  - Cache static reference data (enums, Brand/Outlet lists) with invalidation on change
+  - **New**: Cache approval workflow states, plan version hierarchies, integration partner configurations, credit balances
+- **Enhanced monitoring**:
+  - Track slow queries and long-running transactions; alert on unusual spikes
+  - **New**: Monitor POS transaction lock timeouts, approval workflow bottlenecks, settlement processing delays, webhook delivery failures, credit balance anomalies
 
 ## Troubleshooting Guide
 Common issues and resolutions:
-- Duplicate voucher code:
-  - Symptom: VoucherCode uniqueness constraint violation.
-  - Resolution: Implement code rotation and uniqueness checks before insertion/update.
-- Cross-tenant access:
-  - Symptom: Unauthorized data retrieval across Brands.
-  - Resolution: Enforce BrandID filtering at query level and repository boundaries.
-- POS transaction integrity:
-  - Symptom: Partial redemption or inconsistent state.
-  - Resolution: Wrap redemption operations in explicit transactions; validate usage limits and expiry.
-- Audit trail gaps:
-  - Symptom: Missing VoucherUsage entries.
-  - Resolution: Ensure middleware logs POS requests and retries; reconcile discrepancies periodically.
+- **Duplicate voucher code**:
+  - Symptom: VoucherCodeSecret uniqueness constraint violation
+  - Resolution: Implement code rotation and uniqueness checks before insertion/update
+- **Cross-tenant access**:
+  - Symptom: Unauthorized data retrieval across Brands
+  - Resolution: Enforce BrandId filtering at query level and repository boundaries
+- **POS transaction integrity**:
+  - Symptom: Partial redemption or inconsistent state
+  - Resolution: Wrap redemption operations in explicit transactions; validate usage limits, expiry, and implement proper voucher locking
+- **Audit trail gaps**:
+  - Symptom: Missing VoucherUsage entries
+  - Resolution: Ensure middleware logs POS requests and retries; reconcile discrepancies periodically
+- **Approval workflow issues**:
+  - Symptom: VoucherPlanHeader stuck in Pending status
+  - Resolution: Check VoucherReview entries and approval permissions; verify UserAccount roles
+- **POS lock conflicts**:
+  - Symptom: Concurrent POS transactions failing
+  - Resolution: Implement proper lock timeout handling and retry logic in POS integration
+- **Settlement processing errors**:
+  - Symptom: Duplicate settlement entries or missing settlements
+  - Resolution: Verify VoucherUsageId uniqueness constraint; check cross-tenant detection logic
+- **Credit ledger inconsistencies**:
+  - Symptom: Double consumption or incorrect balances
+  - Resolution: Validate VoucherDetailId uniqueness; implement idempotent consumption processing
+- **Webhook delivery failures**:
+  - Symptom: Events not delivered to integration partners
+  - Resolution: Check webhook retry logic, partner callback URLs, and API key validity
+- **Member account issues**:
+  - Symptom: Login failures or account conflicts
+  - Resolution: Verify MemberAccount-Customer relationships; check username uniqueness and password hashes
+- **Voucher transfer problems**:
+  - Symptom: Transfers not completing or expiring prematurely
+  - Resolution: Check transfer expiration dates, recipient acceptance workflow, and voucher ownership validation
 
 **Section sources**
-- [data-models.md:9-98](file://docs/data-models.md#L9-L98)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
 - [architecture.md:28-52](file://docs/architecture.md#L28-L52)
 
 ## Conclusion
-The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, dynamic security, and strict POS integration controls underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms, settlement management, credit ledger system, integration partner support, and improved member identity management provide enhanced governance and operational control. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, enhanced security through POS transaction locking, strict POS integration controls, cross-tenant settlement tracking, and comprehensive audit logging underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time with support for complex approval processes, outlet-specific campaign management, and integration ecosystem expansion.
 
 ## Appendices
 
-### Appendix A: Data Lifecycle Management, Retention, and Archival
-- Voucher lifecycle:
-  - Creation: VoucherPlanHeader and VoucherPlanDetail creation upon approval.
-  - Distribution: VoucherDistribution records and ownership assignment.
-  - Usage: VoucherUsage entries per POS transaction; UsageStatus updates.
-  - Expiration: Automatic deactivation via ExpiryDate and TimeRange.
-- Retention policy:
-  - VoucherUsage/VoucherDistribution: Retain for statutory periods (e.g., 5–7 years).
-  - VoucherPlanHeader/VoucherPlanDetail: Retain indefinitely for auditability.
-  - UserAccount/Customer: Retain per privacy regulations; anonymization on request.
-- Archival strategy:
-  - Cold storage for historical VoucherUsage; partitioned by quarter/year.
-  - Metadata-only archiving for closed plans and outlets.
+### Appendix A: Enhanced Data Lifecycle Management, Retention, and Archival
+- **Enhanced voucher lifecycle**:
+  - Creation: VoucherPlanHeader and VoucherPlanDetail creation upon approval with version tracking and display field population
+  - Distribution: VoucherDistribution records and ownership assignment with member account linkage
+  - Usage: VoucherUsage entries per POS transaction with POS identification; UsageStatus updates
+  - Settlement: Automatic settlement entry creation for cross-tenant redemptions with financial tracking
+  - Credit consumption: CreditLedgerEntry creation for each voucher consumption with balance impact
+  - Expiration: Automatic deactivation via ExpiryDate and ValidFrom/ValidTo periods
+  - **New**: Approval workflow tracking, plan version archival, webhook event generation, transfer lifecycle management
+- **Enhanced retention policy**:
+  - VoucherUsage/VoucherDistribution: Retain for statutory periods (5-7 years)
+  - VoucherPlanHeader/VoucherPlanDetail: Retain indefinitely for auditability with version history
+  - VoucherReview: Retain permanently for complete approval audit trail
+  - SettlementEntry: Retain for financial compliance and reconciliation purposes
+  - CreditLedgerEntry: Retain permanently for financial audit trails
+  - PaymentTransaction: Retain for payment processing compliance
+  - VoucherEvent/WebhookDelivery: Retain for integration audit trails
+  - UserAccount/Customer/MemberAccount: Retain per privacy regulations; anonymization on request
+- **Enhanced archival strategy**:
+  - Cold storage for historical VoucherUsage; partitioned by quarter/year
+  - Metadata-only archiving for closed plans and outlets
+  - **New**: Complete approval workflow archival, settlement archival, credit ledger archival, webhook delivery archival for compliance purposes
 
-[No sources needed since this section provides general guidance]
-
-### Appendix B: Security, Privacy, and Access Control
-- Multi-tenancy:
-  - Strict BrandID enforcement across queries and writes.
-- Dynamic security:
-  - VoucherPlanDetail.VoucherCode rotates frequently; POS verification validates against current rules.
-- Authentication and authorization:
-  - JWT for back-office users; API Keys for POS systems bound to approved ranges.
-- Privacy:
-  - Pseudonymization of Customer.PhoneNumber; minimal PII collection.
-- Audit logging:
-  - Track all sensitive operations (usage, approvals, distribution).
+### Appendix B: Enhanced Security, Privacy, and Access Control
+- **Enhanced multi-tenancy**:
+  - Strict BrandId enforcement across queries and writes
+  - **New**: BrandManager role for brand-specific administrative access, integration partner brand authorization
+- **Enhanced dynamic security**:
+  - VoucherPlanDetail.VoucherCodeSecret rotates with secure storage; POS verification validates against current rules
+  - **New**: POS transaction locking prevents unauthorized concurrent usage, settlement entry uniqueness prevents duplicate settlements
+- **Enhanced authentication and authorization**:
+  - JWT for back-office users; API Keys for POS systems bound to approved ranges
+  - **New**: Role-based access control for approval workflows and plan management, integration partner API key management with BCrypt hashing
+- **Enhanced privacy**:
+  - Pseudonymization of Customer.PhoneNumber; minimal PII collection
+  - **New**: POS transaction data anonymization for audit trails, webhook payload sanitization, member account separation from customer data
+- **Enhanced audit logging**:
+  - Track all sensitive operations (usage, approvals, distribution, version changes)
+  - **New**: Complete approval workflow audit trail, settlement processing logs, credit ledger entries, webhook delivery attempts, transfer lifecycle tracking
+- **Enhanced data protection**:
+  - Encryption at rest for sensitive fields (password hashes, API keys, webhook secrets)
+  - **New**: Secure webhook signature verification, transfer expiration enforcement, credit balance calculation validation
 
 **Section sources**
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
 - [architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
 
-### Appendix C: Data Migration Paths and Version Management
-- Migration strategy:
-  - Use EF Core migrations for schema changes; maintain deterministic ordering.
-  - Add indexes and constraints in separate migration steps to minimize downtime.
-- Version management:
-  - Tag database versions alongside application releases.
-  - Maintain rollback scripts for critical migrations.
-- Zero-downtime deployments:
-  - Shadow deployments for large schema changes; blue/green deployment for API and services.
+### Appendix C: Enhanced Data Migration Paths and Version Management
+- **Enhanced migration strategy**:
+  - Use EF Core migrations for schema changes; maintain deterministic ordering
+  - Add indexes and constraints in separate migration steps to minimize downtime
+  - **New**: Support for plan versioning migrations, approval workflow schema changes, settlement tracking migrations, credit ledger migrations, integration partner migrations, member identity split migrations
+- **Enhanced version management**:
+  - Tag database versions alongside application releases
+  - Maintain rollback scripts for critical migrations
+  - **New**: Version-aware migration scripts for plan header versioning, settlement processing, credit ledger operations, webhook delivery system
+- **Enhanced zero-downtime deployments**:
+  - Shadow deployments for large schema changes; blue/green deployment for API and services
+  - **New**: Support for gradual rollout of approval workflow enhancements, settlement processing, credit ledger operations, integration partner features
+- **Enhanced data migration considerations**:
+  - Backfill existing data with new required fields using default values
+  - Implement data transformation scripts for legacy data compatibility
+  - **New**: Migrate Customer references to MemberAccount relationships, populate settlement entries for historical transactions, calculate credit balances from existing data
 
 **Section sources**
 - [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)

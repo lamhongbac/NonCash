@@ -2,6 +2,21 @@
 
 <cite>
 **Referenced Files in This Document**
+- [Program.cs](file://src/NonCash.API/Program.cs)
+- [appsettings.json](file://src/NonCash.API/appsettings.json)
+- [ApiKeyMiddleware.cs](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs)
+- [BrandScopeMiddleware.cs](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs)
+- [JwtTokenService.cs](file://src/NonCash.API/Services/JwtTokenService.cs)
+- [CurrentUserService.cs](file://src/NonCash.API/Services/CurrentUserService.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [AuthDtos.cs](file://src/NonCash.API/DTOs/AuthDtos.cs)
+- [PosController.cs](file://src/NonCash.API/Controllers/PosController.cs)
+- [IPosService.cs](file://src/NonCash.Core/Interfaces/IPosService.cs)
+- [PosService.cs](file://src/NonCash.Core/Services/PosService.cs)
+- [IJwtTokenService.cs](file://src/NonCash.Core/Interfaces/IJwtTokenService.cs)
+- [ICurrentUserService.cs](file://src/NonCash.Core/Interfaces/ICurrentUserService.cs)
+- [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
+- [Outlet.cs](file://src/NonCash.Core/Entities/Outlet.cs)
 - [BMAD_STRUCTURE.md](file://BMAD_STRUCTURE.md)
 - [description.txt](file://description.txt)
 - [docs/index.md](file://docs/index.md)
@@ -16,6 +31,14 @@
 - [4-4-rollback-mechanism.md](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Enhanced JWT token support with comprehensive claim structure and validation
+- Added dedicated API key middleware for POS system authentication
+- Implemented comprehensive role-based access control with multi-tenant enforcement
+- Strengthened multi-tenant architecture with brand scoping middleware
+- Integrated new authentication and authorization infrastructure throughout the platform
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -29,17 +52,18 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document presents the security architecture for the NonCash SaaS platform. It covers multi-tenancy enforcement via BrandID, authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project’s documentation and implementation artifacts.
+This document presents the enhanced security architecture for the NonCash SaaS platform. The architecture has been significantly strengthened with new JWT token support, dedicated API key middleware for POS systems, comprehensive role-based access control, and robust multi-tenant enforcement via BrandID. The platform now implements a layered security approach covering authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project's documentation and implementation artifacts.
 
 ## Project Structure
-The NonCash project organizes its security-relevant logic across three primary layers and supporting documentation:
+The NonCash project organizes its enhanced security-relevant logic across four primary layers with supporting documentation:
 - Documentation layer: architecture, data models, API contracts, and implementation artifacts define security policies and flows.
-- Backend services: microservices implementing identity, planning, approval, distribution, and usage orchestration.
+- Backend services: microservices implementing identity, planning, approval, distribution, and usage orchestration with enhanced authentication.
+- Infrastructure layer: middleware components providing authentication and authorization enforcement.
 - Data access: PostgreSQL-backed repositories enforcing tenant scoping and transactional integrity.
 
 ```mermaid
 graph TB
-subgraph "Documentation"
+subgraph "Documentation Layer"
 IDX["docs/index.md"]
 ARCH["docs/architecture.md"]
 DM["docs/data-models.md"]
@@ -47,6 +71,17 @@ API["docs/api-contracts.md"]
 DESC["description.txt"]
 BMAD["BMAD_STRUCTURE.md"]
 KF["Key Functionalities.txt"]
+end
+subgraph "Infrastructure Layer"
+JWTMW["JWT Authentication Middleware"]
+BRANDMW["BrandScopeMiddleware"]
+APIKEYMW["ApiKeyMiddleware"]
+AUTHPIPE["Authentication Pipeline"]
+end
+subgraph "Business Services Layer"
+AUTHSVC["AuthService & JwtTokenService"]
+POSSVC["PosService"]
+USERSVC["UserService & CurrentUserService"]
 end
 subgraph "Implementation Artifacts"
 RBAC["1-4-staff-accounts-rbac.md"]
@@ -69,9 +104,16 @@ VERIFY --> API
 LOCK --> API
 COMMIT --> API
 ROLLBACK --> API
+JWTMW --> AUTHPIPE
+BRANDMW --> AUTHPIPE
+APIKEYMW --> AUTHPIPE
+AUTHPIPE --> AUTHSVC
+AUTHPIPE --> POSSVC
+AUTHPIPE --> USERSVC
 ```
 
 **Diagram sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 - [docs/index.md:1-41](file://docs/index.md#L1-L41)
 - [docs/architecture.md:1-52](file://docs/architecture.md#L1-L52)
 - [docs/data-models.md:1-98](file://docs/data-models.md#L1-L98)
@@ -86,18 +128,24 @@ ROLLBACK --> API
 - [4-4-rollback-mechanism.md:1-112](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L1-L112)
 
 **Section sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 - [docs/index.md:12-41](file://docs/index.md#L12-L41)
 - [docs/architecture.md:5-52](file://docs/architecture.md#L5-L52)
 - [description.txt:16-31](file://description.txt#L16-L31)
 - [BMAD_STRUCTURE.md:37-82](file://BMAD_STRUCTURE.md#L37-L82)
 
 ## Core Components
-- Multi-tenant identity and RBAC: JWT tokens carry BrandID and role claims; BrandID scopes all tenant-aware repository queries. Staff accounts are mapped to Brand and role, with strict enforcement of cross-brand access.
-- POS integration security: API Key authentication per outlet; endpoints are read-only for verification and state-changing for lock/commit/rollback.
-- Dynamic voucher code generation: rotating codes (similar to JWT logic) prevent static reuse and unauthorized scanning; validation ensures expiry, time windows, and outlet scope.
-- Transaction security: POS flow enforces BEGIN (lock), COMMIT (permanent state change), and ROLLBACK (compensating transaction) with atomic updates, idempotency, and audit trail records.
+- **Enhanced Multi-tenant Identity and RBAC**: JWT tokens carry comprehensive claims including subject (UserID), BrandID, role, and expiration; BrandID scopes all tenant-aware repository queries. Staff accounts are mapped to Brand and role, with strict enforcement of cross-brand access through BrandScopeMiddleware.
+- **Dedicated POS Integration Security**: API Key authentication per outlet with dedicated ApiKeyMiddleware validating X-API-Key headers and attaching outlet claims to HTTP context for downstream processing.
+- **Dynamic Voucher Code Generation**: Rotating codes (similar to JWT logic) prevent static reuse and unauthorized scanning; validation ensures expiry, time windows, and outlet scope.
+- **Transactional Integrity**: POS flow enforces BEGIN (lock), COMMIT (permanent state change), and ROLLBACK (compensating transaction) with atomic updates, idempotency, and audit trail records.
+- **Comprehensive Authentication Pipeline**: Layered approach combining JWT bearer authentication, custom brand scoping middleware, and API key validation for different client types.
 
 **Section sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
+- [ApiKeyMiddleware.cs:1-69](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L1-L69)
+- [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
+- [JwtTokenService.cs:1-59](file://src/NonCash.API/Services/JwtTokenService.cs#L1-L59)
 - [docs/architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [docs/api-contracts.md:5-109](file://docs/api-contracts.md#L5-L109)
 - [Key Functionalities.txt:56-68](file://Key Functionalities.txt#L56-L68)
@@ -108,29 +156,32 @@ ROLLBACK --> API
 - [4-4-rollback-mechanism.md:13-38](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L13-L38)
 
 ## Architecture Overview
-The security architecture integrates:
-- Multi-tenancy via BrandID across identity, planning, approval, distribution, and usage services.
-- Authentication:
-  - JWT for web/member app users (login, RBAC enforcement).
-  - API Keys for POS systems (per outlet).
-- Dynamic voucher code validation to prevent reuse and unauthorized scanning.
-- Transactional integrity for POS operations with audit logs.
+The enhanced security architecture integrates:
+- **Multi-tenancy via BrandID**: Across identity, planning, approval, distribution, and usage services with comprehensive brand scoping enforcement.
+- **Dual Authentication Mechanisms**:
+  - JWT for web/member app users with comprehensive claim structure and validation.
+  - API Keys for POS systems with dedicated middleware and outlet-specific authentication.
+- **Enhanced Transaction Security**: POS flow with improved lock/commit/rollback operations, comprehensive validation, and robust audit trails.
+- **Comprehensive RBAC**: Role-based access control with multi-tenant enforcement and strict authorization boundaries.
 
 ```mermaid
 graph TB
-Client["Client Apps<br/>Web (Blazor) / Mobile App"] --> Auth["JWT Auth"]
+Client["Client Applications<br/>Web (Blazor) / Mobile App / POS Systems"] --> Auth["JWT Authentication"]
 Client --> POS["POS Systems"]
-Auth --> IdentitySvc["Identity & Tenant Service"]
+Auth --> JWTMW["JWT Bearer Authentication"]
+JWTMW --> BrandMW["BrandScopeMiddleware"]
+BrandMW --> IdentitySvc["Identity & Tenant Service"]
 IdentitySvc --> RBAC["RBAC Enforcement<br/>BrandID Scope"]
-POS --> ApiKeyMW["API Key Middleware"]
+POS --> ApiKeyMW["ApiKeyMiddleware<br/>X-API-Key Validation"]
 ApiKeyMW --> PosSvc["POS Usage Service"]
 PosSvc --> DB[("PostgreSQL")]
 RBAC --> DB
-subgraph "POS Transaction Flow"
-Verify["Verify (Read-only)"]
-Lock["Lock (BEGIN)"]
-Commit["Commit (PERMANENT)"]
-Rollback["Rollback (COMPENSATE)"]
+ApiKeyMW --> DB
+subgraph "Enhanced POS Transaction Flow"
+Verify["Verify (Read-only)<br/>Stateless Validation"]
+Lock["Lock (BEGIN)<br/>Atomic Conditional Update"]
+Commit["Commit (PERMANENT)<br/>Idempotent Commit"]
+Rollback["Rollback (COMPENSATE)<br/>Compensating Transaction"]
 end
 PosSvc --> Verify
 PosSvc --> Lock
@@ -143,6 +194,10 @@ Rollback --> DB
 ```
 
 **Diagram sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
+- [ApiKeyMiddleware.cs:1-69](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L1-L69)
+- [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
+- [PosController.cs:1-193](file://src/NonCash.API/Controllers/PosController.cs#L1-L193)
 - [docs/architecture.md:17-35](file://docs/architecture.md#L17-L35)
 - [docs/api-contracts.md:14-88](file://docs/api-contracts.md#L14-L88)
 - [1-4-staff-accounts-rbac.md:28-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L28-L44)
@@ -153,111 +208,118 @@ Rollback --> DB
 
 ## Detailed Component Analysis
 
-### Multi-Tenancy with BrandID
-- Tenant boundary: BrandID isolates data between businesses in the SaaS environment. All tenant-scoped operations enforce BrandID at query time.
-- Identity and RBAC:
-  - JWT includes subject (UserID), BrandID, role, and expiration.
+### Enhanced Multi-Tenant Architecture with BrandID
+- **Tenant Boundary**: BrandID isolates data between businesses in the SaaS environment. All tenant-scoped operations enforce BrandID at query time through comprehensive middleware enforcement.
+- **Enhanced Identity and RBAC**:
+  - JWT includes comprehensive claims: subject (UserID), BrandID, role, expiration, and full_name.
   - BrandID in JWT overrides any request-body BrandID for tenant-scoped endpoints.
   - Role-based rights govern access to planning, approval, distribution, and outlet/customer management within a Brand.
-- Enforcement:
-  - Middleware enforces BrandID scope for all tenant-aware endpoints.
-  - Passwords are hashed with salt; JWT secret key is securely managed.
+  - BrandScopeMiddleware enforces that non-admin users must have a brand_id in their token.
+- **Middleware Enforcement**:
+  - BrandScopeMiddleware validates JWT claims and ensures proper tenant assignment.
+  - Authentication pipeline combines JWT bearer authentication with custom brand scoping.
+  - Passwords are hashed with salt; JWT secret key is securely managed in configuration.
 
 ```mermaid
 sequenceDiagram
-participant Client as "Client App"
+participant Client as "Client Application"
 participant Auth as "AuthController"
 participant AuthService as "AuthService"
-participant JwtSvc as "JWT Service"
+participant JwtSvc as "JwtTokenService"
 participant BrandMW as "BrandScopeMiddleware"
+participant AuthPipe as "Authentication Pipeline"
 Client->>Auth : "POST /api/v1/auth/login"
 Auth->>AuthService : "Validate credentials"
 AuthService-->>Auth : "UserAccount verified"
-Auth->>JwtSvc : "Generate JWT with claims {sub, brandId, role, exp}"
-JwtSvc-->>Auth : "JWT token"
-Auth-->>Client : "{ token, expiresAt, user }"
-Client->>BrandMW : "Subsequent request with Authorization : Bearer <jwt>"
-BrandMW-->>Client : "Proceed if BrandID matches scope"
+Auth->>JwtSvc : "Generate JWT with claims {sub, brandId, role, exp, full_name}"
+JwtSvc-->>Auth : "JWT token with comprehensive claims"
+Auth-->>Client : "{ token, expiresAt, user with role and brandId }"
+Client->>AuthPipe : "Subsequent request with Authorization : Bearer <jwt>"
+AuthPipe->>BrandMW : "Validate JWT claims and brand scope"
+BrandMW-->>AuthPipe : "Proceed if BrandID matches scope"
+AuthPipe-->>Client : "Access granted to tenant-scoped resources"
 ```
 
 **Diagram sources**
-- [1-4-staff-accounts-rbac.md:28-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L28-L44)
-- [1-4-staff-accounts-rbac.md:77-99](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L77-L99)
-- [docs/architecture.md:38](file://docs/architecture.md#L38)
+- [AuthController.cs:19-41](file://src/NonCash.API/Controllers/AuthController.cs#L19-L41)
+- [JwtTokenService.cs:20-50](file://src/NonCash.API/Services/JwtTokenService.cs#L20-L50)
+- [BrandScopeMiddleware.cs:14-32](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L14-L32)
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 
 **Section sources**
+- [AuthController.cs:19-41](file://src/NonCash.API/Controllers/AuthController.cs#L19-L41)
+- [JwtTokenService.cs:20-50](file://src/NonCash.API/Services/JwtTokenService.cs#L20-L50)
+- [BrandScopeMiddleware.cs:14-32](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L14-L32)
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 - [1-4-staff-accounts-rbac.md:19-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L19-L44)
 - [1-4-staff-accounts-rbac.md:101-117](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L101-L117)
 - [docs/architecture.md:38](file://docs/architecture.md#L38)
 
 ### JWT Token Management (Web Applications)
-- Login flow issues a signed JWT with claims: subject (UserID), BrandID, role, and expiration.
-- All subsequent protected endpoints require Authorization: Bearer <JWT>.
-- JWT secret key must be at least 32 characters and stored in environment variables.
+- **Enhanced Login Flow**: Issues a signed JWT with comprehensive claims including subject (UserID), BrandID, role, expiration, and full_name.
+- **Protected Endpoints**: All subsequent protected endpoints require Authorization: Bearer <JWT> with comprehensive claim validation.
+- **Configuration Management**: JWT secret key must be at least 32 characters and stored in environment variables under the Jwt configuration section.
+- **Token Validation**: Authentication pipeline validates issuer, audience, lifetime, and signing key with configurable clock skew.
 
 ```mermaid
 flowchart TD
 Start(["Login Request"]) --> Validate["Validate Credentials"]
 Validate --> Valid{"Valid?"}
 Valid --> |No| Return401["Return 401 Unauthorized"]
-Valid --> |Yes| Claims["Build Claims {sub, brandId, role, exp}"]
-Claims --> Sign["Sign with Secret Key"]
-Sign --> Issue["Issue JWT"]
-Issue --> End(["Return Token"])
+Valid --> |Yes| Claims["Build Comprehensive Claims<br/>{sub, brandId, role, exp, full_name}"]
+Claims --> Sign["Sign with Secret Key from Jwt Configuration"]
+Sign --> Issue["Issue JWT with Expiration"]
+Issue --> End(["Return Token with User Details"])
 ```
 
 **Diagram sources**
-- [1-4-staff-accounts-rbac.md:28-32](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L28-L32)
+- [AuthController.cs:21-41](file://src/NonCash.API/Controllers/AuthController.cs#L21-L41)
+- [JwtTokenService.cs:28-47](file://src/NonCash.API/Services/JwtTokenService.cs#L28-L47)
+- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
 
 **Section sources**
-- [1-4-staff-accounts-rbac.md:108-117](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L108-L117)
+- [AuthController.cs:21-41](file://src/NonCash.API/Controllers/AuthController.cs#L21-L41)
+- [JwtTokenService.cs:20-59](file://src/NonCash.API/Services/JwtTokenService.cs#L20-L59)
 - [docs/api-contracts.md:7](file://docs/api-contracts.md#L7)
+- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
 
 ### API Key Authentication (POS Integration)
-- POS systems authenticate via API Key header (X-API-Key).
-- API Key middleware validates the key against outlet-defined secrets and attaches outlet claims to the HTTP context.
-- POS endpoints:
-  - Verify: read-only, returns validity without mutating state.
-  - Lock: begins transaction by locking the voucher atomically.
-  - Commit: permanently marks usage and logs transaction.
-  - Rollback: compensates a failed transaction by releasing the lock.
+- **Dedicated API Key Middleware**: Validates X-API-Key header for POS endpoints with route prefix /api/v1/pos.
+- **Outlet-Specific Authentication**: Matches supplied key against outlet's ApiKeyPrefix and ensures outlet status is Active.
+- **Context Attachment**: On successful validation, attaches outlet_id and brand_id to HttpContext.Items for downstream processing.
+- **POS Endpoint Security**: All POS endpoints are gated by ApiKeyMiddleware and use outlet claims for authorization.
 
 ```mermaid
 sequenceDiagram
 participant POS as "POS System"
 participant API as "API Gateway"
 participant KeyMW as "ApiKeyMiddleware"
+participant DB as "PostgreSQL Database"
 participant PosCtrl as "PosController"
-participant PosSvc as "PosService"
-participant DB as "PostgreSQL"
 POS->>API : "POST /api/v1/pos/verify<br/>Header : X-API-Key"
-API->>KeyMW : "Validate API Key"
-KeyMW-->>API : "Attach Outlet Claims"
-API->>PosCtrl : "Dispatch Verify"
-PosCtrl->>PosSvc : "Verify(voucherCode, outletID)"
-PosSvc->>DB : "Lookup + Validate"
-DB-->>PosSvc : "Result"
-PosSvc-->>PosCtrl : "Validation outcome"
+API->>KeyMW : "Validate API Key Header"
+KeyMW->>DB : "Query Outlet by ApiKeyPrefix"
+DB-->>KeyMW : "Outlet with BrandId"
+KeyMW-->>API : "Attach Outlet Claims to HttpContext"
+API->>PosCtrl : "Dispatch Verify with Validated Outlet"
 PosCtrl-->>POS : "{ status, voucherInfo }"
 ```
 
 **Diagram sources**
-- [4-1-check-for-information.md:13-26](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L13-L26)
-- [4-1-check-for-information.md:72-79](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L72-L79)
-- [docs/api-contracts.md:14-34](file://docs/api-contracts.md#L14-L34)
+- [ApiKeyMiddleware.cs:22-60](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L22-L60)
+- [PosController.cs:22-52](file://src/NonCash.API/Controllers/PosController.cs#L22-L52)
+- [Outlet.cs:15](file://src/NonCash.Core/Entities/Outlet.cs#L15)
 
 **Section sources**
-- [4-1-check-for-information.md:52-70](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L52-L70)
+- [ApiKeyMiddleware.cs:1-69](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L1-L69)
+- [PosController.cs:18-52](file://src/NonCash.API/Controllers/PosController.cs#L18-L52)
 - [docs/api-contracts.md:14-34](file://docs/api-contracts.md#L14-L34)
 
 ### Dynamic Voucher Code Generation and Validation
-- Voucher code is dynamic (rotating) to prevent reuse and unauthorized scanning.
-- Validation logic checks:
-  - Signature correctness (same secret/key used for generation).
-  - Expiry date and time window constraints.
-  - Outlet scope authorization (must be in plan’s SalesRange).
-  - Usage status is Pending.
-- Verify is read-only and never mutates state.
+- **Enhanced Voucher Code Logic**: Voucher code is dynamic (rotating) to prevent reuse and unauthorized scanning.
+- **Comprehensive Validation**: Validation logic checks signature correctness, expiry date and time window constraints, outlet scope authorization, and usage status.
+- **Stateless Verification**: Verify operation is read-only and never mutates state, ensuring idempotent operations.
+- **Enhanced Error Handling**: Distinguishes between forged codes, expired codes, and outlet authorization failures.
 
 ```mermaid
 flowchart TD
@@ -277,31 +339,32 @@ StatusOK --> Valid["Return Valid"]
 ```
 
 **Diagram sources**
-- [4-1-check-for-information.md:13-26](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L13-L26)
+- [PosService.cs:33-43](file://src/NonCash.Core/Services/PosService.cs#L33-L43)
+- [PosService.cs:158-237](file://src/NonCash.Core/Services/PosService.cs#L158-L237)
 - [Key Functionalities.txt:56](file://Key Functionalities.txt#L56)
 
 **Section sources**
-- [4-1-check-for-information.md:13-43](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L13-L43)
+- [PosService.cs:33-43](file://src/NonCash.Core/Services/PosService.cs#L33-L43)
+- [PosService.cs:158-237](file://src/NonCash.Core/Services/PosService.cs#L158-L237)
 - [Key Functionalities.txt:56-68](file://Key Functionalities.txt#L56-L68)
 
-### POS Transaction Security: Lock/Commit/Rollback
-- Lock (BEGIN):
-  - Validates dynamic code, outlet scope, time window, and status.
-  - Atomically transitions UsageStatus from Pending to In-Use using conditional update.
-  - Returns LockID for subsequent commit/rollback.
-  - Idempotent: duplicate requests return the same LockID.
-- Commit (PERMANENT):
-  - Validates LockID and non-expired lock.
-  - Atomic update: mark Complete, set UsedDate, clear LockID.
-  - Inserts VoucherUsage record with TransactionID and AmountUsed.
-  - Idempotent: duplicate commits do not create duplicate records.
-- Rollback (COMPENSATE):
-  - Validates LockID and In-Use status.
-  - Atomic update: revert to Pending, clear lock fields.
+### Enhanced POS Transaction Security: Lock/Commit/Rollback
+- **Improved Lock (BEGIN)**:
+  - Validates dynamic code, outlet scope, time window, and status with enhanced error handling.
+  - Atomic conditional update Pending → InUse using TryAcquireLockAsync with race condition handling.
+  - Returns LockID for subsequent commit/rollback with comprehensive idempotency support.
+  - Enhanced duplicate detection for same outlet+bill combinations.
+- **Robust Commit (PERMANENT)**:
+  - Validates LockID and non-expired lock with duplicate transaction prevention.
+  - Atomic update with duplicate transaction detection by TransactionId.
+  - Inserts VoucherUsage record with comprehensive audit trail.
+  - Idempotent handling for duplicate commits.
+- **Enhanced Rollback (COMPENSATE)**:
+  - Validates LockID and In-Use status with comprehensive outcome handling.
+  - Atomic update reverting to Pending with enhanced error scenarios.
   - Does not create VoucherUsage records.
-  - Idempotent: duplicate rollbacks are safe.
-- Audit trail:
-  - VoucherUsage captures POSID, TransactionID, UsageDate, AmountUsed for traceability.
+  - Idempotent handling for AlreadyReleased and LockNotFound scenarios.
+- **Comprehensive Audit Trail**: VoucherUsage captures POSID, TransactionID, UsageDate, AmountUsed for complete traceability.
 
 ```mermaid
 sequenceDiagram
@@ -311,135 +374,164 @@ participant PosCtrl as "PosController"
 participant PosSvc as "PosService"
 participant DB as "PostgreSQL"
 POS->>API : "POST /api/v1/pos/lock"
-API->>PosCtrl : "Dispatch Lock"
-PosCtrl->>PosSvc : "Lock(voucherCode, outletID, billNumber)"
-PosSvc->>DB : "Atomic UPDATE ... WHERE UsageStatus = Pending"
-DB-->>PosSvc : "Rows Affected"
-PosSvc-->>PosCtrl : "LockID or Conflict"
-PosCtrl-->>POS : "{ status, lockID }"
+API->>PosCtrl : "Dispatch Lock with Outlet Claims"
+PosCtrl->>PosSvc : "Lock(voucherCode, outletId, billNumber)"
+PosSvc->>DB : "Release Expired Locks + Atomic UPDATE with Race Condition Handling"
+DB-->>PosSvc : "LockId or Conflict"
+PosSvc-->>PosCtrl : "LockId, AlreadyInUse, or Error"
+PosCtrl-->>POS : "{ status, lockId }"
 POS->>API : "POST /api/v1/pos/commit"
-API->>PosCtrl : "Dispatch Commit"
-PosCtrl->>PosSvc : "Commit(lockID, transactionID, amountUsed)"
-PosSvc->>DB : "Atomic UPDATE + INSERT VoucherUsage"
-DB-->>PosSvc : "Success/Failure"
-PosSvc-->>PosCtrl : "Success or LockExpired"
+API->>PosCtrl : "Dispatch Commit with Outlet Claims"
+PosCtrl->>PosSvc : "Commit(lockId, transactionId, amountUsed, outletId)"
+PosSvc->>DB : "Duplicate Txn Check + Atomic UPDATE + INSERT VoucherUsage"
+DB-->>PosSvc : "Success, AlreadyComplete, or LockExpired"
+PosSvc-->>PosCtrl : "Success, AlreadyComplete, or LockExpired"
 PosCtrl-->>POS : "{ status, message }"
 POS->>API : "POST /api/v1/pos/rollback"
 API->>PosCtrl : "Dispatch Rollback"
-PosCtrl->>PosSvc : "Rollback(lockID)"
-PosSvc->>DB : "Atomic UPDATE to Pending"
-DB-->>PosSvc : "Success"
-PosSvc-->>PosCtrl : "Success"
+PosCtrl->>PosSvc : "Rollback(lockId)"
+PosSvc->>DB : "Atomic UPDATE to Pending with Outcome Handling"
+DB-->>PosSvc : "Success or AlreadyReleased"
+PosSvc-->>PosCtrl : "Success or AlreadyReleased"
 PosCtrl-->>POS : "{ status, message }"
 ```
 
 **Diagram sources**
-- [4-2-prepare-and-lock.md:13-39](file://_bmad-output/implementation-artifacts/4-2-prepare-and-lock.md#L13-L39)
-- [4-3-commit-and-log.md:13-42](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L13-L42)
-- [4-4-rollback-mechanism.md:13-38](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L13-L38)
+- [PosController.cs:58-95](file://src/NonCash.API/Controllers/PosController.cs#L58-L95)
+- [PosController.cs:101-135](file://src/NonCash.API/Controllers/PosController.cs#L101-L135)
+- [PosController.cs:140-167](file://src/NonCash.API/Controllers/PosController.cs#L140-L167)
+- [PosService.cs:45-95](file://src/NonCash.Core/Services/PosService.cs#L45-L95)
+- [PosService.cs:97-133](file://src/NonCash.Core/Services/PosService.cs#L97-L133)
+- [PosService.cs:135-154](file://src/NonCash.Core/Services/PosService.cs#L135-L154)
 - [docs/api-contracts.md:36-88](file://docs/api-contracts.md#L36-L88)
 
 **Section sources**
-- [4-2-prepare-and-lock.md:42-76](file://_bmad-output/implementation-artifacts/4-2-prepare-and-lock.md#L42-L76)
-- [4-3-commit-and-log.md:44-77](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L44-L77)
-- [4-4-rollback-mechanism.md:46-75](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L46-L75)
+- [PosController.cs:58-95](file://src/NonCash.API/Controllers/PosController.cs#L58-L95)
+- [PosController.cs:101-135](file://src/NonCash.API/Controllers/PosController.cs#L101-L135)
+- [PosController.cs:140-167](file://src/NonCash.API/Controllers/PosController.cs#L140-L167)
+- [PosService.cs:45-95](file://src/NonCash.Core/Services/PosService.cs#L45-L95)
+- [PosService.cs:97-133](file://src/NonCash.Core/Services/PosService.cs#L97-L133)
+- [PosService.cs:135-154](file://src/NonCash.Core/Services/PosService.cs#L135-L154)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ### Data Encryption and Secure API Communication
-- Data-at-rest: PostgreSQL is the target database; encryption at rest should be enabled at the storage layer.
-- Data-in-motion: TLS termination at the ingress/load balancer; all internal and external APIs use HTTPS.
-- Secrets management: JWT signing key and API keys are stored in environment variables; never in source code.
-- Hashing: Passwords are hashed with salt; API keys are stored as hashes.
+- **Data-at-Rest**: PostgreSQL is the target database; encryption at rest should be enabled at the storage layer.
+- **Data-in-Motion**: TLS termination at the ingress/load balancer; all internal and external APIs use HTTPS.
+- **Secrets Management**: JWT signing key and API keys are stored in configuration files; never in source code.
+- **Enhanced Hashing**: Passwords are hashed with salt using secure hashing algorithms; API keys are stored as hashes with prefix validation.
 
 **Section sources**
 - [description.txt:13](file://description.txt#L13)
-- [1-4-staff-accounts-rbac.md:115-117](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L115-L117)
-- [4-1-check-for-information.md:95](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L95)
+- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
+- [Outlet.cs:15](file://src/NonCash.Core/Entities/Outlet.cs#L15)
 
-### Role-Based Access Control (RBAC)
-- Roles:
-  - Admin: full system access, cross-brand user management.
-  - BrandManager: manage Outlets, Customers, view plans within Brand.
-  - Planner: create/edit VoucherPlanHeaders within Brand.
-  - Approver: approve/reject plans within Brand.
-- Enforcement:
-  - JWT carries role claims; middleware enforces role-per-action.
+### Enhanced Role-Based Access Control (RBAC)
+- **Comprehensive Role Structure**:
+  - Admin: full system access, cross-brand user management with unrestricted operations.
+  - BrandManager: manage Outlets, Customers, view plans within Brand with administrative privileges.
+  - Planner: create/edit VoucherPlanHeaders within Brand with planning capabilities.
+  - Approver: approve/reject plans within Brand with authorization responsibilities.
+- **Enhanced Enforcement**:
+  - JWT carries comprehensive role claims; middleware enforces role-per-action with multi-tenant context.
+  - BrandScopeMiddleware ensures non-admin users have proper brand assignment in JWT claims.
   - Multi-tenancy: BrandID in JWT overrides any request-body BrandID for tenant-scoped endpoints.
+  - CurrentUserService provides centralized access to current user context across the application.
 
 **Section sources**
+- [UserAccount.cs:3-9](file://src/NonCash.Core/Entities/UserAccount.cs#L3-L9)
+- [BrandScopeMiddleware.cs:21-28](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L21-L28)
+- [CurrentUserService.cs:15-50](file://src/NonCash.API/Services/CurrentUserService.cs#L15-L50)
 - [1-4-staff-accounts-rbac.md:19-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L19-L44)
 - [1-4-staff-accounts-rbac.md:113-115](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L113-L115)
 
 ## Dependency Analysis
-The security architecture depends on:
-- Identity & Tenant Service for JWT issuance and BrandID scoping.
-- POS Usage Service orchestrating lock/commit/rollback with database transactions.
-- API Key Middleware for POS endpoint authentication.
-- Data models enforcing referential integrity and audit trail records.
+The enhanced security architecture depends on:
+- **Authentication Pipeline**: JWT bearer authentication with comprehensive claim validation and BrandScopeMiddleware for tenant enforcement.
+- **POS Processing**: Dedicated API key middleware for outlet authentication and POS service orchestration with database transactions.
+- **User Context Management**: CurrentUserService providing centralized access to current user claims and brand context.
+- **Data Models**: Entities enforcing referential integrity, outlet API key validation, and user role assignments.
+- **Service Layer**: Enhanced PosService with comprehensive validation, error handling, and transaction management.
 
 ```mermaid
 graph TB
-IdentitySvc["Identity & Tenant Service"] --> RBAC["RBAC Enforcement"]
-RBAC --> AllEndpoints["Protected Endpoints"]
-ApiKeyMW["API Key Middleware"] --> PosSvc["POS Usage Service"]
+AuthPipe["Enhanced Authentication Pipeline"] --> JWTAuth["JWT Bearer Authentication"]
+AuthPipe --> BrandMW["BrandScopeMiddleware"]
+JWTAuth --> JwtSvc["JwtTokenService"]
+BrandMW --> CurrentUser["CurrentUserService"]
+AuthPipe --> RBAC["RBAC Enforcement"]
+ApiKeyMW["ApiKeyMiddleware"] --> PosSvc["PosService"]
 PosSvc --> DB[("PostgreSQL")]
-AllEndpoints --> DB
+RBAC --> DB
+AllEndpoints["Protected Endpoints"] --> DB
 ```
 
 **Diagram sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
+- [JwtTokenService.cs:11-18](file://src/NonCash.API/Services/JwtTokenService.cs#L11-L18)
+- [CurrentUserService.cs:6-13](file://src/NonCash.API/Services/CurrentUserService.cs#L6-L13)
+- [ApiKeyMiddleware.cs:11-20](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L11-L20)
+- [PosService.cs:6-31](file://src/NonCash.Core/Services/PosService.cs#L6-L31)
 - [docs/architecture.md:25](file://docs/architecture.md#L25)
-- [docs/api-contracts.md:7](file://docs/api-contracts.md#L7)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 **Section sources**
+- [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 - [docs/architecture.md:25-35](file://docs/architecture.md#L25-L35)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ## Performance Considerations
-- Concurrency control: use conditional updates and row-level locking to prevent race conditions during lock acquisition.
-- Idempotency: design POS endpoints to tolerate retries without side effects.
-- Audit logging: minimize write amplification by batching non-critical audit entries; keep VoucherUsage minimal and indexed.
-- API key rotation: automate periodic rotation and maintain historical keys for short transition windows.
-
-[No sources needed since this section provides general guidance]
+- **Enhanced Concurrency Control**: Use conditional updates and row-level locking to prevent race conditions during lock acquisition with comprehensive race condition handling.
+- **Improved Idempotency**: Design POS endpoints to tolerate retries without side effects with enhanced duplicate detection mechanisms.
+- **Optimized Audit Logging**: Minimize write amplification by batching non-critical audit entries; keep VoucherUsage minimal and indexed for performance.
+- **API Key Rotation**: Automate periodic rotation and maintain historical keys for short transition windows with enhanced security.
+- **JWT Token Management**: Implement token expiration and refresh strategies to balance security and performance.
+- **Database Optimization**: Indexes on BrandId, OutletId, and VoucherCode fields for optimal query performance.
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- Invalid dynamic code:
-  - Cause: forged/expired/invalid signature.
-  - Resolution: return Invalid with reason; ensure client retries do not mutate state.
-- Outlet not authorized:
-  - Cause: POS outlet not in plan’s SalesRange.
-  - Resolution: enforce outlet scope validation; return Invalid with reason.
-- Already in use:
-  - Cause: concurrent lock attempts.
-  - Resolution: return AlreadyInUse; clients should wait or retry.
-- Lock expired:
-  - Cause: background cleanup or manual timeout.
+Common issues and resolutions with enhanced error handling:
+- **Invalid Dynamic Code**:
+  - Cause: forged/expired/invalid signature or validation failure.
+  - Resolution: return Invalid with specific reason; ensure client retries do not mutate state.
+- **Outlet Not Authorized**:
+  - Cause: POS outlet not in plan's SalesRange or outlet claims mismatch.
+  - Resolution: enforce outlet scope validation; return Invalid with specific reason.
+- **Already In Use**:
+  - Cause: concurrent lock attempts or race conditions.
+  - Resolution: return AlreadyInUse with LockId for idempotent handling; clients should wait or retry.
+- **Lock Expired**:
+  - Cause: background cleanup or manual timeout with enhanced TTL management.
   - Resolution: advise re-verify and re-lock; reject commit with LockExpired.
-- Already completed:
-  - Cause: voucher already marked Complete.
+- **Already Completed**:
+  - Cause: voucher already marked Complete with enhanced duplicate transaction detection.
   - Resolution: return AlreadyCompleted on rollback; do not create usage records.
-- Duplicate commit/rollback:
-  - Cause: network retry.
-  - Resolution: idempotent handling; do not create duplicates.
+- **Duplicate Commit/Rollback**:
+  - Cause: network retry with enhanced idempotency handling.
+  - Resolution: comprehensive idempotent handling; do not create duplicates.
+- **JWT Validation Failures**:
+  - Cause: expired tokens, invalid signatures, or missing claims.
+  - Resolution: implement token refresh mechanisms and comprehensive error reporting.
+- **API Key Authentication Issues**:
+  - Cause: missing headers, invalid keys, or inactive outlets.
+  - Resolution: enhanced error responses with specific failure reasons.
 
 **Section sources**
-- [4-1-check-for-information.md:28-43](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L28-L43)
-- [4-2-prepare-and-lock.md:22-39](file://_bmad-output/implementation-artifacts/4-2-prepare-and-lock.md#L22-L39)
-- [4-3-commit-and-log.md:32-42](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L32-L42)
-- [4-4-rollback-mechanism.md:21-38](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L21-L38)
+- [PosController.cs:27-51](file://src/NonCash.API/Controllers/PosController.cs#L27-L51)
+- [PosController.cs:63-94](file://src/NonCash.API/Controllers/PosController.cs#L63-L94)
+- [PosController.cs:106-134](file://src/NonCash.API/Controllers/PosController.cs#L106-L134)
+- [PosController.cs:145-166](file://src/NonCash.API/Controllers/PosController.cs#L145-L166)
+- [ApiKeyMiddleware.cs:33-53](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L33-L53)
+- [BrandScopeMiddleware.cs:21-28](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L21-L28)
 
 ## Conclusion
-The NonCash security architecture establishes strong multi-tenancy via BrandID, robust authentication using JWT for web/member apps and API keys for POS, and a secure, transactional voucher redemption flow. Dynamic code validation and strict RBAC enforcement protect tenant isolation and prevent fraud. The lock/commit/rollback pattern with atomic updates, idempotency, and audit trails ensures transaction integrity and traceability.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The enhanced NonCash security architecture establishes robust multi-tenancy via comprehensive BrandID enforcement, sophisticated authentication using JWT for web/member apps with enhanced claim structure and API keys for POS systems with dedicated middleware. The architecture incorporates comprehensive role-based access control with strict tenant isolation, dynamic code validation with enhanced security measures, and a secure, transactional voucher redemption flow with improved error handling and audit trails. The layered approach combining JWT bearer authentication, custom brand scoping middleware, and API key validation ensures transaction integrity, traceability, and protection against unauthorized access across all client types.
 
 ## Appendices
-- Cross-cutting security guidelines:
-  - Enforce HTTPS for all APIs.
-  - Rotate JWT and API keys regularly.
-  - Store secrets in environment variables.
-  - Monitor and log authentication failures and RBAC denials.
-
-[No sources needed since this section provides general guidance]
+- **Enhanced Cross-Cutting Security Guidelines**:
+  - Enforce HTTPS for all APIs with certificate validation.
+  - Rotate JWT and API keys regularly with enhanced key management.
+  - Store secrets in configuration files with proper environment variable management.
+  - Monitor and log authentication failures, RBAC denials, and security events.
+  - Implement comprehensive error handling with informative but non-sensitive error messages.
+  - Regular security audits of authentication and authorization mechanisms.
+  - Implement rate limiting and abuse detection for authentication endpoints.
+  - Maintain comprehensive audit logs for all security-relevant operations.

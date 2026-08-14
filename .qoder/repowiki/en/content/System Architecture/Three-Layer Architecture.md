@@ -12,7 +12,23 @@
 - [implementation-readiness-report-2026-04-17.md](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 - [ux-design-specification.md](file://_bmad-output/planning-artifacts/ux-design-specification.md)
+- [BaseEntity.cs](file://src/NonCash.Core/Entities/BaseEntity.cs)
+- [BaseEntity.cs](file://src/NonCash.Core/Entities/Base/BaseEntity.cs)
+- [Brand.cs](file://src/NonCash.Core/Entities/Brand.cs)
+- [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
+- [Customer.cs](file://src/NonCash.Core/Entities/Customer.cs)
+- [VoucherPlanHeader.cs](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs)
+- [VoucherPlanDetail.cs](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs)
+- [VoucherUsage.cs](file://src/NonCash.Core/Entities/VoucherUsage.cs)
+- [VoucherDistribution.cs](file://src/NonCash.Core/Entities/VoucherDistribution.cs)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added documentation for the new BaseEntity foundation class pattern
+- Updated entity relationship diagrams to reflect the inheritance hierarchy
+- Enhanced BaseEntity documentation with both base class variants
+- Updated data models section to show proper inheritance relationships
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -282,14 +298,110 @@ IVoucherPlanDetailRepository <|.. VoucherPlanDetailRepository
 - [data-models.md:7-98](file://docs/data-models.md#L7-L98)
 - [source-tree-analysis.md:15-18](file://docs/source-tree-analysis.md#L15-L18)
 
+### BaseEntity Foundation Class Pattern
+**Updated** Added documentation for the new BaseEntity foundation class pattern that establishes a common base for all domain entities.
+
+The NonCash system implements a dual BaseEntity pattern to support different entity requirements:
+
+#### Primary BaseEntity (Core Entities)
+The main BaseEntity class located in `src/NonCash.Core/Entities/BaseEntity.cs` serves as the foundation for most business entities:
+
+```mermaid
+classDiagram
+class BaseEntity {
++Guid Id
++DateTime CreatedAt
++DateTime? UpdatedAt
+}
+class Brand {
++string Name
++string TaxCode
++string ContactEmail
++BrandStatus Status
+}
+class UserAccount {
++Guid? BrandId
++string Username
++string PasswordHash
++string FullName
++UserRole Role
++UserStatus Status
++Brand Brand
+}
+class Customer {
++string PhoneNumber
++string FullName
++string Email
++CustomerStatus Status
+}
+BaseEntity <|-- Brand
+BaseEntity <|-- UserAccount
+BaseEntity <|-- Customer
+```
+
+**Diagram sources**
+- [BaseEntity.cs:1-8](file://src/NonCash.Core/Entities/BaseEntity.cs#L1-L8)
+- [Brand.cs:10-16](file://src/NonCash.Core/Entities/Brand.cs#L10-L16)
+- [UserAccount.cs:18-28](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L28)
+- [Customer.cs:9-20](file://src/NonCash.Core/Entities/Customer.cs#L9-L20)
+
+#### Secondary BaseEntity (Base Namespace)
+A secondary BaseEntity class exists in the `Base` namespace (`src/NonCash.Core/Entities/Base/BaseEntity.cs`) with extended properties for audit trails:
+
+```mermaid
+classDiagram
+class Base_BaseEntity {
++Guid Id = Guid.NewGuid()
++DateTime CreatedDate = DateTime.UtcNow
++Guid? CreatorId
+}
+class VoucherPlanHeader {
++DateTime PlanDate
++Guid CreatorId
++Guid? ApproverId
++Guid BrandId
++VoucherType VoucherType
++VoucherValueType ValueType
++decimal FaceValue
++decimal NetValue
++DateTime ExpiryDate
++DateTime PublishDate
++DateTime? ValidFrom
++DateTime? ValidTo
++int TargetQuantity
++decimal Budget
++int TargetDistributed
++int TargetUsed
++ApprovalStatus ApprovalStatus
++Guid? PreviousVersionId
++int VersionNumber
++Guid? PreviousVersionId
++int VersionNumber
++UserAccount Creator
++UserAccount? Approver
++Brand Brand
++VoucherPlanHeader? PreviousVersion
++ICollection PlanOutlets
+}
+Base_BaseEntity <|-- VoucherPlanHeader
+```
+
+**Diagram sources**
+- [BaseEntity.cs:1-11](file://src/NonCash.Core/Entities/Base/BaseEntity.cs#L1-L11)
+- [VoucherPlanHeader.cs:22-54](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L54)
+
+**Section sources**
+- [BaseEntity.cs:1-8](file://src/NonCash.Core/Entities/BaseEntity.cs#L1-L8)
+- [BaseEntity.cs:1-11](file://src/NonCash.Core/Entities/Base/BaseEntity.cs#L1-L11)
+- [Brand.cs:10-16](file://src/NonCash.Core/Entities/Brand.cs#L10-L16)
+- [UserAccount.cs:18-28](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L28)
+- [Customer.cs:9-20](file://src/NonCash.Core/Entities/Customer.cs#L9-L20)
+- [VoucherPlanHeader.cs:22-54](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L54)
+
 ### Data Models and Transactions
-- Core entities and relationships are relational (PostgreSQL) and managed via EF Core.
-- Example entities:
-  - VoucherPlanHeader (plan header)
-  - VoucherPlanDetail (individual vouchers)
-  - VoucherUsage (POS redemption history)
-  - VoucherDistribution (distribution tracking)
-  - Brand, Outlet, UserAccount, Customer (identity and operations)
+**Updated** Enhanced entity relationship documentation to reflect the BaseEntity inheritance pattern and new entity relationships.
+
+Core entities now inherit from BaseEntity, establishing a consistent foundation across the domain model:
 
 ```mermaid
 erDiagram
@@ -323,65 +435,91 @@ string FullName
 string Email
 enum Status
 }
-VOucherPLANHEADER {
+VOUCHERPLANHEADER {
 uuid ID PK
 datetime PlanDate
 uuid CreatorID FK
 uuid ApproverID FK
 uuid BrandID FK
 enum VoucherType
-string ImageURL
-string IconURL
+string ImageUrl
+string IconUrl
 enum ValueType
 decimal FaceValue
 decimal NetValue
 datetime ExpiryDate
 datetime PublishDate
-json SalesRange
-json TimeRange
+datetime ValidFrom
+datetime ValidTo
 int TargetQuantity
 decimal Budget
 int TargetDistributed
 int TargetUsed
 enum ApprovalStatus
+uuid PreviousVersionId
+int VersionNumber
 }
-VOucherPLANDETAIL {
+VOUCHERPLANDETAIL {
 uuid ID PK
 uuid ParentID FK
 string SerialNo
-string VoucherCode
-uuid MemberID FK
+string VoucherCodeSecret
+uuid MemberId
 enum UsageStatus
 datetime UsedDate
+uuid LockId
+datetime LockedAt
+string BillNumber
+uuid LockedOutletId
 }
-VOucherUSAGE {
+VOUCHERUSAGE {
 uuid ID PK
 uuid VoucherID FK
-string POSID
-string TransactionID
+uuid PosId
+string TransactionId
 datetime UsageDate
 decimal AmountUsed
 }
-VOucherDISTRIBUTION {
+VOUCHERDISTRIBUTION {
 uuid ID PK
 uuid VoucherID FK
 uuid MemberID FK
 enum Method
 datetime DistributionDate
 }
+BaseEntity ||--|| BRAND : "inherits from"
+BaseEntity ||--|| USERACCOUNT : "inherits from"
+BaseEntity ||--|| CUSTOMER : "inherits from"
+BaseEntity ||--|| VOUCHERPLANDETAIL : "inherits from"
+BaseEntity ||--|| VOUCHERUSAGE : "inherits from"
+BaseEntity ||--|| VOUCHERDISTRIBUTION : "inherits from"
 BRAND ||--o{ OUTLET : "owns"
-BRAND ||--o{ VOucherPLANHEADER : "creates"
-USERACCOUNT ||--o{ VOucherPLANHEADER : "creator/approver"
-VOucherPLANHEADER ||--o{ VOucherPLANDETAIL : "generates"
-CUSTOMER ||--o{ VOucherDISTRIBUTION : "receives"
-VOucherPLANDETAIL ||--o{ VOucherUSAGE : "consumed"
+BRAND ||--o{ VOUCHERPLANHEADER : "creates"
+USERACCOUNT ||--o{ VOUCHERPLANHEADER : "creator/approver"
+VOUCHERPLANHEADER ||--o{ VOUCHERPLANDETAIL : "generates"
+CUSTOMER ||--o{ VOUCHERDISTRIBUTION : "receives"
+VOUCHERPLANDETAIL ||--o{ VOUCHERUSAGE : "consumed"
 ```
 
 **Diagram sources**
 - [data-models.md:9-98](file://docs/data-models.md#L9-L98)
+- [Brand.cs:10-16](file://src/NonCash.Core/Entities/Brand.cs#L10-L16)
+- [UserAccount.cs:18-28](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L28)
+- [Customer.cs:9-20](file://src/NonCash.Core/Entities/Customer.cs#L9-L20)
+- [VoucherPlanHeader.cs:22-54](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L54)
+- [VoucherPlanDetail.cs:10-27](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L27)
+- [VoucherUsage.cs:3-13](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L13)
+- [VoucherDistribution.cs:10-20](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L20)
 
 **Section sources**
 - [data-models.md:9-98](file://docs/data-models.md#L9-L98)
+- [Brand.cs:10-16](file://src/NonCash.Core/Entities/Brand.cs#L10-L16)
+- [UserAccount.cs:18-28](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L28)
+- [Customer.cs:9-20](file://src/NonCash.Core/Entities/Customer.cs#L9-L20)
+- [VoucherPlanHeader.cs:22-54](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L54)
+- [VoucherPlanDetail.cs:10-27](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L27)
+- [VoucherUsage.cs:3-13](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L13)
+- [VoucherDistribution.cs:10-20](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L20)
 
 ### POS Integration API (External Consumer)
 - Overview
@@ -484,8 +622,6 @@ POS["External POS"] --> |HTTP| API
   - Employ connection pooling and efficient queries in EF Core.
   - Keep UI logic lean; delegate heavy computation to microservices.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 - Multi-tenancy isolation failures
   - Ensure BrandID is enforced in all queries and writes.
@@ -501,9 +637,9 @@ POS["External POS"] --> |HTTP| API
 - [data-models.md:46-53](file://docs/data-models.md#L46-L53)
 
 ## Conclusion
-NonCash’s three-layer SaaS architecture cleanly separates concerns across the Blazor UI, C#/.NET Core microservices, and PostgreSQL-backed EF Core DAL. This design supports scalability, maintainability, and independent development/deployment of services. The explicit separation of responsibilities, repository pattern, and microservice organization enable robust, extensible systems that can evolve with changing business needs while preserving transactional integrity and strong security controls.
+NonCash's three-layer SaaS architecture cleanly separates concerns across the Blazor UI, C#/.NET Core microservices, and PostgreSQL-backed EF Core DAL. This design supports scalability, maintainability, and independent development/deployment of services. The explicit separation of responsibilities, repository pattern, and microservice organization enable robust, extensible systems that can evolve with changing business needs while preserving transactional integrity and strong security controls.
 
-[No sources needed since this section summarizes without analyzing specific files]
+The addition of the BaseEntity foundation class pattern enhances the architectural consistency by providing a standardized base for all domain entities, ensuring uniform identity and audit trail capabilities across the entire system.
 
 ## Appendices
 
@@ -517,6 +653,21 @@ NonCash’s three-layer SaaS architecture cleanly separates concerns across the 
 **Section sources**
 - [architecture.md:5-52](file://docs/architecture.md#L5-L52)
 - [index.md:34-37](file://docs/index.md#L34-L37)
+
+### BaseEntity Architecture Benefits
+**Updated** Added documentation for the BaseEntity pattern benefits.
+
+The BaseEntity foundation class pattern provides several architectural advantages:
+
+- **Consistent Identity Management**: All entities inherit a standardized Guid-based Id property, ensuring uniform identity handling across the domain model.
+- **Audit Trail Standardization**: The dual BaseEntity pattern accommodates different audit requirements - the base namespace version for detailed audit trails and the core version for basic timestamps.
+- **Reduced Code Duplication**: Common properties like CreatedAt/UpdatedAt eliminate repetitive property declarations across entities.
+- **Enhanced Type Safety**: Strongly-typed BaseEntity classes provide compile-time safety and IntelliSense support.
+- **Future Extensibility**: The base class pattern allows for easy addition of common functionality without modifying individual entity classes.
+
+**Section sources**
+- [BaseEntity.cs:1-8](file://src/NonCash.Core/Entities/BaseEntity.cs#L1-L8)
+- [BaseEntity.cs:1-11](file://src/NonCash.Core/Entities/Base/BaseEntity.cs#L1-L11)
 
 ### UX and Frontend Guidance
 - UI framework choices: Blazor for admin dashboards; Tailwind-based custom components for customer-facing experiences.
