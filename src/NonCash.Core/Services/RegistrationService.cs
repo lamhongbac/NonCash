@@ -271,7 +271,7 @@ public class RegistrationService : IRegistrationService
 
         // Notify the applicant
         await _notificationService.NotifyApplicantReviewResultAsync(
-            request.SubmittedByUserId, brand?.Name ?? "", approve, cancellationToken);
+            request.SubmittedByUserId, brand?.Name ?? "", approve, request.ReviewNotes, cancellationToken);
 
         return new ReviewResult(true);
     }

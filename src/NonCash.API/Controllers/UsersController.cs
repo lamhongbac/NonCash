@@ -47,7 +47,7 @@ public class UsersController : ControllerBase
         try
         {
             var user = await _userService.CreateAsync(
-                request.Username, request.Password, request.FullName, role, request.BrandId, cancellationToken);
+                request.Username, request.Password, request.FullName, role, request.BrandId, request.Email, cancellationToken);
 
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, MapToResponse(user));
         }
@@ -71,7 +71,7 @@ public class UsersController : ControllerBase
 
         try
         {
-            var user = await _userService.UpdateAsync(id, request.FullName, role, request.BrandId, request.Password, cancellationToken);
+            var user = await _userService.UpdateAsync(id, request.FullName, role, request.BrandId, request.Password, request.Email, cancellationToken);
             return Ok(MapToResponse(user));
         }
         catch (ArgumentException ex)
@@ -118,6 +118,7 @@ public class UsersController : ControllerBase
             user.Id,
             user.Username,
             user.FullName,
+            user.Email,
             user.Role.ToString(),
             user.BrandId,
             user.Status.ToString(),

@@ -10,10 +10,10 @@ public class ConsoleNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
-    public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, CancellationToken cancellationToken = default)
+    public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
         var status = approved ? "APPROVED" : "REJECTED";
-        Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been {status}. User #{userId} notified.");
+        Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been {status}. User #{userId} notified. Note: {reviewNotes ?? "n/a"}");
         return Task.CompletedTask;
     }
 

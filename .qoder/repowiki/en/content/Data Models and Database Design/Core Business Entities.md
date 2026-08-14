@@ -4,29 +4,25 @@
 **Referenced Files in This Document**
 - [data-models.md](file://docs/data-models.md)
 - [Business.cs](file://src/NonCash.Core/Entities/Business.cs)
-- [Member.cs](file://src/NonCash.Core/Entities/Member.cs)
-- [PlanDetail.cs](file://src/NonCash.Core/Entities/PlanDetail.cs)
-- [ApprovalTransaction.cs](file://src/NonCash.Core/Entities/ApprovalTransaction.cs)
-- [UsageTransaction.cs](file://src/NonCash.Core/Entities/UsageTransaction.cs)
-- [ProductionPlan.cs](file://src/NonCash.Core/Entities/ProductionPlan.cs)
+- [Brand.cs](file://src/NonCash.Core/Entities/Brand.cs)
+- [WelcomeGrantPolicy.cs](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs)
+- [CreditBatch.cs](file://src/NonCash.Core/Entities/CreditBatch.cs)
+- [CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
+- [IWelcomePolicyService.cs](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs)
+- [WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
+- [migration-split-welcome-policy.sql](file://tools/migration-split-welcome-policy.sql)
+- [20260814050918_SplitWelcomePolicy.cs](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
 - [BaseEntity.cs](file://src/NonCash.Core/Entities/Base/BaseEntity.cs)
-- [MemberType.cs](file://src/NonCash.Shared/Enums/MemberType.cs)
-- [VoucherStatus.cs](file://src/NonCash.Shared/Enums/VoucherStatus.cs)
-- [ApprovalStatus.cs](file://src/NonCash.Shared/Enums/ApprovalStatus.cs)
-- [MembersController.cs](file://src/NonCash.API/Controllers/MembersController.cs)
-- [MemberVouchersController.cs](file://src/NonCash.API/Controllers/MemberVouchersController.cs)
-- [Key Functionalities.txt](file://Key Functionalities.txt)
-- [BMAD_STRUCTURE.md](file://BMAD_STRUCTURE.md)
-- [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added new core business entities: Business, Member, PlanDetail, ApprovalTransaction, and UsageTransaction
-- Updated production planning model to use ProductionPlan instead of VoucherPlanHeader
-- Enhanced voucher lifecycle with detailed status tracking and approval workflows
-- Integrated member-based voucher ownership and transfer capabilities
-- Added POS transaction tracking for redemption monitoring
+- Added new WelcomeGrantPolicy entity for business-scoped welcome credit policies
+- Updated CreditBatch entity with welcome_policy_id foreign key relationship
+- Enhanced Business entity with comprehensive tenant management capabilities
+- Introduced time-based policy activation system with effective date ranges
+- Migrated from brand-scoped to business-scoped welcome credit policies
+- Added comprehensive policy resolution service with configuration fallback
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -41,12 +37,14 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document defines the core business entities that underpin the NonCash platform's enhanced voucher lifecycle and tenant-aware operations. The platform now features an improved production planning model with detailed approval workflows and comprehensive member-based voucher management. The core entities include:
+This document defines the core business entities that underpin the NonCash platform's enhanced voucher lifecycle and tenant-aware operations. The platform now features an improved production planning model with detailed approval workflows, comprehensive member-based voucher management, and sophisticated welcome credit policy management. The core entities include:
 
+- **Business** (Multi-tenant organization)
+- **Brand** (Organization within a business)
+- **WelcomeGrantPolicy** (Business-scoped welcome credit policies)
+- **CreditBatch** (Prepaid credit batches with policy tracking)
 - **ProductionPlan** (Enhanced Production Planning)
 - **PlanDetail** (Individual Voucher Records)
-- **Business** (Multi-tenant organization)
-- **Member** (Customer/Organization accounts)
 - **ApprovalTransaction** (Approval workflow tracking)
 - **UsageTransaction** (POS redemption tracking)
 - **Outlet** (POS locations)
@@ -60,83 +58,237 @@ The enhanced data model and business context are documented across multiple file
 
 - **docs/data-models.md**: Defines the core entities and their attributes
 - **src/NonCash.Core/Entities/**: Contains all entity definitions with navigation properties
-- **src/NonCash.Shared/Enums/**: Defines shared enumeration types
-- **src/NonCash.API/Controllers/**: Demonstrates entity usage in API endpoints
-- **Key Functionalities.txt**: Describes production planning, approval workflows, and distribution processes
-- **BMAD_STRUCTURE.md**: Outlines business objectives and target users
-- **_bmad-output/planning-artifacts/epics.md**: Captures epics and acceptance criteria
+- **src/NonCash.Core/Configuration/**: Configuration classes including CreditConfig
+- **src/NonCash.Core/Interfaces/**: Service interfaces including IWelcomePolicyService
+- **src/NonCash.Infrastructure/Services/**: Service implementations including WelcomePolicyService
+- **tools/**: Database migration scripts including welcome policy migration
+- **src/NonCash.Infrastructure/Migrations/**: Entity Framework migrations
 
 ```mermaid
 graph TB
 DM["docs/data-models.md"]
 BE["Business.cs"]
-ME["Member.cs"]
-PD["PlanDetail.cs"]
-AT["ApprovalTransaction.cs"]
-UT["UsageTransaction.cs"]
-PP["ProductionPlan.cs"]
+BR["Brand.cs"]
+WGP["WelcomeGrantPolicy.cs"]
+CB["CreditBatch.cs"]
+CC["CreditConfig.cs"]
+IWS["IWelcomePolicyService.cs"]
+WPS["WelcomePolicyService.cs"]
+MIG["migration-split-welcome-policy.sql"]
 BASE["BaseEntity.cs"]
-MT["MemberType.cs"]
-VS["VoucherStatus.cs"]
-AS["ApprovalStatus.cs"]
-MC["MembersController.cs"]
-MVC["MemberVouchersController.cs"]
-KF["Key Functionalities.txt"]
-BS["BMAD_STRUCTURE.md"]
-EP["epics.md"]
 DM --- BE
-DM --- ME
-DM --- PD
-DM --- AT
-DM --- UT
-DM --- PP
+DM --- BR
+DM --- WGP
+DM --- CB
 BE --- BASE
-ME --- BASE
-PD --- BASE
-AT --- BASE
-UT --- BASE
-PP --- BASE
-BE --- MT
-PD --- VS
-AT --- AS
-MC --- PD
-MVC --- PD
+BR --- BASE
+WGP --- BASE
+CB --- BASE
+WGP --- CC
+IWS --- WGP
+WPS --- WGP
+WPS --- CC
+MIG --- WGP
 ```
 
 **Diagram sources**
-- [data-models.md:1-98](file://docs/data-models.md#L1-L98)
-- [Business.cs:1-14](file://src/NonCash.Core/Entities/Business.cs#L1-L14)
-- [Member.cs:1-16](file://src/NonCash.Core/Entities/Member.cs#L1-L16)
-- [PlanDetail.cs:1-29](file://src/NonCash.Core/Entities/PlanDetail.cs#L1-L29)
-- [ApprovalTransaction.cs:1-24](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L1-L24)
-- [UsageTransaction.cs:1-22](file://src/NonCash.Core/Entities/UsageTransaction.cs#L1-L22)
-- [ProductionPlan.cs:1-70](file://src/NonCash.Core/Entities/ProductionPlan.cs#L1-L70)
-- [BaseEntity.cs:1-12](file://src/NonCash.Core/Entities/Base/BaseEntity.cs#L1-L12)
-- [MemberType.cs:1-9](file://src/NonCash.Shared/Enums/MemberType.cs#L1-L9)
-- [VoucherStatus.cs:1-10](file://src/NonCash.Shared/Enums/VoucherStatus.cs#L1-L10)
-- [ApprovalStatus.cs:1-10](file://src/NonCash.Shared/Enums/ApprovalStatus.cs#L1-L10)
-- [MembersController.cs:1-79](file://src/NonCash.API/Controllers/MembersController.cs#L1-L79)
-- [MemberVouchersController.cs:1-73](file://src/NonCash.API/Controllers/MemberVouchersController.cs#L1-L73)
+- [data-models.md:1-113](file://docs/data-models.md#L1-L113)
+- [Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
+- [Brand.cs:1-19](file://src/NonCash.Core/Entities/Brand.cs#L1-L19)
+- [WelcomeGrantPolicy.cs:1-37](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L37)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+- [CreditConfig.cs:1-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L1-L35)
+- [IWelcomePolicyService.cs:1-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L1-L37)
+- [WelcomePolicyService.cs:1-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L75)
+- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
 
 **Section sources**
-- [data-models.md:1-98](file://docs/data-models.md#L1-L98)
-- [Business.cs:1-14](file://src/NonCash.Core/Entities/Business.cs#L1-L14)
-- [Member.cs:1-16](file://src/NonCash.Core/Entities/Member.cs#L1-L16)
-- [PlanDetail.cs:1-29](file://src/NonCash.Core/Entities/PlanDetail.cs#L1-L29)
-- [ApprovalTransaction.cs:1-24](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L1-L24)
-- [UsageTransaction.cs:1-22](file://src/NonCash.Core/Entities/UsageTransaction.cs#L1-L22)
-- [ProductionPlan.cs:1-70](file://src/NonCash.Core/Entities/ProductionPlan.cs#L1-L70)
-- [BaseEntity.cs:1-12](file://src/NonCash.Core/Entities/Base/BaseEntity.cs#L1-L12)
-- [MemberType.cs:1-9](file://src/NonCash.Shared/Enums/MemberType.cs#L1-L9)
-- [VoucherStatus.cs:1-10](file://src/NonCash.Shared/Enums/VoucherStatus.cs#L1-L10)
-- [ApprovalStatus.cs:1-10](file://src/NonCash.Shared/Enums/ApprovalStatus.cs#L1-L10)
-- [MembersController.cs:1-79](file://src/NonCash.API/Controllers/MembersController.cs#L1-L79)
-- [MemberVouchersController.cs:1-73](file://src/NonCash.API/Controllers/MemberVouchersController.cs#L1-L73)
+- [data-models.md:1-113](file://docs/data-models.md#L1-L113)
+- [Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
+- [Brand.cs:1-19](file://src/NonCash.Core/Entities/Brand.cs#L1-L19)
+- [WelcomeGrantPolicy.cs:1-37](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L37)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+- [CreditConfig.cs:1-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L1-L35)
+- [IWelcomePolicyService.cs:1-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L1-L37)
+- [WelcomePolicyService.cs:1-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L75)
+- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
 
 ## Core Components
 This section summarizes each entity's purpose, attributes, and constraints as defined in the enhanced repository materials.
 
-### Enhanced Production Planning Model
+### Welcome Grant Policy System
+
+**WelcomeGrantPolicy** (Business-Scoped Welcome Credit Policies)
+- **Purpose**: Versioned, time-bound welcome-grant policy attached to a Business for managing welcome credits for new brands
+- **Primary Key**: Id (GUID)
+- **Foreign Key**: BusinessId (Business)
+- **Attributes and Types**: Name (String), BusinessId (GUID), WelcomeCredits (Integer), WelcomeCreditExpiryMonths (Integer?), EffectiveFrom (DateTime), EffectiveTo (DateTime?), IsActive (Boolean), CreatedBy (GUID?)
+- **Business Constraints**:
+  - Time-based activation with EffectiveFrom and EffectiveTo date ranges
+  - Business-scoped policies apply uniformly to all brands under a business
+  - Most recent active policy takes precedence based on EffectiveFrom ordering
+  - Fallback to CreditConfig defaults when no matching policy exists
+  - Supports versioning through multiple policy records per business
+
+**Updated** New entity introduced to replace brand-scoped welcome credits with business-scoped approach
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- WelcomeCredits must be non-negative integer
+- WelcomeCreditExpiryMonths must be positive or null (never expires)
+- EffectiveFrom must be before EffectiveTo (when both provided)
+- IsActive controls policy availability
+- EffectiveFrom defaults to current UTC time
+
+Sample Data Example:
+- Id: [GUID]
+- Name: "[Policy Name]"
+- BusinessId: [GUID]
+- WelcomeCredits: [Integer]
+- WelcomeCreditExpiryMonths: [Integer or null]
+- EffectiveFrom: [DateTime]
+- EffectiveTo: [DateTime or null]
+- IsActive: true or false
+- CreatedBy: [GUID or null]
+
+**Section sources**
+- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+
+**ResolvedWelcomePolicy** (Policy Resolution Result)
+- **Purpose**: Resolved welcome policy values after applying business policy → CreditConfig fallback logic
+- **Type**: Record with PolicyId, Name, WelcomeCredits, WelcomeCreditExpiryMonths
+- **Business Logic**: Represents the effective policy values for a business at a given time
+
+**New Type** Added to encapsulate resolved policy values for consumption
+
+**Section sources**
+- [IWelcomePolicyService.cs:28-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L28-L37)
+
+### Enhanced Business Management
+
+**Business** (Multi-Tenant Organization)
+- **Purpose**: Enhanced tenant representation with comprehensive business information and brand management
+- **Primary Key**: Id (GUID)
+- **Attributes and Types**: BusinessName (String), TaxCode (String), Address (String), ContactEmail (String?), PhoneNumber (String?), IsActive (Boolean)
+- **Navigation Properties**: Brands (ICollection<Brand>)
+- **Business Constraints**:
+  - Controls tenant activation and deactivation via IsActive flag
+  - Supports multi-tenant isolation and resource management
+  - Provides business contact and identification information
+  - Serves as parent entity for Brand hierarchy
+
+**Updated** Enhanced from original Business entity with comprehensive business information fields
+
+Validation Rules:
+- BusinessName must be non-empty
+- TaxCode must be unique per tenant
+- IsActive must be boolean value
+- Email format validation (when provided)
+
+Sample Data Example:
+- Id: [GUID]
+- BusinessName: "[Business Name]"
+- TaxCode: "[Tax Identifier]"
+- Address: "[Business Address]"
+- ContactEmail: "[Email Address]"
+- PhoneNumber: "[Phone Number]"
+- IsActive: true or false
+
+**Section sources**
+- [Business.cs:6-16](file://src/NonCash.Core/Entities/Business.cs#L6-L16)
+
+**Brand** (Organization within Business)
+- **Purpose**: Individual organizations within a business that receive welcome credits based on business policies
+- **Primary Key**: Id (GUID)
+- **Foreign Key**: BusinessId (Business)
+- **Attributes and Types**: Name (String), TaxCode (String), ContactEmail (String?), Status (Enum: PendingActivation, Active, Suspended)
+- **Navigation Properties**: Business (Business)
+- **Business Constraints**:
+  - Belongs to a parent Business entity
+  - Status governs activation state
+  - Receives welcome credits based on business-level policies
+
+**Updated** Enhanced from Brand entity with business relationship and status management
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- TaxCode must be unique within business scope
+- Status must be PendingActivation, Active, or Suspended
+
+Sample Data Example:
+- Id: [GUID]
+- BusinessId: [GUID]
+- Name: "[Brand Name]"
+- TaxCode: "[Tax Code]"
+- ContactEmail: "[Email Address]"
+- Status: PendingActivation or Active or Suspended
+
+**Section sources**
+- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+
+### Enhanced Credit Management
+
+**CreditBatch** (Prepaid Credit Batches)
+- **Purpose**: Prepaid credit batches with support for welcome grants and pricing policies
+- **Primary Key**: Id (GUID)
+- **Foreign Keys**: BrandId (Brand), PolicyId (CreditPricingPolicy), WelcomePolicyId (WelcomeGrantPolicy), AdjustmentRequestId (CreditAdjustmentRequest)
+- **Attributes and Types**: Amount (Decimal), RemainingAmount (Decimal), PricePerCreditVnd (Decimal), TotalPaidVnd (Decimal), ExpiresAt (DateTime?), EvidenceImageUrl (String?), Reference (String?), CreatedBy (GUID?)
+- **Navigation Properties**: Brand (Brand), Policy (CreditPricingPolicy), WelcomePolicy (WelcomeGrantPolicy), AdjustmentRequest (CreditAdjustmentRequest)
+- **Business Constraints**:
+  - Links to either pricing policy or welcome policy (or both)
+  - Supports idempotent welcome grants per brand
+  - Tracks expiration dates for credit usage
+  - Maintains audit trail through CreatedBy field
+
+**Updated** Enhanced with WelcomePolicyId foreign key for welcome grant tracking
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- Amount must be positive
+- RemainingAmount ≤ Amount
+- ExpiresAt must be after creation date (when provided)
+- WelcomePolicyId must reference an existing WelcomeGrantPolicy (when set)
+
+Sample Data Example:
+- Id: [GUID]
+- BrandId: [GUID]
+- PolicyId: [GUID or null]
+- WelcomePolicyId: [GUID or null]
+- Amount: [Decimal]
+- RemainingAmount: [Decimal]
+- PricePerCreditVnd: [Decimal]
+- TotalPaidVnd: [Decimal]
+- ExpiresAt: [DateTime or null]
+- CreatedBy: [GUID or null]
+
+**Section sources**
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+
+**CreditConfig** (Configuration Defaults)
+- **Purpose**: Application configuration providing default values when no database policies exist
+- **Attributes and Types**: WelcomeCredits (Integer = 500), LowBalanceWarningPercent (Integer = 20), PricePerCreditVnd (Decimal = 5000m), CreditExpiryMonths (Integer? = 12), WelcomeCreditExpiryMonths (Integer? = 12), ExpiryWarningDays (Integer? = 30), AdjustmentApprovalThreshold (Integer? = 1000)
+- **Business Logic**: Serves as fallback when no database policy matches for welcome credits
+
+**Updated** Enhanced to serve as fallback for welcome credit policies
+
+Validation Rules:
+- WelcomeCredits must be non-negative
+- All numeric values must be valid ranges
+- Percentage values must be between 0-100
+
+Sample Data Example:
+- WelcomeCredits: 500
+- LowBalanceWarningPercent: 20
+- PricePerCreditVnd: 5000m
+- CreditExpiryMonths: 12
+- WelcomeCreditExpiryMonths: 12
+- ExpiryWarningDays: 30
+- AdjustmentApprovalThreshold: 1000
+
+**Section sources**
+- [CreditConfig.cs:7-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L7-L35)
+
+### Core Business Entities
 
 **ProductionPlan** (Enhanced Production Planning)
 - **Purpose**: Comprehensive voucher production planning with approval workflows and detailed campaign management
@@ -149,8 +301,43 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Budget and quantity targets support financial planning
   - Navigation properties link to PlanDetail and ApprovalTransaction collections
 
+**Updated** Enhanced from VoucherPlanHeader with comprehensive approval workflow and detailed operational fields
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- FaceValue ≥ 0, NetValue ≥ 0, Price ≥ 0
+- ExpiryDate ≥ PublishDate (when both provided)
+- ValidFrom ≤ ValidTo (when both provided)
+- PlannedQuantity ≥ 0
+- TotalBudget ≥ 0
+- TargetDistributionQuantity ≥ 0
+- TargetUsageQuantity ≥ 0
+
+Sample Data Example:
+- ID: [GUID]
+- PlanName: "[Campaign Name]"
+- BusinessId: [GUID]
+- VoucherType: Complimentary or Gift
+- ValueType: Value or Percentage
+- FaceValue: [Decimal]
+- NetValue: [Decimal]
+- Price: [Decimal]
+- ExpiryDate: [DateTime or null]
+- PublishDate: [DateTime or null]
+- ValidFrom: [DateTime or null]
+- ValidTo: [DateTime or null]
+- AllowedLocations: "[JSON/CSV string]"
+- PlannedQuantity: [Integer]
+- TotalBudget: [Decimal]
+- TargetDistributionQuantity: [Integer]
+- TargetUsageQuantity: [Integer]
+- ApprovalStatus: Pending or Approved or Rejected
+
+**Section sources**
+- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
+
 **PlanDetail** (Individual Voucher Records)
-- **Purpose**: Individual voucher instance with detailed status tracking and member ownership
+- **Purpose**: Detailed individual voucher instance with comprehensive status tracking and member ownership
 - **Primary Key**: ID (GUID)
 - **Foreign Keys**: ProductionPlanId (ProductionPlan), MemberId (Member)
 - **Attributes and Types**: SerialNo (String), DynamicVoucherCode (String), MemberId (GUID?), Status (Enum), UsedDate (DateTime?)
@@ -158,6 +345,27 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Status drives lifecycle (Pending → In-Use → Complete)
   - MemberId links ownership to either Customer or Organization members
   - DynamicVoucherCode enables secure redemption with flexible encoding
+
+**Updated** Enhanced from VoucherPlanDetail with improved status tracking and member ownership
+
+Validation Rules:
+- ProductionPlanId must reference an existing ProductionPlan
+- MemberId must reference an existing Member (when assigned)
+- Status must be Pending/In-Use/Complete
+- UsedDate must be present when Status is Complete
+- SerialNo must be unique within ProductionPlan scope
+
+Sample Data Example:
+- ID: [GUID]
+- ProductionPlanId: [GUID]
+- SerialNo: "[Unique String]"
+- DynamicVoucherCode: "[Dynamic Code]"
+- MemberId: [GUID or null]
+- Status: Pending or In-Use or Complete
+- UsedDate: [DateTime or null]
+
+**Section sources**
+- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
 
 **ApprovalTransaction** (Approval Workflow Tracking)
 - **Purpose**: Detailed audit trail of approval decisions and reviewer actions
@@ -169,6 +377,27 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Supports traceability for rejected plans requiring resubmission
   - Enables audit trail for compliance and reporting
 
+**New Entity** Added to track detailed approval workflows and decision history
+
+Validation Rules:
+- ProductionPlanId must reference an existing ProductionPlan
+- ReviewerId must reference an existing UserAccount
+- ReviewDate defaults to current UTC time
+- Status must be Pending/Approved/Rejected
+- PublishDate can only be set for Approved statuses
+
+Sample Data Example:
+- ID: [GUID]
+- ProductionPlanId: [GUID]
+- ReviewerId: [GUID]
+- ReviewDate: [DateTime]
+- ReviewNotes: "[Reviewer comments]"
+- Status: Pending or Approved or Rejected
+- PublishDate: [DateTime or null]
+
+**Section sources**
+- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
+
 **UsageTransaction** (POS Redemption Tracking)
 - **Purpose**: Comprehensive POS transaction logging for redemption monitoring
 - **Primary Key**: ID (GUID)
@@ -179,24 +408,25 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Supports reconciliation and audit requirements
   - Enables real-time redemption monitoring
 
-### Core Business Entities
+**New Entity** Added to track detailed POS redemption activities
 
-**Business** (Multi-Tenant Organization)
-- **Purpose**: Enhanced tenant representation with comprehensive business information
-- **Primary Key**: ID (GUID)
-- **Attributes and Types**: BusinessName (String), TaxCode (String), Address (String), IsActive (Boolean)
-- **Business Constraints**:
-  - IsActive flag controls tenant activation status
-  - Supports multi-tenant isolation and resource management
+Validation Rules:
+- PlanDetailId must reference an existing PlanDetail
+- PosSystemId must reference an existing Outlet
+- UsedAmount must be positive and ≤ PlanDetail.FaceValue
+- TransactionDate defaults to current UTC time
+- PosReferenceNumber must be unique per transaction
 
-**Member** (Customer/Organization Accounts)
-- **Purpose**: Unified membership system supporting both individual customers and organizational accounts
-- **Primary Key**: ID (GUID)
-- **Attributes and Types**: MemberCode (String), Name (String), PhoneNumber (String), Email (String), Type (Enum)
-- **Business Constraints**:
-  - MemberType distinguishes between Customer (0) and Organization (1)
-  - PhoneNumber serves as primary identifier for account linking
-  - Supports both personal and business voucher ownership
+Sample Data Example:
+- ID: [GUID]
+- PlanDetailId: [GUID]
+- PosSystemId: [GUID]
+- UsedAmount: [Decimal]
+- TransactionDate: [DateTime]
+- PosReferenceNumber: "[POS Reference]"
+
+**Section sources**
+- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
 
 **Outlet** (Point of Sale / Store)
 - **Purpose**: Physical or digital store under a Business eligible to accept vouchers
@@ -207,6 +437,23 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Status governs Active/Closed state
   - AllowedLocations in ProductionPlan references Outlet IDs for usage restrictions
 
+**Updated** Enhanced from Outlet with improved business association
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- Status must be Active or Closed
+- Name must be non-empty
+
+Sample Data Example:
+- ID: [GUID]
+- BusinessId: [GUID]
+- Name: "[Store Name]"
+- Address: "[Full Address]"
+- Status: Active or Closed
+
+**Section sources**
+- [data-models.md:73-79](file://docs/data-models.md#L73-L79)
+
 **UserAccount** (Back-office Users)
 - **Purpose**: Platform users with roles for planning, reviewing, and approving production plans
 - **Primary Key**: ID (GUID)
@@ -216,6 +463,26 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - Role determines access rights (Admin/Planner/Approver)
   - BusinessId scopes users to a tenant (nullable for system-wide roles)
 
+**Updated** Enhanced from UserAccount with improved business scoping
+
+Validation Rules:
+- Role must be Admin/Planner/Approver
+- Status must be Active/Locked
+- Username must be unique
+- BusinessId can be null for system administrators
+
+Sample Data Example:
+- ID: [GUID]
+- BusinessId: [GUID or null]
+- Username: "[Unique Username]"
+- PasswordHash: "[Hashed Value]"
+- FullName: "[Full Name]"
+- Role: Admin or Planner or Approver
+- Status: Active or Locked
+
+**Section sources**
+- [data-models.md:81-89](file://docs/data-models.md#L81-L89)
+
 **Customer** (End-User / App Member)
 - **Purpose**: Individual end-users who receive and redeem vouchers
 - **Primary Key**: ID (GUID)
@@ -224,17 +491,24 @@ This section summarizes each entity's purpose, attributes, and constraints as de
   - PhoneNumber is the primary identifier for transfers/logins
   - Status governs Active/Blacklisted state
 
+**Updated** Enhanced from Customer with improved status management
+
+Validation Rules:
+- PhoneNumber must be unique
+- Status must be Active or Blacklisted
+
+Sample Data Example:
+- ID: [GUID]
+- PhoneNumber: "[Phone Number]"
+- FullName: "[Full Name]"
+- Email: "[Email Address]"
+- Status: Active or Blacklisted
+
 **Section sources**
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
-- [Business.cs:6-12](file://src/NonCash.Core/Entities/Business.cs#L6-L12)
-- [Member.cs:7-14](file://src/NonCash.Core/Entities/Member.cs#L7-L14)
-- [data-models.md:9-97](file://docs/data-models.md#L9-L97)
+- [data-models.md:91-97](file://docs/data-models.md#L91-L97)
 
 ## Architecture Overview
-The enhanced entities form a comprehensive domain model supporting advanced multi-tenancy, detailed approval workflows, and comprehensive voucher lifecycle management.
+The enhanced entities form a comprehensive domain model supporting advanced multi-tenancy, detailed approval workflows, comprehensive voucher lifecycle management, and sophisticated welcome credit policy management.
 
 ```mermaid
 erDiagram
@@ -243,15 +517,43 @@ guid ID PK
 string BusinessName
 string TaxCode
 string Address
+string ContactEmail
+string PhoneNumber
 boolean IsActive
 }
-MEMBER {
+BRAND {
 guid ID PK
-string MemberCode
+guid BusinessId FK
 string Name
-string PhoneNumber
-string Email
-enum Type
+string TaxCode
+string ContactEmail
+enum Status
+}
+WELCOMEGRANTPOLICY {
+guid ID PK
+guid BusinessId FK
+string Name
+int WelcomeCredits
+int WelcomeCreditExpiryMonths
+datetime EffectiveFrom
+datetime EffectiveTo
+boolean IsActive
+guid CreatedBy
+}
+CREDITBATCH {
+guid ID PK
+guid BrandId FK
+guid PolicyId FK
+guid WelcomePolicyId FK
+decimal Amount
+decimal RemainingAmount
+decimal PricePerCreditVnd
+decimal TotalPaidVnd
+datetime ExpiresAt
+string EvidenceImageUrl
+string Reference
+guid AdjustmentRequestId
+guid CreatedBy
 }
 PRODUCTIONPLAN {
 guid ID PK
@@ -325,29 +627,231 @@ string FullName
 string Email
 enum Status
 }
-PRODUCTIONPLAN ||--o{ PLANDetail : "generates"
-PRODUCTIONPLAN ||--o{ APPROVALTRANSACTION : "approved_by"
-PLANDetail ||--|| MEMBER : "owned_by"
-PLANDetail ||--o{ USAGETRANSACTION : "redeemed_in"
+BUSINESS ||--o{ BRAND : "owns"
+BUSINESS ||--o{ WELCOMEGRANTPOLICY : "has_policies"
 BUSINESS ||--o{ PRODUCTIONPLAN : "creates"
 BUSINESS ||--o{ OUTLET : "owns"
 BUSINESS ||--o{ USERACCOUNT : "employs"
-MEMBER ||--o{ PLANDetail : "owns"
+BRAND ||--o{ CREDITBATCH : "receives"
+BRAND ||--o{ PLANDetail : "owns_vouchers"
+WELCOMEGRANTPOLICY ||--o{ CREDITBATCH : "grants_welcome"
+PRODUCTIONPLAN ||--o{ PLANDetail : "generates"
+PRODUCTIONPLAN ||--o{ APPROVALTRANSACTION : "approved_by"
+PLANDetail ||--o{ USAGETRANSACTION : "redeemed_in"
 OUTLET ||--o{ USAGETRANSACTION : "accepts"
 ```
 
 **Diagram sources**
+- [Business.cs:6-16](file://src/NonCash.Core/Entities/Business.cs#L6-L16)
+- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
 - [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
 - [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
 - [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
 - [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
-- [Business.cs:6-12](file://src/NonCash.Core/Entities/Business.cs#L6-L12)
-- [Member.cs:7-14](file://src/NonCash.Core/Entities/Member.cs#L7-L14)
-- [data-models.md:9-97](file://docs/data-models.md#L9-L97)
 
 ## Detailed Component Analysis
 
-### Enhanced Production Planning Model
+### Welcome Grant Policy System
+
+#### WelcomeGrantPolicy (Business-Scoped Welcome Credit Policies)
+- **Purpose**: Versioned, time-bound welcome-grant policy attached to a Business for managing welcome credits for new brands
+- **Key Fields**:
+  - Id (Primary Key)
+  - BusinessId (Foreign Key to Business)
+  - Name (Policy description)
+  - WelcomeCredits (Free credits granted to each new brand)
+  - WelcomeCreditExpiryMonths (Months until welcome batch expires)
+  - EffectiveFrom/EffectiveTo (Time-based activation)
+  - IsActive (Policy availability flag)
+  - CreatedBy (Admin who created the policy)
+- **Business Logic**:
+  - Business-scoped policies apply uniformly to all brands under a business
+  - Time-based activation with effective date ranges
+  - Most recent active policy takes precedence based on EffectiveFrom ordering
+  - Fallback to CreditConfig defaults when no matching policy exists
+  - Supports versioning through multiple policy records per business
+
+**Updated** New entity introduced to replace brand-scoped welcome credits with business-scoped approach
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- WelcomeCredits must be non-negative integer
+- WelcomeCreditExpiryMonths must be positive or null (never expires)
+- EffectiveFrom must be before EffectiveTo (when both provided)
+- IsActive controls policy availability
+- EffectiveFrom defaults to current UTC time
+
+Sample Data Example:
+- Id: [GUID]
+- Name: "[Policy Name]"
+- BusinessId: [GUID]
+- WelcomeCredits: [Integer]
+- WelcomeCreditExpiryMonths: [Integer or null]
+- EffectiveFrom: [DateTime]
+- EffectiveTo: [DateTime or null]
+- IsActive: true or false
+- CreatedBy: [GUID or null]
+
+**Section sources**
+- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+
+#### WelcomePolicyService (Policy Resolution and Management)
+- **Purpose**: Service layer for welcome policy management and resolution logic
+- **Methods**: ResolveForBusinessAsync, GetPoliciesAsync, GetPolicyAsync, CreatePolicyAsync, UpdatePolicyAsync, DeactivatePolicyAsync
+- **Business Logic**:
+  - Resolves most recent active, in-effect policy for a business
+  - Falls back to CreditConfig defaults when no DB policy matches
+  - Supports CRUD operations for policy management
+  - Handles time-based policy activation and deactivation
+
+**New Service** Added to manage welcome policy lifecycle and resolution
+
+Validation Rules:
+- Policy resolution follows business policy → CreditConfig fallback pattern
+- Time-based queries use EffectiveFrom and EffectiveTo for filtering
+- Most recent policy wins based on EffectiveFrom ordering
+
+**Section sources**
+- [IWelcomePolicyService.cs:12-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L12-L37)
+- [WelcomePolicyService.cs:14-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L14-L75)
+
+### Enhanced Business Management
+
+#### Business (Enhanced Multi-Tenant Organization)
+- **Purpose**: Comprehensive tenant representation with business information management and brand hierarchy
+- **Key Fields**:
+  - Id (Primary Key)
+  - BusinessName, TaxCode, Address
+  - ContactEmail, PhoneNumber
+  - IsActive (Boolean flag)
+- **Navigation Properties**: Brands (ICollection<Brand>)
+- **Business Logic**:
+  - Controls tenant activation and deactivation
+  - Supports multi-tenant isolation and resource management
+  - Provides business contact and identification information
+  - Serves as parent entity for brand hierarchy
+
+**Updated** Enhanced from original Business entity with comprehensive business information fields
+
+Validation Rules:
+- BusinessName must be non-empty
+- TaxCode must be unique per tenant
+- IsActive must be boolean value
+- Email format validation (when provided)
+
+Sample Data Example:
+- Id: [GUID]
+- BusinessName: "[Business Name]"
+- TaxCode: "[Tax Identifier]"
+- Address: "[Business Address]"
+- ContactEmail: "[Email Address]"
+- PhoneNumber: "[Phone Number]"
+- IsActive: true or false
+
+**Section sources**
+- [Business.cs:6-16](file://src/NonCash.Core/Entities/Business.cs#L6-L16)
+
+#### Brand (Organization within Business)
+- **Purpose**: Individual organizations within a business that receive welcome credits based on business policies
+- **Key Fields**:
+  - Id (Primary Key)
+  - BusinessId (Foreign Key to Business)
+  - Name, TaxCode, ContactEmail
+  - Status (Enum: PendingActivation, Active, Suspended)
+- **Navigation Properties**: Business (Business)
+- **Business Logic**:
+  - Belongs to a parent Business entity
+  - Status governs activation state
+  - Receives welcome credits based on business-level policies
+
+**Updated** Enhanced from Brand entity with business relationship and status management
+
+Validation Rules:
+- BusinessId must reference an existing Business
+- TaxCode must be unique within business scope
+- Status must be PendingActivation, Active, or Suspended
+
+Sample Data Example:
+- Id: [GUID]
+- BusinessId: [GUID]
+- Name: "[Brand Name]"
+- TaxCode: "[Tax Code]"
+- ContactEmail: "[Email Address]"
+- Status: PendingActivation or Active or Suspended
+
+**Section sources**
+- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+
+### Enhanced Credit Management
+
+#### CreditBatch (Prepaid Credit Batches)
+- **Purpose**: Prepaid credit batches with support for welcome grants and pricing policies
+- **Key Fields**:
+  - Id (Primary Key)
+  - BrandId (Foreign Key to Brand)
+  - PolicyId (Foreign Key to CreditPricingPolicy)
+  - WelcomePolicyId (Foreign Key to WelcomeGrantPolicy)
+  - Amount, RemainingAmount, PricePerCreditVnd, TotalPaidVnd
+  - ExpiresAt, EvidenceImageUrl, Reference
+  - AdjustmentRequestId, CreatedBy
+- **Navigation Properties**: Brand, Policy, WelcomePolicy, AdjustmentRequest
+- **Business Logic**:
+  - Links to either pricing policy or welcome policy (or both)
+  - Supports idempotent welcome grants per brand
+  - Tracks expiration dates for credit usage
+  - Maintains audit trail through CreatedBy field
+
+**Updated** Enhanced with WelcomePolicyId foreign key for welcome grant tracking
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- Amount must be positive
+- RemainingAmount ≤ Amount
+- ExpiresAt must be after creation date (when provided)
+- WelcomePolicyId must reference an existing WelcomeGrantPolicy (when set)
+
+Sample Data Example:
+- Id: [GUID]
+- BrandId: [GUID]
+- PolicyId: [GUID or null]
+- WelcomePolicyId: [GUID or null]
+- Amount: [Decimal]
+- RemainingAmount: [Decimal]
+- PricePerCreditVnd: [Decimal]
+- TotalPaidVnd: [Decimal]
+- ExpiresAt: [DateTime or null]
+- CreatedBy: [GUID or null]
+
+**Section sources**
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+
+#### CreditConfig (Configuration Defaults)
+- **Purpose**: Application configuration providing default values when no database policies exist
+- **Key Fields**: WelcomeCredits (500), LowBalanceWarningPercent (20), PricePerCreditVnd (5000m), CreditExpiryMonths (12), WelcomeCreditExpiryMonths (12), ExpiryWarningDays (30), AdjustmentApprovalThreshold (1000)
+- **Business Logic**: Serves as fallback when no database policy matches for welcome credits
+
+**Updated** Enhanced to serve as fallback for welcome credit policies
+
+Validation Rules:
+- WelcomeCredits must be non-negative
+- All numeric values must be valid ranges
+- Percentage values must be between 0-100
+
+Sample Data Example:
+- WelcomeCredits: 500
+- LowBalanceWarningPercent: 20
+- PricePerCreditVnd: 5000m
+- CreditExpiryMonths: 12
+- WelcomeCreditExpiryMonths: 12
+- ExpiryWarningDays: 30
+- AdjustmentApprovalThreshold: 1000
+
+**Section sources**
+- [CreditConfig.cs:7-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L7-L35)
+
+### Core Business Entities
 
 #### ProductionPlan (Enhanced Production Planning)
 - **Purpose**: Comprehensive voucher production planning encompassing strategy, approval workflows, and operational details
@@ -514,67 +1018,6 @@ Sample Data Example:
 **Section sources**
 - [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
 
-### Core Business Entities
-
-#### Business (Enhanced Multi-Tenant Organization)
-- **Purpose**: Comprehensive tenant representation with business information management
-- **Key Fields**:
-  - ID (Primary Key)
-  - BusinessName, TaxCode, Address
-  - IsActive (Boolean flag)
-- **Business Logic**:
-  - Controls tenant activation and deactivation
-  - Supports multi-tenant isolation and resource management
-  - Provides business contact and identification information
-
-**Updated** Enhanced from Brand with comprehensive business information fields
-
-Validation Rules:
-- BusinessName must be non-empty
-- TaxCode must be unique per tenant
-- IsActive must be boolean value
-
-Sample Data Example:
-- ID: [GUID]
-- BusinessName: "[Business Name]"
-- TaxCode: "[Tax Identifier]"
-- Address: "[Business Address]"
-- IsActive: true or false
-
-**Section sources**
-- [Business.cs:6-12](file://src/NonCash.Core/Entities/Business.cs#L6-L12)
-
-#### Member (Unified Customer/Organization Accounts)
-- **Purpose**: Unified membership system supporting both individual customers and organizational accounts
-- **Key Fields**:
-  - ID (Primary Key)
-  - MemberCode, Name, PhoneNumber, Email
-  - Type (Enum: Customer=0, Organization=1)
-- **Business Logic**:
-  - MemberType distinguishes between individual and organizational accounts
-  - PhoneNumber serves as primary identifier for account linking
-  - Supports both personal and business voucher ownership scenarios
-  - Enables flexible distribution and transfer workflows
-
-**New Entity** Added to unify customer and organizational account management
-
-Validation Rules:
-- MemberCode must be unique
-- PhoneNumber must be unique
-- Type must be Customer or Organization
-- Email format validation (when provided)
-
-Sample Data Example:
-- ID: [GUID]
-- MemberCode: "[Unique Member Code]"
-- Name: "[Full Name or Organization Name]"
-- PhoneNumber: "[Phone Number]"
-- Email: "[Email Address]"
-- Type: Customer or Organization
-
-**Section sources**
-- [Member.cs:7-14](file://src/NonCash.Core/Entities/Member.cs#L7-L14)
-
 #### Outlet (Enhanced POS Locations)
 - **Purpose**: Physical or digital store under a Business eligible to accept vouchers
 - **Key Fields**:
@@ -664,11 +1107,13 @@ Sample Data Example:
 - [data-models.md:91-97](file://docs/data-models.md#L91-L97)
 
 ## Dependency Analysis
-Enhanced entity relationships and comprehensive referential integrity constraints:
+Enhanced entity relationships and comprehensive referential integrity constraints including the new welcome policy system:
 
 ```mermaid
 graph LR
-BusinessId["BusinessId (Business)"] --> ProductionPlanBusiness["ProductionPlan.BusinessId"]
+BusinessId["BusinessId (Business)"] --> WelcomePolicyBusiness["WelcomeGrantPolicy.BusinessId"]
+BusinessId --> BrandBusiness["Brand.BusinessId"]
+BusinessId --> ProductionPlanBusiness["ProductionPlan.BusinessId"]
 BusinessId --> OutletBusiness["Outlet.BusinessId"]
 BusinessId --> UserAccountBusiness["UserAccount.BusinessId"]
 UserID["UserID (UserAccount)"] --> ApprovalTransactionReviewer["ApprovalTransaction.ReviewerId"]
@@ -677,36 +1122,48 @@ ProductionPlanId --> ApprovalTransactionProductionPlan["ApprovalTransaction.Prod
 MemberId["MemberId (Member)"] --> PlanDetailMember["PlanDetail.MemberId"]
 PlanDetailId["PlanDetailId (PlanDetail)"] --> UsageTransactionPlanDetail["UsageTransaction.PlanDetailId"]
 PosSystemId["PosSystemId (Outlet)"] --> UsageTransactionPosSystem["UsageTransaction.PosSystemId"]
+BrandId["BrandId (Brand)"] --> CreditBatchBrand["CreditBatch.BrandId"]
+WelcomePolicyId["WelcomePolicyId (WelcomeGrantPolicy)"] --> CreditBatchWelcome["CreditBatch.WelcomePolicyId"]
 ```
 
-**Updated** Enhanced dependency graph to include new entities and relationships
+**Updated** Enhanced dependency graph to include new welcome policy entities and relationships
 
 **Diagram sources**
+- [WelcomeGrantPolicy.cs:15-16](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L15-L16)
+- [Brand.cs:12-13](file://src/NonCash.Core/Entities/Brand.cs#L12-L13)
 - [ProductionPlan.cs:14-15](file://src/NonCash.Core/Entities/ProductionPlan.cs#L14-L15)
 - [PlanDetail.cs:10-21](file://src/NonCash.Core/Entities/PlanDetail.cs#L10-L21)
 - [ApprovalTransaction.cs:9-13](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L9-L13)
 - [UsageTransaction.cs:9-12](file://src/NonCash.Core/Entities/UsageTransaction.cs#L9-L12)
+- [CreditBatch.cs:70-72](file://src/NonCash.Core/Entities/CreditBatch.cs#L70-L72)
 
 **Section sources**
+- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
 - [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
 - [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
 - [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
 - [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
 
 ## Performance Considerations
-Enhanced indexing recommendations for the expanded entity model:
+Enhanced indexing recommendations for the expanded entity model including welcome policy optimizations:
 
+- **WelcomeGrantPolicy**: BusinessId, IsActive, EffectiveFrom, EffectiveTo, CreatedBy
+- **CreditBatch**: BrandId, PolicyId, WelcomePolicyId, CreatedAt, ExpiresAt
+- **Business**: BusinessName, TaxCode, IsActive
+- **Brand**: BusinessId, TaxCode, Status
 - **ProductionPlan**: BusinessId, ApprovalStatus, PublishDate, ExpiryDate, VoucherType, ValueType
 - **PlanDetail**: ProductionPlanId, MemberId, Status, SerialNo
 - **ApprovalTransaction**: ProductionPlanId, ReviewerId, Status, ReviewDate
 - **UsageTransaction**: PlanDetailId, PosSystemId, TransactionDate, UsedAmount
-- **Business**: BusinessName, TaxCode, IsActive
-- **Member**: MemberCode, PhoneNumber, Type
 - **Outlet**: BusinessId, Status, Name
 - **UserAccount**: BusinessId, Role, Status, Username
 - **Customer**: PhoneNumber, Status, Name
 
 Query patterns:
+- Welcome policy resolution by Business and time range
+- Credit batch generation based on welcome policies
 - Production plan reporting by Business and time range
 - Redemption analytics by Outlet and POS system
 - Distribution funnel analysis by Member type and transaction type
@@ -716,11 +1173,39 @@ Data partitioning:
 - Consider partitioning by BusinessId for multi-tenant isolation
 - Implement time-based partitioning for UsageTransaction historical data
 - Separate approval workflow data for compliance retention
+- Partition welcome policy history for efficient querying
 
 ## Troubleshooting Guide
-Enhanced troubleshooting for the expanded entity model:
+Enhanced troubleshooting for the expanded entity model including welcome policy issues:
 
-**Production Planning Issues**
+### Welcome Policy Issues
+- **No Matching Policy Found**
+  - Symptom: Welcome credits not applied to new brand
+  - Resolution: Verify WelcomeGrantPolicy exists with correct BusinessId, IsActive=true, and effective date range includes current time
+- **Policy Not Taking Effect**
+  - Symptom: Wrong welcome credits applied
+  - Resolution: Check EffectiveFrom and EffectiveTo dates, ensure most recent policy has highest priority
+- **Migration Data Loss**
+  - Symptom: Missing welcome policies after migration
+  - Resolution: Verify migration script ran successfully and brand-scoped policies were properly migrated
+
+### Business and Brand Issues
+- **Invalid Business Association**
+  - Symptom: Brand cannot receive welcome credits
+  - Resolution: Confirm Business.IsActive and proper BusinessId assignment
+- **Duplicate Tax Codes**
+  - Symptom: Brand creation fails
+  - Resolution: Verify TaxCode uniqueness within business scope
+
+### Credit Batch Issues
+- **Welcome Grant Already Exists**
+  - Symptom: Duplicate welcome grant prevented
+  - Resolution: Check for existing CreditBatch with same BrandId and WelcomePolicyId
+- **Policy Resolution Failures**
+  - Symptom: Credits not applied correctly
+  - Resolution: Verify WelcomePolicyId references valid WelcomeGrantPolicy
+
+### Production Planning Issues
 - **Invalid ApprovalStatus Transition**
   - Symptom: Plan cannot proceed beyond Pending
   - Resolution: Ensure ApprovalTransaction exists with Approved status and ReviewDate set
@@ -731,7 +1216,7 @@ Enhanced troubleshooting for the expanded entity model:
   - Symptom: Plan invalid or distribution blocked
   - Resolution: Set ExpiryDate ≥ PublishDate (when both provided)
 
-**Voucher Lifecycle Issues**
+### Voucher Lifecycle Issues
 - **Invalid Status Transition**
   - Symptom: Voucher cannot change state
   - Resolution: Ensure proper ApprovalTransaction approval and valid status progression
@@ -742,49 +1227,53 @@ Enhanced troubleshooting for the expanded entity model:
   - Symptom: POS transaction not recorded
   - Resolution: Confirm UsageTransaction.PosReferenceNumber uniqueness and PlanDetail.Status validation
 
-**Member Management Issues**
-- **Duplicate Member Registration**
-  - Symptom: Member creation fails
-  - Resolution: Verify MemberCode and PhoneNumber uniqueness
-- **Business Association Errors**
-  - Symptom: Member cannot access Business resources
-  - Resolution: Confirm Business.IsActive and proper BusinessId assignment
-
 **Section sources**
+- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)
+- [migration-split-welcome-policy.sql:31-52](file://tools/migration-split-welcome-policy.sql#L31-L52)
+- [Business.cs:6-16](file://src/NonCash.Core/Entities/Business.cs#L6-L16)
+- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
 - [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
 - [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
 - [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
 - [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
-- [Member.cs:7-14](file://src/NonCash.Core/Entities/Member.cs#L7-L14)
-- [Business.cs:6-12](file://src/NonCash.Core/Entities/Business.cs#L6-L12)
 
 ## Conclusion
-The NonCash platform's enhanced core entities define a comprehensive, multi-tenant domain model for advanced voucher lifecycle management. The new ProductionPlan, PlanDetail, ApprovalTransaction, and UsageTransaction entities provide detailed approval workflows, comprehensive audit trails, and sophisticated POS integration. Business and Member entities enable unified tenant and customer management with flexible ownership models. The enhanced data model, combined with robust validation rules and business constraints, ensures data consistency, supports accurate reporting, and maintains compliance across all operational aspects of the voucher ecosystem.
+The NonCash platform's enhanced core entities define a comprehensive, multi-tenant domain model for advanced voucher lifecycle management with sophisticated welcome credit policy management. The new WelcomeGrantPolicy entity provides business-scoped welcome credit policies with time-based activation, replacing the previous brand-scoped approach. The enhanced Business and Brand entities enable unified tenant and customer management with flexible ownership models. The updated CreditBatch entity integrates with the welcome policy system to track welcome credit grants. The comprehensive data model, combined with robust validation rules and business constraints, ensures data consistency, supports accurate reporting, and maintains compliance across all operational aspects of the voucher ecosystem.
 
 ## Appendices
 
 ### Business Objectives and Scope
-- **Enhanced Production Planning**: Comprehensive campaign management with detailed approval workflows
-- **Advanced Member Management**: Unified customer and organizational account handling
+- **Enhanced Welcome Policy Management**: Business-scoped welcome credit policies with time-based activation and versioning
+- **Advanced Multi-Tenancy**: Comprehensive business and brand hierarchy with isolated resource management
 - **Detailed Audit Trails**: Complete approval and transaction tracking for compliance
 - **POS Integration**: Real-time redemption monitoring and reconciliation
-- **Multi-Tenant Isolation**: Secure separation of business operations and data
+- **Flexible Credit Management**: Support for both purchased credits and welcome grants with expiration tracking
+
+### Migration Details
+The welcome policy migration introduces several key changes:
+- **New Table**: `welcome_grant_policies` with business-scoped policy management
+- **Schema Changes**: Added `welcome_policy_id` foreign key to `credit_batches` table
+- **Data Migration**: Automatic migration of brand-scoped welcome credits to business-scoped policies
+- **Index Optimization**: Added indexes for efficient policy resolution queries
+- **Constraint Updates**: Foreign key relationships ensure data integrity
 
 ### API Integration Examples
-The new entities integrate seamlessly with existing API controllers:
+The new welcome policy system integrates seamlessly with existing services:
 
-**Member Management APIs**:
-- MembersController: Retrieves member-owned vouchers and plan details
-- MemberVouchersController: Handles voucher transfer operations and history tracking
+**Welcome Policy APIs**:
+- Policy resolution through IWelcomePolicyService.ResolveForBusinessAsync
+- CRUD operations for policy management
+- Automatic fallback to CreditConfig defaults
 
 **Enhanced Business Logic**:
-- Member-based voucher ownership enables flexible distribution patterns
-- ApprovalTransaction provides comprehensive audit trail for compliance
-- UsageTransaction supports real-time POS integration and monitoring
+- Welcome credit grants automatically resolve business policies
+- CreditBatch creation tracks which policy generated the grant
+- Time-based policy activation ensures correct policy application
 
 **Section sources**
-- [MembersController.cs:28-66](file://src/NonCash.API/Controllers/MembersController.cs#L28-L66)
-- [MemberVouchersController.cs:19-63](file://src/NonCash.API/Controllers/MemberVouchersController.cs#L19-L63)
-- [Key Functionalities.txt:87-111](file://Key Functionalities.txt#L87-L111)
-- [BMAD_STRUCTURE.md:5-16](file://BMAD_STRUCTURE.md#L5-L16)
-- [epics.md](file://_bmad-output/planning-artifacts/epics.md)
+- [IWelcomePolicyService.cs:12-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L12-L37)
+- [WelcomePolicyService.cs:14-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L14-L75)
+- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
+- [20260814050918_SplitWelcomePolicy.cs:27-79](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L27-L79)

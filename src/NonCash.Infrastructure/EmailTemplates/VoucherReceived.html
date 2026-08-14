@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>You've Received a Voucher</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #388e3c; color: #fff; padding: 20px;">
+            <h2 style="margin: 0;">You've Received a Voucher</h2>
+        </div>
+        <div style="padding: 24px;">
+            <p>Dear {{RecipientName}},</p>
+            <p>A voucher has been added to your NonCash wallet.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold; width: 140px;">Voucher</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{VoucherName}}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Value</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{FaceValue}}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Valid Until</td>
+                    <td style="padding: 8px; border: 1px solid #eee;">{{ExpiryDate}}</td>
+                </tr>
+            </table>
+            <p>Log in with your phone number {{PhoneNumber}} to view and redeem it.</p>
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+        </div>
+    </div>
+</body>
+</html>

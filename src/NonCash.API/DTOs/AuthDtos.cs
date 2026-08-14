@@ -21,20 +21,23 @@ public record CreateUserRequest(
     string Password,
     string FullName,
     string Role,
-    Guid? BrandId
+    Guid? BrandId,
+    string? Email = null
 );
 
 public record UpdateUserRequest(
     string FullName,
     string Role,
     Guid? BrandId,
-    string? Password
+    string? Password,
+    string? Email = null
 );
 
 public record UserResponse(
     Guid Id,
     string Username,
     string FullName,
+    string? Email,
     string Role,
     Guid? BrandId,
     string Status,

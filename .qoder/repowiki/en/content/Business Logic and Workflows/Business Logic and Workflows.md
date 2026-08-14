@@ -23,32 +23,37 @@
 - [src/NonCash.Core/Entities/CreditAdjustmentRequest.cs](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs)
 - [src/NonCash.Core/Entities/CreditConsumption.cs](file://src/NonCash.Core/Entities/CreditConsumption.cs)
 - [src/NonCash.Core/Entities/CreditExpiryLog.cs](file://src/NonCash.Core/Entities/CreditExpiryLog.cs)
+- [src/NonCash.Core/Entities/WelcomeGrantPolicy.cs](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs)
 - [src/NonCash.Core/Interfaces/ISettlementService.cs](file://src/NonCash.Core/Interfaces/ISettlementService.cs)
 - [src/NonCash.Core/Interfaces/ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
 - [src/NonCash.Core/Interfaces/ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
+- [src/NonCash.Core/Interfaces/IWelcomePolicyService.cs](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs)
 - [src/NonCash.API/Controllers/SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [src/NonCash.API/Controllers/CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 - [src/NonCash.API/Controllers/CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
 - [src/NonCash.API/Controllers/CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
+- [src/NonCash.API/Controllers/WelcomePoliciesController.cs](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs)
 - [src/NonCash.API/Controllers/PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs](file://src/NonCash.Infrastructure/Services/SettlementService.cs)
 - [src/NonCash.Infrastructure/Services/CreditService.cs](file://src/NonCash.Infrastructure/Services/CreditService.cs)
 - [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs)
 - [src/NonCash.Infrastructure/Services/CreditPolicyService.cs](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs)
+- [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
 - [src/NonCash.API/HostedServices/CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
 - [src/NonCash.Core/Entities/IntegrationPartner.cs](file://src/NonCash.Core/Entities/IntegrationPartner.cs)
 - [src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs](file://src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs)
+- [src/NonCash.Core/Configuration/CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
+- [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Major architectural shift from Epic 9's simple ledger model to Epic 10's sophisticated batch-based credit system
-- Added comprehensive credit management with batch lifecycle, pricing policies, and adjustment workflows
-- Enhanced credit consumption tracking with FIFO batch draining and idempotent voucher charging
-- Implemented maker-checker approval workflow for credit adjustments with threshold-based approval matrix
-- Added automated credit expiry sweep service with warning notifications
-- Updated settlement processing to integrate with new batch-based credit system
-- Enhanced reporting capabilities for credit batches, adjustments, and policy management
+- Updated welcome credit system to use business-scoped policies instead of brand-scoped configuration
+- Added migration details for transforming existing brand-level welcome credits to business-level policies with 'Migrated:' prefix preservation
+- Enhanced policy resolution engine documentation to support business-scope welcome grants alongside existing global, brand group, and brand scopes
+- Updated CreditBatch entity documentation to include WelcomePolicyId field for tracking welcome grant sources
+- Added new WelcomePoliciesController API endpoints for business-level welcome policy management
+- Updated CreditService implementation to use new business-scoped welcome policy resolution
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -58,17 +63,18 @@
 5. [Detailed Component Analysis](#detailed-component-analysis)
 6. [Epic 10 Batch-Based Credit System](#epic-10-batch-based-credit-system)
 7. [Credit Pricing Policy Management](#credit-pricing-policy-management)
-8. [Maker-Checker Adjustment Workflow](#maker-checker-adjustment-workflow)
-9. [Automated Credit Expiry Management](#automated-credit-expiry-management)
-10. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
-11. [Payment Processing Integration](#payment-processing-integration)
-12. [Loyalty App Integrations](#loyalty-app-integrations)
-13. [Enhanced Display Data Handling](#enhanced-display-data-handling)
-14. [Dependency Analysis](#dependency-analysis)
-15. [Performance Considerations](#performance-considerations)
-16. [Troubleshooting Guide](#troubleshooting-guide)
-17. [Conclusion](#conclusion)
-18. [Appendices](#appendices)
+8. [Business-Scoped Welcome Credit Policies](#business-scoped-welcome-credit-policies)
+9. [Maker-Checker Adjustment Workflow](#maker-checker-adjustment-workflow)
+10. [Automated Credit Expiry Management](#automated-credit-expiry-management)
+11. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
+12. [Payment Processing Integration](#payment-processing-integration)
+13. [Loyalty App Integrations](#loyalty-app-integrations)
+14. [Enhanced Display Data Handling](#enhanced-display-data-handling)
+15. [Dependency Analysis](#dependency-analysis)
+16. [Performance Considerations](#performance-considerations)
+17. [Troubleshooting Guide](#troubleshooting-guide)
+18. [Conclusion](#conclusion)
+19. [Appendices](#appendices)
 
 ## Introduction
 This document explains the NonCash business logic and workflows across production planning, distribution, POS redemption, customer and brand management, approvals, reporting, and the newly implemented Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. It synthesizes the project's functional requirements, architecture, and API contracts into a cohesive guide for both technical and non-technical stakeholders. Practical scenarios and edge cases are included to illustrate real-world usage.
@@ -417,6 +423,7 @@ Each credit batch represents a distinct credit acquisition event with:
 - **Total Paid VND**: Actual amount paid (Purchase only)
 - **Expires At**: When remaining credits expire (null = never expires)
 - **Evidence Image URL**: Supporting documentation for manual operations
+- **WelcomePolicyId**: Reference to the welcome grant policy that created this batch (for WelcomeGrant type)
 
 ```mermaid
 flowchart TD
@@ -426,10 +433,11 @@ SetPrice --> SetExpiry["Set ExpiresAt<br/>from Policy"]
 Welcome["Brand Activation"] --> WelcomeBatch["Create WelcomeBatch<br/>(WelcomeGrant Type)"]
 WelcomeBatch --> FreePrice["Free Credits<br/>(Price = 0)"]
 FreePrice --> WelcomeExpiry["Apply Welcome Expiry"]
+WelcomeExpiry --> LinkPolicy["Link to WelcomePolicyId"]
 ```
 
 **Diagram sources**
-- [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
+- [src/NonCash.Core/Entities/CreditBatch.cs:1-75](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L75)
 - [src/NonCash.Infrastructure/Services/CreditService.cs:111-173](file://src/NonCash.Infrastructure/Services/CreditService.cs#L111-L173)
 
 ### FIFO Consumption Algorithm
@@ -459,7 +467,7 @@ CREDIT-->>POS : "Consumption successful"
 - [src/NonCash.Infrastructure/Services/CreditService.cs:43-109](file://src/NonCash.Infrastructure/Services/CreditService.cs#L43-L109)
 
 **Section sources**
-- [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
+- [src/NonCash.Core/Entities/CreditBatch.cs:1-75](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L75)
 - [src/NonCash.Core/Entities/CreditConsumption.cs:1-23](file://src/NonCash.Core/Entities/CreditConsumption.cs#L1-L23)
 - [src/NonCash.Infrastructure/Services/CreditService.cs:1-200](file://src/NonCash.Infrastructure/Services/CreditService.cs#L1-L200)
 
@@ -499,8 +507,6 @@ UseConfig --> Resolve
 Policies support comprehensive configuration options:
 - **Price Per Credit VND**: Flat unit price for purchased credits
 - **Credit Expiry Months**: Months until purchased credits expire (null = never)
-- **Welcome Credits**: Free credits granted on brand activation
-- **Welcome Credit Expiry**: Expiry period for welcome credits
 - **Low Balance Warning**: Percentage threshold for balance warnings
 - **Expiry Warning Days**: Days before batch expiry to send warnings
 - **Adjustment Approval Threshold**: Amount requiring FinancialController approval
@@ -510,6 +516,93 @@ Policies support comprehensive configuration options:
 - [src/NonCash.Core/Interfaces/ICreditPolicyService.cs:1-23](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs#L1-L23)
 - [src/NonCash.Infrastructure/Services/CreditPolicyService.cs:1-149](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs#L1-L149)
 - [src/NonCash.API/Controllers/CreditPoliciesController.cs:1-204](file://src/NonCash.API/Controllers/CreditPoliciesController.cs#L1-L204)
+
+## Business-Scoped Welcome Credit Policies
+
+**Updated** Welcome credit system now uses business-scoped policies instead of brand-scoped configuration. Migration transforms existing brand-level welcome credits to business-level policies with 'Migrated:' prefix preservation.
+
+Welcome credits are now managed through dedicated business-scoped policies rather than being embedded in credit pricing policies. This change allows businesses to negotiate uniform welcome credit terms that apply to all brands they launch, providing better commercial flexibility and contract management.
+
+### Welcome Grant Policy Model
+Business-scoped welcome grant policies provide versioned, time-bound welcome credit configurations:
+- **BusinessId**: Links policy to specific business for commercial agreements
+- **WelcomeCredits**: Number of free credits granted to each new brand under this business
+- **WelcomeCreditExpiryMonths**: Expiry period for welcome credits (default 12 months)
+- **EffectiveFrom/EffectiveTo**: Time-bound policy periods for contract management
+- **IsActive**: Soft delete capability for policy lifecycle management
+- **CreatedBy**: Audit trail for policy creation
+
+```mermaid
+flowchart TD
+Business["Business Entity"] --> WelcomePolicy["WelcomeGrantPolicy"]
+WelcomePolicy --> NewBrands["New Brands Under Business"]
+NewBrands --> AutoGrant["Automatic Welcome Credits on Activation"]
+AutoGrant --> CreditBatch["Creates WelcomeGrant CreditBatch"]
+CreditBatch --> LinkPolicy["Links to WelcomePolicyId"]
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Entities/WelcomeGrantPolicy.cs:1-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L36)
+- [src/NonCash.Core/Entities/CreditBatch.cs:34-35](file://src/NonCash.Core/Entities/CreditBatch.cs#L34-L35)
+
+### Policy Resolution Engine
+The welcome policy resolution engine implements business-scoped resolution with fallback mechanisms:
+- **Business-scoped policies**: Most recent active policy for the specific business
+- **CreditConfig fallback**: Default welcome credits when no business policy exists
+- **Version precedence**: Newest effective policy wins within business scope
+- **Time-bound validation**: Only active policies within effective date ranges
+
+```mermaid
+flowchart TD
+BusinessQuery["Resolve for Business"] --> CheckBusiness["Check Business-scoped policy"]
+CheckBusiness --> |Found| UseBusiness["Use Business Policy"]
+CheckBusiness --> |Not Found| UseConfig["Use CreditConfig Fallback"]
+UseBusiness --> Resolve["Return Resolved Welcome Policy"]
+UseConfig --> Resolve
+```
+
+**Diagram sources**
+- [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)
+
+### Migration Process
+The migration automatically transforms existing brand-scoped welcome credits to business-scoped policies:
+- **Data Preservation**: Existing brand-level welcome credits are migrated to business-level policies
+- **'Migrated:' Prefix**: Migrated policies are prefixed with 'Migrated:' for identification
+- **Business Mapping**: Brand-to-business relationships are used to map policies correctly
+- **Column Removal**: Welcome credit columns are removed from credit_pricing_policies table
+
+```mermaid
+sequenceDiagram
+participant DB as "Database"
+participant Migration as "Migration Script"
+participant Policy as "WelcomeGrantPolicies"
+DB->>Migration : "Execute SplitWelcomePolicy"
+Migration->>DB : "Create welcome_grant_policies table"
+Migration->>DB : "Add welcome_policy_id to credit_batches"
+Migration->>DB : "Seed migrated policies from credit_pricing_policies"
+DB->>Policy : "Insert 'Migrated : ' prefixed policies"
+Migration->>DB : "Drop welcome_credits columns"
+Note over Migration,DB : Migration preserves existing data with business mapping
+```
+
+**Diagram sources**
+- [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:74-99](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L74-L99)
+
+### API Management
+New admin endpoints provide comprehensive welcome policy management:
+- **GET /api/v1/welcome-policies/businesses**: List businesses for policy targeting
+- **GET /api/v1/welcome-policies**: Retrieve all welcome policies
+- **POST /api/v1/welcome-policies**: Create new welcome policy
+- **PUT /api/v1/welcome-policies/{id}**: Update existing policy
+- **DELETE /api/v1/welcome-policies/{id}/deactivate**: Deactivate policy
+- **GET /api/v1/welcome-policies/resolve**: Resolve effective policy for business
+
+**Section sources**
+- [src/NonCash.Core/Entities/WelcomeGrantPolicy.cs:1-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L36)
+- [src/NonCash.Core/Interfaces/IWelcomePolicyService.cs:1-38](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L1-L38)
+- [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:1-128](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L128)
+- [src/NonCash.API/Controllers/WelcomePoliciesController.cs:1-177](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs#L1-L177)
+- [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:1-153](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L1-L153)
 
 ## Maker-Checker Adjustment Workflow
 
@@ -825,6 +918,7 @@ EXPIRY["Credit Expiry Sweep"] --> DB
 - Optimize database queries with proper indexing and query optimization
 - **Optimize FIFO credit consumption queries with appropriate indexes on CreatedAt and ExpiresAt**
 - **Implement efficient policy resolution caching to reduce database queries**
+- **Optimize welcome policy resolution queries with composite indexes on BusinessId, IsActive, and EffectiveFrom**
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -840,6 +934,8 @@ Common issues and resolutions:
 - Payment webhook failures: Verify webhook signatures and retry failed deliveries
 - Integration partner access: Confirm partner-brand authorization and API key validity
 - **Policy resolution conflicts**: Check effective date ranges and scope precedence
+- **Welcome policy migration issues**: Verify business-brand mappings and 'Migrated:' policy prefixes
+- **Welcome grant not applied**: Check business-scoped welcome policy resolution and CreditConfig fallback
 
 **Section sources**
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
@@ -878,6 +974,12 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
   - Idempotent webhook processing prevents duplicate order fulfillment on network retries
 - **Edge: Integration partner brand scoping**
   - Only return vouchers from brands explicitly authorized to the integration partner
+- **Edge: Welcome policy migration**
+  - Existing brand-scoped welcome credits are automatically migrated to business-scoped policies with 'Migrated:' prefix
+- **Edge: Welcome grant idempotency**
+  - Each brand receives welcome credits only once; subsequent activations are ignored
+- **Edge: Business policy resolution**
+  - Welcome policy resolution falls back to CreditConfig when no business-specific policy exists
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
@@ -886,3 +988,5 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
 - [src/NonCash.Infrastructure/Services/CreditService.cs:43-109](file://src/NonCash.Infrastructure/Services/CreditService.cs#L43-L109)
 - [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs:46-107](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs#L46-L107)
 - [src/NonCash.API/Controllers/PaymentsController.cs:108-163](file://src/NonCash.API/Controllers/PaymentsController.cs#L108-L163)
+- [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:74-99](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L74-L99)
+- [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)

@@ -32,6 +32,9 @@ public class UserAccountConfiguration : IEntityTypeConfiguration<UserAccount>
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(u => u.Email)
+            .HasMaxLength(255);
+
         builder.Property(u => u.Role)
             .IsRequired()
             .HasConversion<string>()

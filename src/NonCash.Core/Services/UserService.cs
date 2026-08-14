@@ -14,7 +14,7 @@ public class UserService
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
     }
 
-    public async Task<UserAccount> CreateAsync(string username, string password, string fullName, UserRole role, Guid? brandId, CancellationToken cancellationToken = default)
+    public async Task<UserAccount> CreateAsync(string username, string password, string fullName, UserRole role, Guid? brandId, string? email = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(username))
             throw new ArgumentException("Username is required.", nameof(username));
@@ -36,6 +36,7 @@ public class UserService
             Username = username.Trim().ToLowerInvariant(),
             PasswordHash = _authService.HashPassword(password),
             FullName = fullName.Trim(),
+            Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
             Role = role,
             BrandId = brandId,
             Status = UserStatus.Active
@@ -68,7 +69,7 @@ public class UserService
         return user;
     }
 
-    public async Task<UserAccount> UpdateAsync(Guid id, string fullName, UserRole role, Guid? brandId, string? password = null, CancellationToken cancellationToken = default)
+    public async Task<UserAccount> UpdateAsync(Guid id, string fullName, UserRole role, Guid? brandId, string? password = null, string? email = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new ArgumentException("Full name is required.", nameof(fullName));
@@ -81,6 +82,7 @@ public class UserService
             throw new KeyNotFoundException($"User with ID '{id}' was not found.");
 
         user.FullName = fullName.Trim();
+        user.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
         user.Role = role;
         user.BrandId = role == UserRole.Admin ? null : brandId;
 

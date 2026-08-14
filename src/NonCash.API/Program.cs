@@ -119,6 +119,7 @@ builder.Services.AddScoped<IRegistrationService, RegistrationService>();
 
 // Notification services
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
+builder.Services.AddScoped<IEmailTemplateRenderer, PlaceholderEmailTemplateRenderer>();
 var smtpHost = builder.Configuration["Smtp:Host"];
 if (!string.IsNullOrWhiteSpace(smtpHost))
 {

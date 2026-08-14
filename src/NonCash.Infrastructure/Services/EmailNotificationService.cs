@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
 namespace NonCash.Infrastructure.Services;
@@ -20,56 +21,108 @@ public class SmtpOptions
 public class EmailNotificationService : INotificationService
 {
     private readonly SmtpOptions _smtpOptions;
+    private readonly IUserAccountRepository _userAccountRepository;
+    private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly ILogger<EmailNotificationService> _logger;
 
-    public EmailNotificationService(IOptions<SmtpOptions> smtpOptions, ILogger<EmailNotificationService> logger)
+    public EmailNotificationService(
+        IOptions<SmtpOptions> smtpOptions,
+        IUserAccountRepository userAccountRepository,
+        IEmailTemplateRenderer templateRenderer,
+        ILogger<EmailNotificationService> logger)
     {
         _smtpOptions = smtpOptions.Value;
+        _userAccountRepository = userAccountRepository ?? throw new ArgumentNullException(nameof(userAccountRepository));
+        _templateRenderer = templateRenderer ?? throw new ArgumentNullException(nameof(templateRenderer));
         _logger = logger;
     }
 
-    public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default)
+    public async Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default)
     {
+        var admins = (await _userAccountRepository.FindAsync(
+            u => u.Role == UserRole.Admin && u.Status == UserStatus.Active && !string.IsNullOrEmpty(u.Email),
+            cancellationToken)).ToList();
+
+        if (admins.Count == 0)
+        {
+            _logger.LogWarning("New registration notification for {CompanyName} has no active admin recipients with email.", companyName);
+            return;
+        }
+
         var subject = $"New business registration: {companyName}";
-        var body = $"A new business registration has been submitted.\n\nCompany: {companyName}\nRequest ID: {requestId}\n\nPlease review it in the admin portal.";
-        return SendAsync(_smtpOptions.FromAddress, subject, body, cancellationToken);
+        var body = await _templateRenderer.RenderAsync("AdminNewRegistration", new Dictionary<string, string?>
+        {
+            ["CompanyName"] = companyName,
+            ["RequestId"] = requestId.ToString()
+        }, cancellationToken);
+
+        foreach (var admin in admins)
+        {
+            await SendAsync(admin.Email!, subject, body, cancellationToken);
+        }
     }
 
-    public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, CancellationToken cancellationToken = default)
+    public async Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
-        // Email address is not available in this signature; log and defer to a future enhancement.
-        _logger.LogInformation("Applicant review result notification for user {UserId}, brand {BrandName}, approved={Approved}.", userId, brandName, approved);
-        return Task.CompletedTask;
+        var user = await _userAccountRepository.GetByIdAsync(userId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(user?.Email))
+        {
+            _logger.LogInformation("Applicant review result notification for user {UserId} skipped: no email on file.", userId);
+            return;
+        }
+
+        var outcome = approved ? "Approved" : "Rejected";
+        var headerColor = approved ? "#388e3c" : "#d32f2f";
+        var reviewNoteHtml = string.IsNullOrWhiteSpace(reviewNotes)
+            ? string.Empty
+            : $"<p><strong>Reviewer note:</strong> {HtmlEncode(reviewNotes)}</p>";
+
+        var subject = $"Your NonCash registration has been {outcome.ToLowerInvariant()}";
+        var body = await _templateRenderer.RenderAsync("ApplicantReviewResult", new Dictionary<string, string?>
+        {
+            ["BrandName"] = brandName,
+            ["Outcome"] = outcome,
+            ["HeaderColor"] = headerColor,
+            ["ReviewNote"] = reviewNoteHtml
+        }, cancellationToken);
+
+        await SendAsync(user.Email, subject, body, cancellationToken);
     }
 
-    public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
+    public async Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
     {
         var subject = "Thank you for registering your business with NonCash";
-        var body = $"Dear {companyName},\n\nThank you for submitting your business registration.\n\nYour request ID is: {requestId}\n\nWe will review your application and notify you once it is approved.\n\nBest regards,\nNonCash Team";
-        return SendAsync(email, subject, body, cancellationToken);
+        var body = await _templateRenderer.RenderAsync("ApplicantRegistrationSubmitted", new Dictionary<string, string?>
+        {
+            ["CompanyName"] = companyName,
+            ["RequestId"] = requestId.ToString()
+        }, cancellationToken);
+
+        await SendAsync(email, subject, body, cancellationToken);
     }
 
     public async Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default)
     {
-        if (notification.Channels.HasFlag(NotificationChannel.Email))
+        if (!notification.Channels.HasFlag(NotificationChannel.Email))
+            return;
+
+        if (string.IsNullOrWhiteSpace(notification.Email))
         {
-            if (string.IsNullOrWhiteSpace(notification.Email))
-            {
-                _logger.LogInformation("Voucher notification skipped for {Phone}: no email on file.", notification.PhoneNumber);
-            }
-            else
-            {
-                var subject = $"You've received a voucher: {notification.VoucherName ?? "NonCash voucher"}";
-                var body = $"Dear {notification.RecipientName},\n\n" +
-                           $"A voucher has been added to your NonCash wallet.\n\n" +
-                           $"Voucher: {notification.VoucherName ?? "NonCash voucher"}\n" +
-                           $"Value: {notification.FaceValue:N0}\n" +
-                           $"Valid until: {notification.ExpiryDate:yyyy-MM-dd}\n\n" +
-                           $"Log in with your phone number {notification.PhoneNumber} to view and redeem it.\n\n" +
-                           $"Best regards,\nNonCash Team";
-                await SendAsync(notification.Email, subject, body, cancellationToken);
-            }
+            _logger.LogInformation("Voucher notification skipped for {Phone}: no email on file.", notification.PhoneNumber);
+            return;
         }
+
+        var subject = $"You've received a voucher: {notification.VoucherName ?? "NonCash voucher"}";
+        var body = await _templateRenderer.RenderAsync("VoucherReceived", new Dictionary<string, string?>
+        {
+            ["RecipientName"] = notification.RecipientName,
+            ["VoucherName"] = notification.VoucherName ?? "NonCash voucher",
+            ["FaceValue"] = notification.FaceValue.ToString("N0"),
+            ["ExpiryDate"] = notification.ExpiryDate.ToString("yyyy-MM-dd"),
+            ["PhoneNumber"] = notification.PhoneNumber
+        }, cancellationToken);
+
+        await SendAsync(notification.Email, subject, body, cancellationToken);
 
         if (notification.Channels.HasFlag(NotificationChannel.Zalo))
         {
@@ -87,13 +140,14 @@ public class EmailNotificationService : INotificationService
         }
 
         var subject = $"Credit adjustment pending approval: {notification.AdjustmentType} {notification.Amount:N0} for {notification.BrandName}";
-        var body = $"A credit adjustment request requires your approval.\n\n" +
-                   $"Brand: {notification.BrandName}\n" +
-                   $"Type: {notification.AdjustmentType}\n" +
-                   $"Amount: {notification.Amount:N0} credit(s)\n" +
-                   $"Requested by: {notification.RequestedByName}\n" +
-                   $"Request ID: {notification.RequestId}\n\n" +
-                   $"Please review it in the admin portal (Credit Adjustments queue).";
+        var body = await _templateRenderer.RenderAsync("AdjustmentPending", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["AdjustmentType"] = notification.AdjustmentType,
+            ["Amount"] = notification.Amount.ToString("N0"),
+            ["RequestedByName"] = notification.RequestedByName,
+            ["RequestId"] = notification.RequestId.ToString()
+        }, cancellationToken);
 
         foreach (var email in notification.ApproverEmails)
         {
@@ -101,40 +155,53 @@ public class EmailNotificationService : INotificationService
         }
     }
 
-    public Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default)
+    public async Task NotifyAdjustmentReviewedAsync(AdjustmentReviewedNotification notification, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(notification.RequesterEmail))
         {
             _logger.LogInformation("Adjustment {RequestId} reviewed but requester has no email on file.", notification.RequestId);
-            return Task.CompletedTask;
+            return;
         }
 
-        var outcome = notification.Approved ? "APPROVED" : "REJECTED";
-        var subject = $"Credit adjustment {outcome}: {notification.AdjustmentType} {notification.Amount:N0} for {notification.BrandName}";
-        var body = $"Your credit adjustment request has been {outcome.ToLowerInvariant()}.\n\n" +
-                   $"Brand: {notification.BrandName}\n" +
-                   $"Type: {notification.AdjustmentType}\n" +
-                   $"Amount: {notification.Amount:N0} credit(s)\n" +
-                   $"Request ID: {notification.RequestId}\n" +
-                   (string.IsNullOrWhiteSpace(notification.ReviewNote) ? "" : $"Reviewer note: {notification.ReviewNote}\n");
-        return SendAsync(notification.RequesterEmail, subject, body, cancellationToken);
+        var outcome = notification.Approved ? "Approved" : "Rejected";
+        var headerColor = notification.Approved ? "#388e3c" : "#d32f2f";
+        var reviewNoteHtml = string.IsNullOrWhiteSpace(notification.ReviewNote)
+            ? string.Empty
+            : $"<p><strong>Reviewer note:</strong> {HtmlEncode(notification.ReviewNote)}</p>";
+
+        var subject = $"Credit adjustment {outcome.ToLowerInvariant()}: {notification.AdjustmentType} {notification.Amount:N0} for {notification.BrandName}";
+        var body = await _templateRenderer.RenderAsync("AdjustmentReviewed", new Dictionary<string, string?>
+        {
+            ["Outcome"] = outcome,
+            ["HeaderColor"] = headerColor,
+            ["BrandName"] = notification.BrandName,
+            ["AdjustmentType"] = notification.AdjustmentType,
+            ["Amount"] = notification.Amount.ToString("N0"),
+            ["RequestId"] = notification.RequestId.ToString(),
+            ["ReviewNote"] = reviewNoteHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.RequesterEmail, subject, body, cancellationToken);
     }
 
-    public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default)
+    public async Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(notification.BrandEmail))
         {
             _logger.LogInformation("Credit expiry warning skipped for {BrandName}: no contact email.", notification.BrandName);
-            return Task.CompletedTask;
+            return;
         }
 
         var subject = $"NonCash credits expiring soon: {notification.ExpiringCredits:N0} credit(s) on {notification.ExpiresAt:yyyy-MM-dd}";
-        var body = $"Dear {notification.BrandName},\n\n" +
-                   $"{notification.ExpiringCredits:N0} credit(s) in your NonCash account will expire in {notification.DaysLeft} day(s), " +
-                   $"on {notification.ExpiresAt:yyyy-MM-dd}.\n\n" +
-                   $"Unused credits are forfeited at expiry. Log in to review your balance and plan your voucher distributions.\n\n" +
-                   $"Best regards,\nNonCash Team";
-        return SendAsync(notification.BrandEmail, subject, body, cancellationToken);
+        var body = await _templateRenderer.RenderAsync("CreditsExpiring", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["ExpiringCredits"] = notification.ExpiringCredits.ToString("N0"),
+            ["DaysLeft"] = notification.DaysLeft.ToString(),
+            ["ExpiresAt"] = notification.ExpiresAt.ToString("yyyy-MM-dd")
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken);
     }
 
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken)
@@ -158,7 +225,7 @@ public class EmailNotificationService : INotificationService
             {
                 Subject = subject,
                 Body = body,
-                IsBodyHtml = false
+                IsBodyHtml = true
             };
 
             await client.SendMailAsync(message, cancellationToken);
@@ -168,5 +235,15 @@ public class EmailNotificationService : INotificationService
         {
             _logger.LogError(ex, "Failed to send email to {ToAddress}.", toAddress);
         }
+    }
+
+    private static string HtmlEncode(string value)
+    {
+        return value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;")
+            .Replace("'", "&#39;");
     }
 }
