@@ -27,6 +27,7 @@ services.AddScoped<ICustomerRepository, CustomerRepository>();
 services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
 services.AddScoped<IAuthService, AuthService>();
+services.AddScoped<INotificationService, ConsoleNotificationService>();
 services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
 services.AddScoped<IJwtTokenService, StubJwtTokenService>();
