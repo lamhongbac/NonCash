@@ -15,6 +15,7 @@ public class PosService : IPosService
     private readonly IVoucherLockRepository _lockRepository;
     private readonly ISettlementService _settlementService;
     private readonly ICreditService _creditService;
+    private readonly IVoucherEventPublisher _eventPublisher;
 
     public PosService(
         IRepository<VoucherPlanDetail> detailRepository,
@@ -24,7 +25,8 @@ public class PosService : IPosService
         IVoucherCodeService codeService,
         IVoucherLockRepository lockRepository,
         ISettlementService settlementService,
-        ICreditService creditService)
+        ICreditService creditService,
+        IVoucherEventPublisher eventPublisher)
     {
         _detailRepository = detailRepository;
         _planRepository = planRepository;
@@ -34,6 +36,7 @@ public class PosService : IPosService
         _lockRepository = lockRepository;
         _settlementService = settlementService;
         _creditService = creditService;
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<PosVerifyResult> VerifyAsync(
@@ -173,6 +176,25 @@ public class PosService : IPosService
             {
                 await _creditService.TryConsumeAsync(
                     chargeBrandId, lockedDetail.Id, $"Redemption {transactionId}", cancellationToken);
+            }
+        }
+
+        // Epic 6.4: Publish webhook event on successful redemption.
+        if (outcome == CommitOutcome.Success && lockedDetail != null)
+        {
+            try
+            {
+                await _eventPublisher.PublishAsync(
+                    "voucher.redeemed",
+                    lockedDetail.Id,
+                    null, // member phone resolved by webhook consumer if needed
+                    issuingBrandId,
+                    new { transactionId, amountUsed, outletId, lockedDetail.SerialNo },
+                    cancellationToken);
+            }
+            catch
+            {
+                // Best-effort: event publishing errors must not fail the redemption.
             }
         }
 

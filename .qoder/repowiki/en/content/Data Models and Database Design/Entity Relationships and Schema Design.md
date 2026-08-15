@@ -1,6 +1,6 @@
 </think>
 
-Based on my analysis of the codebase, I can now update the documentation to reflect the email column addition to the user_accounts table. Here's the updated documentation:
+Based on my comprehensive analysis of the codebase, I can now update the documentation to reflect the password reset token support and improved email-based authentication workflows. Here's the updated documentation:
 
 # Entity Relationships and Schema Design
 
@@ -17,9 +17,12 @@ Based on my analysis of the codebase, I can now update the documentation to refl
 - [Business.cs](file://src/NonCash.Core/Entities/Business.cs)
 - [UserAccountConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
-- [UserAccountRepository.cs](file://src/NonCash.Infrastructure/Repositories/UserAccountRepository.cs)
-- [WelcomePoliciesController.cs](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs)
-- [WelcomeGrantPolicyConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/WelcomeGrantPolicyConfiguration.cs)
+- [AuthService.cs](file://src/NonCash.Core/Services/AuthService.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
+- [INotificationService.cs](file://src/NonCash.Core/Interfaces/INotificationService.cs)
+- [AuthDtos.cs](file://src/NonCash.API/DTOs/AuthDtos.cs)
+- [AddPasswordResetToken Migration](file://src/NonCash.Infrastructure/Migrations/20260814114913_AddPasswordResetToken.cs)
 - [SplitWelcomePolicy Migration](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
 - [AddEmailToUserAccount Migration](file://src/NonCash.Infrastructure/Migrations/20260814090258_AddEmailToUserAccount.cs)
 - [Migration SQL Script](file://tools/migration-split-welcome-policy.sql)
@@ -30,7 +33,9 @@ Based on my analysis of the codebase, I can now update the documentation to refl
 - Added new WelcomeGrantPolicy entity and table with business_id foreign key relationship
 - Updated CreditBatch entity to include welcome_policy_id column establishing lineage between credit batches and governing policies
 - **Added email column support to UserAccount entity via migration '20260814090258_AddEmailToUserAccount'** - The user_accounts table now includes an email field (varchar(255)) enabling email-based authentication, notifications, and account recovery features
-- Enhanced entity relationship diagrams to show new policy-batch relationships and email functionality
+- **Enhanced UserAccount entity with password reset token support** - Added PasswordResetToken and PasswordResetTokenExpiry fields for secure password reset functionality
+- **Implemented comprehensive email-based authentication workflows** - Complete forgot password and reset password functionality with secure token generation and validation
+- Enhanced entity relationship diagrams to show new policy-batch relationships and enhanced authentication capabilities
 - Updated multi-tenancy section to reflect business-level policy isolation and email-based communication capabilities
 
 ## Table of Contents
@@ -117,6 +122,7 @@ This section defines the core entities and their attributes, focusing on primary
   - PK: UserID
   - FK: BrandID → Brand.BrandID (nullable for system super-admins)
   - **Updated**: Now includes Email field (varchar(255), nullable) enabling email-based authentication, notifications, and account recovery features
+  - **Enhanced**: Added PasswordResetToken (varchar(255), nullable) and PasswordResetTokenExpiry (datetime, nullable) for secure password reset functionality
   - Attributes include credentials, role, status, and email contact information.
 
 - Customer
@@ -142,7 +148,7 @@ These definitions are derived from the data models documentation and align with 
 - [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
 - [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
 - [CreditBatch.cs:27-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L74)
-- [UserAccount.cs:20-31](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L31)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
 
 ## Architecture Overview
 NonCash employs a 3-layer SaaS architecture:
@@ -183,7 +189,7 @@ REPO --> DB
 This section focuses on the entity relationship model, constraints, and data access patterns.
 
 ### Relational Schema and Constraints
-The following diagram illustrates the relational schema with primary keys and foreign key relationships among the core entities, including the new welcome grant policy system and email-enabled user accounts.
+The following diagram illustrates the relational schema with primary keys and foreign key relationships among the core entities, including the new welcome grant policy system and enhanced authentication capabilities.
 
 ```mermaid
 erDiagram
@@ -211,6 +217,8 @@ string FullName
 string Email
 enum Role
 enum Status
+string PasswordResetToken
+datetime PasswordResetTokenExpiry
 }
 CUSTOMER {
 uuid CustomerID PK
@@ -315,7 +323,7 @@ CUSTOMER ||--o{ VOICEDISTRIBUTION : "receives"
 - [Key Functionalities.txt:7-166](file://Key Functionalities.txt#L7-L166)
 - [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
 - [CreditBatch.cs:27-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L74)
-- [UserAccount.cs:20-31](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L31)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
 
 ### Repository Pattern Implementation with Entity Framework Core
 The Data Access Layer implements the repository pattern to abstract persistence concerns:
@@ -347,7 +355,7 @@ Access control and filtering enforce that users and outlets operate within their
 - Transactions: Critical workflows (e.g., POS usage) are wrapped in transactions to ensure atomicity.
 - Projection and Pagination: Selective field retrieval and paging improve performance for reporting and dashboards.
 - Policy Resolution: Welcome policy resolution follows most recent active policy per business with fallback to configuration defaults.
-- **Email-Based Communication**: UserAccount email field enables email-based authentication, notifications, and account recovery workflows.
+- **Enhanced Email-Based Communication**: UserAccount email field enables email-based authentication, notifications, and account recovery workflows with secure token management.
 
 **Section sources**
 - [architecture.md:28-35](file://docs/architecture.md#L28-L35)
@@ -383,12 +391,12 @@ API-->>Brand : "Activation complete with credits"
 - [WelcomePolicyService.cs:25-39](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L39)
 - [SplitWelcomePolicy Migration:14-72](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L14-L72)
 
-### Email-Based Authentication and Notification System
-The email column addition enables comprehensive email-based functionality:
+### Enhanced Email-Based Authentication and Account Recovery System
+The email column addition and password reset token support enable comprehensive email-based functionality:
 
 - **Authentication**: Email validation and verification for user registration and login processes
 - **Notifications**: Automated email notifications for account activities, voucher distributions, and business events
-- **Account Recovery**: Email-based password reset and account recovery workflows
+- **Account Recovery**: Secure password reset workflow with time-limited tokens and email delivery
 - **Admin Notifications**: Email alerts for administrative actions and system events
 
 ```mermaid
@@ -397,22 +405,39 @@ participant User as "User Account"
 participant Auth as "Authentication Service"
 participant Email as "Email Notification Service"
 participant DB as "PostgreSQL"
-User->>Auth : "Login Request with Email"
-Auth->>DB : "Query UserAccount by Username"
+User->>Auth : "Forgot Password Request"
+Auth->>DB : "Query UserAccount by Username/Email"
 DB-->>Auth : "UserAccount with Email"
-Auth->>Email : "Send Login Notification"
+Auth->>Auth : "Generate Secure Token (32 bytes)"
+Auth->>DB : "Update PasswordResetToken + Expiry"
+Auth->>Email : "Send Password Reset Email"
 Email->>DB : "Retrieve Admin Emails"
 DB-->>Email : "Active Admin Accounts"
-Email-->>User : "Email Confirmation"
+Email-->>User : "Password Reset Email with Token"
+User->>Auth : "Reset Password with Token"
+Auth->>DB : "Validate Token + Check Expiry"
+Auth->>DB : "Update PasswordHash + Clear Token"
+DB-->>Auth : "Password Reset Complete"
+Auth-->>User : "Success Response"
 ```
 
 **Diagram sources**
-- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
-- [UserAccountConfiguration.cs:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
+- [AuthService.cs:93-170](file://src/NonCash.Core/Services/AuthService.cs#L93-L170)
+- [EmailNotificationService.cs:367-384](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L367-L384)
+- [PasswordReset.html:1-25](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html#L1-L25)
+
+### Security Features
+- **Secure Token Generation**: Uses cryptographic random number generator for password reset tokens
+- **Token Expiration**: 30-minute expiration window for security
+- **Email Validation**: Server-side email format validation prevents invalid data entry
+- **Account Enumeration Prevention**: Forgot password endpoint returns success regardless of account existence
+- **Token Cleanup**: Automatic cleanup of expired or used tokens
 
 **Section sources**
-- [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
-- [UserAccountConfiguration.cs:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
+- [AuthService.cs:93-170](file://src/NonCash.Core/Services/AuthService.cs#L93-L170)
+- [EmailNotificationService.cs:367-384](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L367-L384)
+- [PasswordReset.html:1-25](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html#L1-L25)
+- [AuthController.cs:67-86](file://src/NonCash.API/Controllers/AuthController.cs#L67-L86)
 
 ## Dependency Analysis
 The dependency relationships across layers and modules are as follows:
@@ -442,24 +467,27 @@ Indexing and performance strategies have been enhanced with the new welcome gran
 ### New Indexes and Optimizations
 - **Composite Index on WelcomeGrantPolicy**: `IX_welcome_grant_policies_business_active_from` optimizes business-scoped policy resolution queries with filters on business_id, is_active, and effective_from.
 - **Foreign Key Index on CreditBatch**: `IX_credit_batches_welcome_policy_id` accelerates joins between credit batches and their governing welcome policies.
+- **Password Reset Token Index**: `IX_user_accounts_password_reset_token` with filter optimization for non-null tokens improves password reset lookup performance.
 - **Existing CreditBatch Indexes**: Maintained existing indexes on brand_id+created_at and brand_id+expires_at for efficient brand-scoped queries.
 - **Email Field Optimization**: Email field configured with varchar(255) limit for optimal storage and query performance.
 
 ### General Performance Strategies
 - Primary Keys: Ensure clustered indexes on GUID PKs for efficient row access.
 - Foreign Keys: Add non-clustered indexes on FK columns (e.g., BrandID, UserID, OutletID, CustomerID, BusinessID) to accelerate joins.
-- High-Cardinality Filters: Index columns frequently used in WHERE clauses (e.g., SerialNo, PhoneNumber, ApprovalStatus, Email).
-- Range Queries: Index DateRange and DateTime fields used in validity checks (e.g., ExpiryDate, PublishDate, UsageDate, EffectiveFrom, EffectiveTo).
+- High-Cardinality Filters: Index columns frequently used in WHERE clauses (e.g., SerialNo, PhoneNumber, ApprovalStatus, Email, PasswordResetToken).
+- Range Queries: Index DateRange and DateTime fields used in validity checks (e.g., ExpiryDate, PublishDate, UsageDate, EffectiveFrom, EffectiveTo, PasswordResetTokenExpiry).
 - Composite Indexes: Consider composite indexes for frequent filter combinations (e.g., BrandID + Status, OutletID + Status, BusinessID + IsActive + EffectiveFrom).
 - Query Patterns: Use projection to fetch only required columns; apply pagination for large result sets.
 - Concurrency: Use optimistic concurrency tokens for entities updated by multiple services.
 - Transactions: Keep transactions short; avoid long-held locks during POS usage workflows.
 - **Email Validation**: Implement server-side email validation to prevent invalid data entry and reduce database load.
+- **Token Management**: Efficient token lookup using filtered indexes and automatic cleanup of expired tokens.
 
 **Section sources**
 - [SplitWelcomePolicy Migration:52-62](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L52-L62)
 - [WelcomeGrantPolicyConfiguration:17-19](file://src/NonCash.Infrastructure/Data/Configurations/WelcomeGrantPolicyConfiguration.cs#L17-L19)
-- [UserAccountConfiguration:35-36](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L36)
+- [UserAccountConfiguration:35-55](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L35-L55)
+- [AddPasswordResetToken Migration:29-34](file://src/NonCash.Infrastructure/Migrations/20260814114913_AddPasswordResetToken.cs#L29-L34)
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -472,17 +500,20 @@ Common issues and resolutions:
 - Policy-Batch Lineage Problems: Check welcome_policy_id foreign key relationships when auditing credit batch origins.
 - **Email Functionality Issues**: Verify email field population and SMTP configuration when troubleshooting email-based authentication and notification failures.
 - **Email Validation Errors**: Check email format validation and ensure proper error handling for invalid email addresses during user registration and updates.
+- **Password Reset Token Issues**: Verify token generation, storage, and cleanup processes; check token expiration handling and database index performance.
+- **Authentication Flow Problems**: Debug forgot password and reset password endpoints; verify email delivery and template rendering.
 
 **Section sources**
 - [architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
 - [EmailNotificationService.cs:40-63](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L40-L63)
+- [AuthService.cs:93-170](file://src/NonCash.Core/Services/AuthService.cs#L93-L170)
 
 ## Conclusion
-NonCash's relational schema and repository-driven persistence align with a robust 3-tier SaaS architecture. The introduction of the WelcomeGrantPolicy system enhances multi-tenancy by providing business-level policy management alongside brand-level data isolation. The addition of email support to UserAccount entities enables comprehensive email-based authentication, notifications, and account recovery features, significantly enhancing the platform's communication capabilities. Multi-tenancy is enforced via BrandID across core entities and BusinessID for commercial policies, while the microservices-based Business Logic Layer orchestrates complex workflows such as voucher planning, distribution, POS usage, welcome credit grants, and email-based communications. The documented entity relationships, enhanced indexing strategies, migration practices, and email functionality provide a solid foundation for scalable, secure, and maintainable operations.
+NonCash's relational schema and repository-driven persistence align with a robust 3-tier SaaS architecture. The introduction of the WelcomeGrantPolicy system enhances multi-tenancy by providing business-level policy management alongside brand-level data isolation. The addition of email support to UserAccount entities and comprehensive password reset token functionality significantly enhances the platform's communication and security capabilities. Multi-tenancy is enforced via BrandID across core entities and BusinessID for commercial policies, while the microservices-based Business Logic Layer orchestrates complex workflows such as voucher planning, distribution, POS usage, welcome credit grants, and enhanced email-based authentication with secure account recovery. The documented entity relationships, enhanced indexing strategies, migration practices, and comprehensive email functionality provide a solid foundation for scalable, secure, and maintainable operations.
 
 ## Appendices
-- Implementation Readiness: The project demonstrates strong adherence to database entity mapping and story dependencies, with foundational tables established early and transaction tables introduced progressively. The new welcome grant policy system and email-enabled user accounts represent significant enhancements to the credit management and communication architectures.
+- Implementation Readiness: The project demonstrates strong adherence to database entity mapping and story dependencies, with foundational tables established early and transaction tables introduced progressively. The new welcome grant policy system and enhanced email-enabled user accounts with password reset capabilities represent significant enhancements to the credit management and communication architectures.
 
 **Section sources**
 - [_bmad-output/implementation-readiness-report-2026-04-17.md:91-123](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md#L91-L123)

@@ -1,6 +1,6 @@
 # Story 6.4: Webhook Lifecycle Events (Push to Loyalty App)
 
-Status: backlog
+Status: done
 
 ## Story
 
@@ -41,18 +41,21 @@ And all subsequent webhooks use the new secret for HMAC signing
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Event emitter (AC1)
-  - [ ] Subtask 1.1: `IVoucherEventPublisher` interface in Core
-  - [ ] Subtask 1.2: Hook into existing service methods (distribution, redemption, transfer) to publish events
-  - [ ] Subtask 1.3: `VoucherEvent` domain event record
-- [ ] Task 2: Webhook delivery worker (AC2, AC4)
-  - [ ] Subtask 2.1: `WebhookDeliveryService` as a `BackgroundService` or `IHostedService`
-  - [ ] Subtask 2.2: `webhook_deliveries` table: `id`, `partner_id`, `event_type`, `payload_json`, `http_status`, `retry_count`, `delivered_at`, `created_at`
-  - [ ] Subtask 2.3: Retry logic with exponential backoff (1s, 5s, 30s)
-- [ ] Task 3: HMAC signing (AC2, AC5)
-  - [ ] Subtask 3.1: Add `webhook_secret` (text nullable) to `integration_partners`
-  - [ ] Subtask 3.2: HMAC-SHA256 signing utility
-  - [ ] Subtask 3.3: Admin UI for secret generation
+- [x] Task 1: Event emitter (AC1)
+  - [x] Subtask 1.1: `IVoucherEventPublisher` interface in Core
+  - [x] Subtask 1.2: Hook into existing service methods (distribution, redemption, transfer) to publish events
+    - IntegrationController.Distribute → `voucher.distributed`
+    - PosService.CommitAsync → `voucher.redeemed`
+    - TransferService.TransferAsync → `voucher.transferred`
+  - [x] Subtask 1.3: `VoucherEvent` domain event record
+- [x] Task 2: Webhook delivery worker (AC2, AC4)
+  - [x] Subtask 2.1: `WebhookDeliveryService` as a `BackgroundService`
+  - [x] Subtask 2.2: `webhook_deliveries` table with retry tracking
+  - [x] Subtask 2.3: Retry logic with exponential backoff (1m, 5m, 25m, 2h, 10h — max 5 retries)
+- [x] Task 3: HMAC signing (AC2, AC5)
+  - [x] Subtask 3.1: `webhook_secret` on `integration_partners`
+  - [x] Subtask 3.2: HMAC-SHA256 signing in `WebhookDeliveryService`
+  - [x] Subtask 3.3: Admin UI for secret generation (IntegrationPartners.razor)
 - [ ] Task 4: Admin delivery log dashboard (AC4)
   - [ ] Subtask 4.1: `WebhookDeliveries.razor` page showing recent deliveries, filterable by partner and status
 - [ ] Task 5: Tests

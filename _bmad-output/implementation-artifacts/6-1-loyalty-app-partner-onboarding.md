@@ -1,6 +1,6 @@
 # Story 6.1: Loyalty App Partner Onboarding & API Key Management
 
-Status: backlog
+Status: done
 
 ## Story
 

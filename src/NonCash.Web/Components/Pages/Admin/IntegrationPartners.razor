@@ -1,0 +1,431 @@
+@page "/admin/integration-partners"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Integration Partners</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Integration Partners</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Manage external Loyalty App partners and their API credentials.</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="9"></MudItem>
+        <MudItem xs="12" sm="3" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="OpenCreateDialog" StartIcon="@Icons.Material.Filled.Add">Add Partner</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_partners is not null && _partners.Count > 0)
+{
+    <MudTable Items="_partners" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Contact Email</MudTh>
+            <MudTh>API Key Prefix</MudTh>
+            <MudTh>Brands</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Contact Email">@context.ContactEmail</MudTd>
+            <MudTd DataLabel="API Key Prefix">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@context.ApiKeyPrefix</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Brands">
+                @foreach (var brand in context.Brands)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">@brand.BrandName</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="@(context.IsActive ? Color.Success : Color.Default)" Size="Size.Small">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>
+                <MudTooltip Text="Edit">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEditDialog(context)" />
+                </MudTooltip>
+                <MudTooltip Text="Regenerate API Key">
+                    <MudIconButton Icon="@Icons.Material.Filled.Key" Color="Color.Warning" Size="Size.Small" OnClick="() => RegenerateKey(context)" />
+                </MudTooltip>
+                <MudTooltip Text="Delete">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeletePartner(context)" />
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No integration partners registered yet.</MudAlert>
+}
+
+<!-- Create / Edit Dialog -->
+<MudDialog @bind-Visible="_showDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Partner" : "Create Partner")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="_model.Name" Label="Partner Name" Required="true" RequiredError="Name is required"
+                          Placeholder="e.g. Giga Mall App" Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_model.ContactEmail" Label="Contact Email" Required="true" RequiredError="Email is required"
+                          InputType="InputType.Email" Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_model.CallbackUrl" Label="Webhook Callback URL"
+                          Placeholder="https://partner.example.com/webhooks/noncash" Variant="Variant.Outlined" />
+            <MudSelect @bind-Value="_model.IsActive" Label="Status" Variant="Variant.Outlined">
+                <MudSelectItem Value="true">Active</MudSelectItem>
+                <MudSelectItem Value="false">Inactive</MudSelectItem>
+            </MudSelect>
+
+            @if (!_isEdit)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Authorized Brands</MudText>
+                <MudGrid>
+                    @foreach (var brand in _allBrands)
+                    {
+                        <MudItem xs="6" sm="4">
+                            <MudCheckBox T="bool" Value="_selectedBrandIds.Contains(brand.Id.ToString())"
+                                         ValueChanged="@(v => ToggleBrand(brand.Id.ToString(), v))"
+                                         Label="@brand.Name" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showDialog = false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SavePartner">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- API Key Reveal Dialog -->
+<MudDialog @bind-Visible="_showKeyDialog" Options="_keyDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">API Key Generated</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">
+            <strong>Copy this key now — it will not be shown again!</strong>
+        </MudAlert>
+        <MudPaper Class="pa-3" Style="background: #f5f5f5; font-family: monospace; word-break: break-all;">
+            @_generatedApiKey
+        </MudPaper>
+        <MudButton Color="Color.Primary" Variant="Variant.Outlined" Class="mt-3" StartIcon="@Icons.Material.Filled.ContentCopy"
+                   OnClick="CopyKeyToClipboard">Copy to Clipboard</MudButton>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="() => _showKeyDialog = false">I've Saved It</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _loading = false;
+    private List<PartnerDto>? _partners;
+    private List<BrandOption> _allBrands = new();
+    private HashSet<string> _selectedBrandIds = new();
+
+    private bool _showDialog = false;
+    private bool _isEdit = false;
+    private MudForm? _form;
+    private PartnerFormModel _model = new();
+
+    private bool _showKeyDialog = false;
+    private string? _generatedApiKey;
+    private Guid? _keyPartnerId;
+
+    private readonly DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private readonly DialogOptions _keyDialogOptions = new() { CloseOnEscapeKey = false, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadPartners();
+        await LoadBrands();
+    }
+
+    private async Task LoadPartners()
+    {
+        _loading = true;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/integration-partners");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _partners = await response.Content.ReadFromJsonAsync<List<PartnerDto>>() ?? new();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to load partners: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadBrands()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/brands?pageSize=200");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<BrandListResult>();
+                _allBrands = result?.Items?.Select(b => new BrandOption { Id = b.Id, Name = b.Name }).ToList() ?? new();
+            }
+        }
+        catch { /* non-critical */ }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEdit = false;
+        _model = new PartnerFormModel();
+        _selectedBrandIds = new HashSet<string>();
+        _showDialog = true;
+    }
+
+    private void ToggleBrand(string brandId, bool selected)
+    {
+        if (selected) _selectedBrandIds.Add(brandId);
+        else _selectedBrandIds.Remove(brandId);
+    }
+
+    private void OpenEditDialog(PartnerDto partner)
+    {
+        _isEdit = true;
+        _model = new PartnerFormModel
+        {
+            Id = partner.Id,
+            Name = partner.Name,
+            ContactEmail = partner.ContactEmail,
+            CallbackUrl = partner.CallbackUrl,
+            IsActive = partner.IsActive
+        };
+        _selectedBrandIds = new HashSet<string>(partner.Brands.Select(b => b.BrandId.ToString()));
+        _showDialog = true;
+    }
+
+    private async Task SavePartner()
+    {
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+
+            if (_isEdit)
+            {
+                var body = new { _model.Name, _model.ContactEmail, _model.CallbackUrl, _model.IsActive };
+                var req = new HttpRequestMessage(HttpMethod.Put, $"api/v1/integration-partners/{_model.Id}")
+                { Content = JsonContent.Create(body) };
+                if (!string.IsNullOrEmpty(token))
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var response = await Http.SendAsync(req);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Partner updated.", Severity.Success);
+
+                    // Update brand associations
+                    var brandIds = _selectedBrandIds.Select(Guid.Parse).ToList();
+                    var brandReq = new HttpRequestMessage(HttpMethod.Put, $"api/v1/integration-partners/{_model.Id}/brands")
+                    { Content = JsonContent.Create(new { BrandIds = brandIds }) };
+                    if (!string.IsNullOrEmpty(token))
+                        brandReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                    await Http.SendAsync(brandReq);
+                }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Update failed: {error}", Severity.Error);
+                    return;
+                }
+            }
+            else
+            {
+                var brandIds = _selectedBrandIds.Select(Guid.Parse).ToList();
+                var body = new { _model.Name, _model.ContactEmail, _model.CallbackUrl, BrandIds = brandIds };
+                var req = new HttpRequestMessage(HttpMethod.Post, "api/v1/integration-partners")
+                { Content = JsonContent.Create(body) };
+                if (!string.IsNullOrEmpty(token))
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var response = await Http.SendAsync(req);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Partner created. Generate an API key to enable integration.", Severity.Success);
+                }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Create failed: {error}", Severity.Error);
+                    return;
+                }
+            }
+
+            _showDialog = false;
+            await LoadPartners();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RegenerateKey(PartnerDto partner)
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var req = new HttpRequestMessage(HttpMethod.Post, $"api/v1/integration-partners/{partner.Id}/generate-key");
+            if (!string.IsNullOrEmpty(token))
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(req);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<KeyGenResult>();
+                _generatedApiKey = result?.ApiKey;
+                _keyPartnerId = partner.Id;
+                _showKeyDialog = true;
+                await LoadPartners();
+            }
+            else
+            {
+                Snackbar.Add($"Key generation failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeletePartner(PartnerDto partner)
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var req = new HttpRequestMessage(HttpMethod.Delete, $"api/v1/integration-partners/{partner.Id}");
+            if (!string.IsNullOrEmpty(token))
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(req);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Partner deleted.", Severity.Success);
+                await LoadPartners();
+            }
+            else
+            {
+                Snackbar.Add($"Delete failed: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CopyKeyToClipboard()
+    {
+        if (!string.IsNullOrEmpty(_generatedApiKey))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _generatedApiKey);
+            Snackbar.Add("API key copied to clipboard.", Severity.Success);
+        }
+    }
+
+    // DTOs
+    public class PartnerDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string ContactEmail { get; set; } = string.Empty;
+        public string CallbackUrl { get; set; } = string.Empty;
+        public string ApiKeyPrefix { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public List<PartnerBrandDto> Brands { get; set; } = new();
+    }
+
+    public class PartnerBrandDto
+    {
+        public Guid BrandId { get; set; }
+        public string? BrandName { get; set; }
+    }
+
+    public class PartnerFormModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string ContactEmail { get; set; } = string.Empty;
+        public string CallbackUrl { get; set; } = string.Empty;
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class BrandOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class BrandListResult
+    {
+        public IReadOnlyList<BrandItem>? Items { get; set; }
+        public int TotalCount { get; set; }
+    }
+
+    public class BrandItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class KeyGenResult
+    {
+        public string? ApiKey { get; set; }
+        public string? Prefix { get; set; }
+    }
+}

@@ -231,6 +231,25 @@ public class EmailNotificationService : INotificationService
         await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "WelcomeCreditGranted", "WelcomeCreditGranted");
     }
 
+    public async Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BrandEmail))
+        {
+            _logger.LogInformation("Brand-created notification skipped for {BrandName}: no contact email.", notification.BrandName);
+            return;
+        }
+
+        var subject = $"Your business '{notification.BrandName}' is now active on NonCash";
+        var body = await _templateRenderer.RenderAsync("BrandCreated", new Dictionary<string, string?>
+        {
+            ["BrandName"] = notification.BrandName,
+            ["BusinessName"] = notification.BusinessName,
+            ["TaxCode"] = notification.TaxCode
+        }, cancellationToken);
+
+        await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "BrandCreated", "BrandCreated");
+    }
+
     public async Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(notification.BrandEmail))

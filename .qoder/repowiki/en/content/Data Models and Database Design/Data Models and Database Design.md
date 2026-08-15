@@ -35,10 +35,17 @@
 - [CreditAdjustmentRequestConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs)
 - [EmailLogConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/EmailLogConfiguration.cs)
 - [BrandRegistrationRequestConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/BrandRegistrationRequestConfiguration.cs)
+- [UserAccountConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs)
 - [ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
 - [CreditService.cs](file://src/NonCash.Infrastructure/Services/CreditService.cs)
 - [CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs)
+- [AuthController.cs](file://src/NonCash.API\Controllers\AuthController.cs)
+- [AuthService.cs](file://src/NonCash.Core\Services\AuthService.cs)
+- [INotificationService.cs](file://src/NonCash.Core/Interfaces/INotificationService.cs)
+- [AuthDtos.cs](file://src/NonCash.API/DTOs/AuthDtos.cs)
+- [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
+- [20260814114913_AddPasswordResetToken.cs](file://src/NonCash.Infrastructure/Migrations/20260814114913_AddPasswordResetToken.cs)
 - [architecture.md](file://docs/architecture.md)
 - [source-tree-analysis.md](file://docs/source-tree-analysis.md)
 - [Key Functionalities.txt](file://Key Functionalities.txt)
@@ -53,6 +60,8 @@
 - Enhanced Customer entity with email field support
 - Integrated email notification system across all business processes including voucher distribution, credit operations, and approval workflows
 - Added comprehensive email retry logic with exponential backoff and failure tracking
+- **NEW**: Enhanced UserAccount entity with PasswordResetToken (string) and PasswordResetTokenExpiry (DateTime?) columns for secure time-limited password reset functionality
+- **NEW**: Complete password reset workflow implementation with API endpoints, email notifications, and security measures
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -67,7 +76,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. The platform now includes enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms for voucher management across brands and outlets, settlement tracking for cross-tenant operations, credit ledger management, integration partner support, improved member identity management, sophisticated batch-based credit system with maker-checker approval workflows, and comprehensive email notification system with complete audit trail capabilities.
+This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. The platform now includes enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms for voucher management across brands and outlets, settlement tracking for cross-tenant operations, credit ledger management, integration partner support, improved member identity management, sophisticated batch-based credit system with maker-checker approval workflows, comprehensive email notification system with complete audit trail capabilities, and secure password reset functionality with time-limited tokens.
 
 ## Project Structure
 The NonCash project follows a layered architecture with a clear separation of concerns:
@@ -328,18 +337,20 @@ This section defines the core entities and their attributes, primary keys, forei
     - Status: Enum (Active, Closed)
     - ApiKeyPrefix: String? (POS API access)
 
-- **UserAccount** (Enhanced Back-office Users)
-  - Purpose: Platform access for creating, reviewing, and approving plans.
+- **UserAccount** (Enhanced Back-office Users with Password Reset Support)
+  - Purpose: Platform access for creating, reviewing, and approving plans with secure password reset functionality.
   - Key attributes:
     - ID: GUID (Primary Key)
     - BrandId: GUID (Nullable, FK to Brand)
     - Username: String
     - PasswordHash: String
     - FullName: String
-    - Role: Enum (Admin, BrandManager, Planner, Approver)
+    - Role: Enum (Admin, BrandManager, Planner, Approver, FinancialController)
     - Status: Enum (PendingActivation, Active, Locked)
     - Email: String? (Optional email for notifications)
-  - **Enhanced**: Added email field for direct email notifications and user communication
+    - **PasswordResetToken**: String? (One-time token for password reset, null when no reset is pending)
+    - **PasswordResetTokenExpiry**: DateTime? (Expiry time for the password reset token)
+  - **Enhanced**: Added email field for direct email notifications, user communication, and secure password reset functionality with time-limited tokens
 
 - **Customer** (End-User / App Member)
   - Purpose: Consumers who hold and use distributed vouchers.
@@ -530,6 +541,7 @@ Entity relationships and constraints:
 - **NEW**: BrandRegistrationRequest.BrandId → Brand.ID (many-to-1)
 - **NEW**: BrandRegistrationRequest.SubmittedByUserId → UserAccount.ID (many-to-1)
 - **NEW**: BrandRegistrationRequest.ReviewedByUserId → UserAccount.ID (many-to-1)
+- **NEW**: UserAccount.PasswordResetToken index with filter for non-null values
 
 **Section sources**
 - [data-models.md:9-113](file://docs/data-models.md#L9-L113)
@@ -539,25 +551,25 @@ Entity relationships and constraints:
 - [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
 - [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L21)
 - [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-30)
 - [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
 - [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
 - [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
-- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-17)
-- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-19)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
-- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-20)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
+- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-L20)
 
 ## Architecture Overview
 The NonCash system employs a relational model managed via Entity Framework Core and PostgreSQL. The Data Access Layer uses the Repository pattern to abstract persistence concerns, enabling decoupling from the Business Logic Layer and supporting schema evolution and technology changes.
@@ -585,17 +597,17 @@ DC --> MIG
 ```
 
 **Diagram sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
 **Section sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
 ## Detailed Component Analysis
 
 ### Enhanced Entity Relationship Model
-The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities. The model now includes enhanced approval workflows, versioning, comprehensive tracking, settlement management, credit ledger, integration partners, member identity management, sophisticated batch-based credit system, and comprehensive email notification system.
+The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities. The model now includes enhanced approval workflows, versioning, comprehensive tracking, settlement management, credit ledger, integration partners, member identity management, sophisticated batch-based credit system, comprehensive email notification system, and secure password reset functionality.
 
 ```mermaid
 erDiagram
@@ -623,6 +635,8 @@ string FullName
 enum Role
 enum Status
 string Email
+string PasswordResetToken
+datetime PasswordResetTokenExpiry
 }
 CUSTOMER {
 uuid ID PK
@@ -939,30 +953,30 @@ EMAILLOG ||..| USERACCOUNT : "sent to"
 ```
 
 **Diagram sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
-- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-21)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
-- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-30)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L21)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
 - [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
 - [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
-- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-17)
-- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-19)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
 
 ### Enhanced Data Validation and Business Rules Embedded in Schema
 - **Multi-tenancy isolation**: BrandId ensures tenant boundaries across entities.
@@ -983,30 +997,31 @@ EMAILLOG ||..| USERACCOUNT : "sent to"
 - **Maker-checker adjustment workflow with approval thresholds and audit trail**.
 - **Brand group support for bulk policy application and scope-based policy resolution**.
 - **Automated credit expiry management with one-time warning system**.
-- **NEW**: Comprehensive email notification system with complete audit trail and retry logic.
-- **NEW**: Brand registration workflow with approval process and audit trail.
-- **NEW**: Enhanced user accounts with email support for direct notifications.
-- **NEW**: Customer email support for personalized communications.
+- **Comprehensive email notification system with complete audit trail and retry logic**.
+- **Brand registration workflow with approval process and audit trail**.
+- **Enhanced user accounts with email support for direct notifications**.
+- **Customer email support for personalized communications**.
+- **SECURE PASSWORD RESET FUNCTIONALITY**: UserAccount now includes PasswordResetToken (string) and PasswordResetTokenExpiry (DateTime?) columns for secure time-limited password reset functionality with indexed token lookup and automatic token cleanup on expiry.
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
-- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-20)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
+- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-L20)
 
 ### Enhanced Data Access Patterns Using Entity Framework Core and Repository Pattern
 - DbContext encapsulates all entity sets and manages change tracking and transactions.
@@ -1021,8 +1036,9 @@ EMAILLOG ||..| USERACCOUNT : "sent to"
 - **Batch-based credit consumption with FIFO algorithm and idempotent processing**.
 - **Maker-checker adjustment workflow with approval matrix and audit trail**.
 - **Automated credit expiry sweep service with one-time warning system**.
-- **NEW**: Comprehensive email notification system with retry logic and audit trail.
-- **NEW**: Brand registration workflow with email notifications and approval process.
+- **Comprehensive email notification system with retry logic and audit trail**.
+- **Brand registration workflow with email notifications and approval process**.
+- **SECURE PASSWORD RESET WORKFLOW**: Complete password reset implementation with ForgotPasswordAsync and ResetPasswordAsync methods, secure token generation, email notifications, and automatic token cleanup on expiry or successful password reset.
 - Migrations manage schema evolution and version control for PostgreSQL.
 
 ```mermaid
@@ -1033,18 +1049,13 @@ participant Service as "Business Service"
 participant Repo as "Repository"
 participant DB as "DbContext/DB"
 participant EmailSvc as "EmailNotificationService"
-Client->>API : "POST /api/usage"
-API->>Service : "VerifyAndApply(voucherCode, posId, amount)"
-Service->>Repo : "GetByCodeWithLock(voucherCode)"
-Repo->>DB : "Query VoucherPlanDetail with Lock"
-DB-->>Repo : "Locked voucher entity"
-Service->>Repo : "Update(UsageStatus, UsedDate, Unlock)"
-Service->>Repo : "Create(VoucherUsage)"
-Service->>Repo : "Create(SettlementEntry if cross-tenant)"
-Service->>Repo : "Create(CreditLedgerEntry for consumption)"
-Service->>Repo : "Create(VoucherEvent for webhooks)"
-Service->>Repo : "TryConsumeAsync(brandId, voucherDetailId)"
-Service->>EmailSvc : "Send notification if needed"
+Client->>API : "POST /api/auth/forgot-password"
+API->>Service : "ForgotPasswordAsync(usernameOrEmail)"
+Service->>Repo : "Find user by username/email"
+Repo->>DB : "Query UserAccount"
+DB-->>Repo : "User with email"
+Service->>Repo : "Generate secure token + set expiry"
+Service->>EmailSvc : "Send password reset email"
 EmailSvc->>Repo : "Create(EmailLog)"
 Service->>Repo : "Begin Transaction"
 DB-->>Repo : "Commit"
@@ -1054,14 +1065,16 @@ API-->>Client : "Response"
 ```
 
 **Diagram sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
-- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
+- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-L416)
+- [AuthService.cs:122-171](file://src/NonCash.Core\Services\AuthService.cs#L122-L171)
 
 **Section sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
-- [EmailNotificationService.cs:1-428](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L1-428)
+- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [EmailNotificationService.cs:1-428](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L1-L428)
+- [AuthService.cs:122-171](file://src/NonCash.Core\Services\AuthService.cs#L122-L171)
 
 ### Enhanced Sample Data Examples
 Below are representative rows illustrating typical data entries across entities with the enhanced functionality. These examples illustrate relationships and constraints without exposing sensitive information.
@@ -1072,8 +1085,8 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], Name: "The Coffee House", TaxCode: "THC-12345", ContactEmail: "admin@thecoffeehouse.example", Status: Active
 - **Outlet**
   - ID: [GUID], BrandId: [Brand GUID], Name: "Downtown Store", Address: "123 Main St", Status: Active, ApiKeyPrefix: "POS-101"
-- **UserAccount** *(Enhanced)*
-  - ID: [GUID], BrandId: [Brand GUID], Username: "brand_manager", PasswordHash: "[hash]", FullName: "Jane Brand Manager", Role: BrandManager, Status: Active, Email: "jane.brandmanager@example.com"
+- **UserAccount** *(Enhanced with Password Reset Support)*
+  - ID: [GUID], BrandId: [Brand GUID], Username: "brand_manager", PasswordHash: "[hash]", FullName: "Jane Brand Manager", Role: BrandManager, Status: Active, Email: "jane.brandmanager@example.com", PasswordResetToken: null, PasswordResetTokenExpiry: null
 - **Customer** *(Enhanced)*
   - ID: [GUID], PhoneNumber: "+8490xxxxxxx", FullName: "John Doe", Email: "john.doe@example.com", Status: Active
 - **MemberAccount**
@@ -1088,25 +1101,25 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], PlanId: [Plan GUID], ApproverId: [User GUID], ReviewDate: 2026-06-15T14:30:00Z, ReviewNotes: "Approved with conditions", Decision: Approved, PublishDate: 2026-06-15T15:00:00Z
 - **VoucherDistribution**
   - ID: [GUID], VoucherId: [Detail GUID], MemberId: [Customer GUID], Method: Sale, DistributionDate: 2026-06-16
-- **VoucherUsage** *(Enhanced)*
+- **VoucherUsage** *(Enhanced)**
   - ID: [GUID], VoucherId: [Detail GUID], PosId: [Outlet GUID], TransactionId: "TXN-2026-001", UsageDate: 2026-06-17, AmountUsed: 100000
-- **SettlementEntry** *(New)*
+- **SettlementEntry** *(New)**
   - ID: [GUID], SponsorBrandId: [Brand GUID], IssuingBrandId: [Brand GUID], RedeemBrandId: [Brand GUID], RedeemOutletId: [Outlet GUID], VoucherUsageId: [Usage GUID], FaceValue: 100000, Status: Pending, SettledAt: null, SettledBy: null
-- **CreditLedgerEntry** *(New)*
+- **CreditLedgerEntry** *(New)**
   - ID: [GUID], BrandId: [Brand GUID], EntryType: Consumption, Amount: -1, Reference: "Voucher redemption", VoucherDetailId: [Detail GUID], CreatedBy: null
-- **PaymentTransaction** *(New)*
+- **PaymentTransaction** *(New)**
   - ID: [GUID], PurchaseOrderId: [Purchase GUID], Gateway: "ZaloPay", GatewayTransactionId: "zp-123456", Amount: 100000, Currency: "VND", Status: Success, RequestPayload: "{...}", ResponsePayload: "{...}", WebhookPayload: "{...}", GatewayResponseCode: "00", CompletedAt: 2026-06-16T10:00:00Z
-- **VoucherEvent** *(New)*
+- **VoucherEvent** *(New)**
   - ID: [GUID], EventType: "voucher.redeemed", VoucherId: [Detail GUID], MemberPhone: "+8490xxxxxxx", BrandId: [Brand GUID], PayloadJson: "{\"amount\":100000,\"outlet\":\"store1\"}"
-- **WebhookDelivery** *(New)*
+- **WebhookDelivery** *(New)**
   - ID: [GUID], PartnerId: [Partner GUID], EventId: [Event GUID], HttpStatus: 200, RetryCount: 0, DeliveredAt: 2026-06-17T10:31:00Z, NextRetryAt: null, LastError: null
-- **VoucherTransfer** *(New)*
+- **VoucherTransfer** *(New)**
   - ID: [GUID], SenderId: [Member GUID], RecipientId: [Member GUID], VoucherId: [Detail GUID], Status: PendingAcceptance, TransferType: Gift, InitiatedAt: 2026-06-16T15:00:00Z, ExpiresAt: 2026-06-23T15:00:00Z, Note: "Birthday gift!", RejectReason: null, RespondedAt: null
 - **PlanOutlet**
   - PlanId: [Plan GUID], OutletId: [Outlet GUID]
-- **EmailLog** *(New)*
+- **EmailLog** *(New)**
   - ID: [GUID], ToAddress: "admin@example.com", Subject: "New business registration: Coffee House", TemplateName: "AdminNewRegistration", NotificationType: "NewRegistration", RelatedEntityId: [Request GUID], Success: true, ErrorMessage: null, RetryCount: 0, SentAt: 2026-06-17T10:30:00Z
-- **BrandRegistrationRequest** *(New)*
+- **BrandRegistrationRequest** *(New)**
   - ID: [GUID], BrandId: [Brand GUID], SubmittedByUserId: [User GUID], SubmittedAt: 2026-06-16T09:00:00Z, Status: UnderReview, ReviewNotes: "Under review for compliance check", ReviewedAt: null, ReviewedByUserId: null
 - **NEW**: **CreditBatch**
   - ID: [GUID], BrandId: [Brand GUID], PolicyId: [Policy GUID], BatchType: Purchase, OriginalAmount: 1000, RemainingAmount: 999, PricePerCreditVnd: 100m, TotalPaidVnd: 100000m, ExpiresAt: 2027-06-17, EvidenceImageUrl: "/bank-slip-001.jpg", Reference: "Bank transfer #BT-001", AdjustmentRequestId: null, CreatedBy: [User GUID]
@@ -1120,29 +1133,32 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], BatchId: [Batch GUID], BrandId: [Brand GUID], VoucherDetailId: [Detail GUID], Reference: "gift-sold"
 - **NEW**: **CreditExpiryLog**
   - ID: [GUID], BatchId: [Batch GUID], BrandId: [Brand GUID], ExpiredCredits: 50, ExpiredAt: 2027-06-17T00:00:00Z
+- **NEW**: **UserAccount with Password Reset Token**
+  - ID: [GUID], BrandId: [Brand GUID], Username: "user@example.com", PasswordHash: "[hash]", FullName: "John User", Role: BrandManager, Status: Active, Email: "user@example.com", PasswordResetToken: "base64-encoded-token", PasswordResetTokenExpiry: 2026-08-14T12:30:00Z
 
 **Section sources**
-- [data-models.md:9-113](file://docs/data-models.md#L9-113)
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
-- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-30)
+- [data-models.md:9-113](file://docs/data-models.md#L9-L113)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
 - [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
 
 ## Dependency Analysis
 The following diagram highlights dependencies among layers and components relevant to data modeling and access.
@@ -1157,10 +1173,10 @@ CORE --> INFRA
 ```
 
 **Diagram sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
 **Section sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 
 ## Performance Considerations
 - **Enhanced indexing strategy**:
@@ -1189,6 +1205,7 @@ CORE --> INFRA
   - **NEW**: CreditPricingPolicy: Index on Scope, IsActive, EffectiveFrom for policy resolution, BrandId, BrandGroupId
   - **NEW**: BrandGroup: Unique index on Name for group lookup
   - **NEW**: BrandGroupMember: Composite unique index on BrandGroupId, BrandId for membership validation
+  - **NEW**: UserAccount: Index on PasswordResetToken with filter for non-null values for efficient token lookup
 - **Enhanced query patterns**:
   - Use projection queries to avoid loading unnecessary columns
   - Batch operations for bulk distribution and usage updates
@@ -1197,6 +1214,7 @@ CORE --> INFRA
   - **New**: FIFO consumption queries with ordering by CreatedAt, policy resolution queries with scope priority
   - **new**: Adjustment request queue queries with status-based filtering
   - **new**: Email notification queries with retry logic and failure analysis
+  - **new**: Password reset token queries with expiry validation and cleanup
 - **Enhanced concurrency**:
   - Optimistic concurrency with row versioning for entities updated by multiple users
   - **New**: POS transaction locking prevents concurrent usage conflicts
@@ -1206,16 +1224,19 @@ CORE --> INFRA
   - **New**: Credit consumption unique constraint on VoucherDetailId prevents double charging
   - **New**: One-time expiry warning system prevents duplicate notifications
   - **New**: Email retry logic with exponential backoff prevents duplicate sends
+  - **New**: Password reset token uniqueness and automatic cleanup on expiry or successful reset
 - **Enhanced caching**:
   - Cache static reference data (enums, Brand/Outlet lists) with invalidation on change
   - **New**: Cache approval workflow states, plan version hierarchies, integration partner configurations, credit balances
   - **New**: Cache resolved pricing policies per brand with invalidation on policy changes
   - **New**: Cache email templates and notification configurations
+  - **New**: Cache password reset token state with short-lived cache for performance
 - **Enhanced monitoring**:
   - Track slow queries and long-running transactions; alert on unusual spikes
   - **New**: Monitor POS transaction lock timeouts, approval workflow bottlenecks, settlement processing delays, webhook delivery failures, credit balance anomalies
   - **New**: Monitor credit consumption performance, adjustment request processing times, expiry sweep efficiency
   - **New**: Monitor email delivery success rates, retry patterns, SMTP configuration issues
+  - **New**: Monitor password reset token generation, usage, and expiry patterns for security analytics
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -1264,39 +1285,48 @@ Common issues and resolutions:
 - **Credit expiry issues**:
   - Symptom: Batches not expiring or duplicate warnings sent
   - Resolution: Verify expiry sweep service execution, check ExpiryWarningSentAt deduplication, validate ExpiresAt calculations
-- **NEW**: Email delivery failures:
+- **Email delivery failures**:
   - Symptom: Emails not sent or SMTP connection issues
   - Resolution: Check SMTP configuration, verify recipient addresses, monitor retry counts and error messages in EmailLog
-- **NEW**: Brand registration workflow issues:
+- **Brand registration workflow issues**:
   - Symptom: Registration requests stuck or approval delays
   - Resolution: Check BrandRegistrationRequest status, verify reviewer assignments, validate brand uniqueness constraints
-- **NEW**: Email notification routing problems:
+- **Email notification routing problems**:
   - Symptom: Wrong recipients or missing notifications
   - Resolution: Verify UserAccount.Email fields, check notification type mappings, validate template rendering
+- **PASSWORD RESET ISSUES**:
+  - Symptom: Password reset emails not received or tokens invalid/expired
+  - Resolution: Check UserAccount.Email field, verify PasswordResetToken generation, check PasswordResetTokenExpiry validation, monitor EmailLog for delivery status
+  - Symptom: Multiple password reset requests causing token conflicts
+  - Resolution: Implement token rotation on new reset requests, ensure old tokens are invalidated
+  - Symptom: Security concerns with token exposure
+  - Resolution: Verify token length (32-byte secure random), Base64 encoding, 30-minute expiry, and proper cleanup after use
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
 - [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [architecture.md:28-52](file://docs/architecture.md#L28-52)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
-- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-L416)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
+- [AuthService.cs:122-171](file://src/NonCash.Core\Services\AuthService.cs#L122-L171)
 
 ## Conclusion
-The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms, settlement management, credit ledger system, integration partner support, improved member identity management, sophisticated batch-based credit system, and comprehensive email notification system provide enhanced governance and operational control. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, enhanced security through POS transaction locking, strict POS integration controls, cross-tenant settlement tracking, comprehensive audit logging, automated credit expiry management, and complete email notification audit trail underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time with support for complex approval processes, outlet-specific campaign management, integration ecosystem expansion, advanced credit management capabilities, and comprehensive email communication tracking.
+The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms, settlement management, credit ledger system, integration partner support, improved member identity management, sophisticated batch-based credit system, comprehensive email notification system, and secure password reset functionality provide enhanced governance and operational control. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, enhanced security through POS transaction locking, strict POS integration controls, cross-tenant settlement tracking, comprehensive audit logging, automated credit expiry management, complete email notification audit trail, and secure password reset with time-limited tokens underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time with support for complex approval processes, outlet-specific campaign management, integration ecosystem expansion, advanced credit management capabilities, comprehensive email communication tracking, and secure authentication recovery mechanisms.
 
 ## Appendices
 
@@ -1311,6 +1341,7 @@ The NonCash data model centers on a robust relational design with clear entity r
   - **New**: Approval workflow tracking, plan version archival, webhook event generation, transfer lifecycle management
   - **New**: Batch-based credit lifecycle with purchase, welcome grant, adjustment, consumption, and expiry phases
   - **New**: Email notification lifecycle with send attempts, retry logic, and audit trail
+  - **New**: Password reset token lifecycle with generation, email delivery, expiry validation, and cleanup
 - **Enhanced retention policy**:
   - VoucherUsage/VoucherDistribution: Retain for statutory periods (5-7 years)
   - VoucherPlanHeader/VoucherPlanDetail: Retain indefinitely for auditability with version history
@@ -1327,12 +1358,14 @@ The NonCash data model centers on a robust relational design with clear entity r
   - **New**: CreditExpiryLog: Retain permanently for expiry audit trail
   - **New**: CreditAdjustmentRequest: Retain permanently for adjustment audit trail
   - **New**: CreditPricingPolicy: Retain indefinitely for policy history and compliance
+  - **New**: Password reset tokens: Temporary storage with automatic cleanup on expiry or successful reset
 - **Enhanced archival strategy**:
   - Cold storage for historical VoucherUsage; partitioned by quarter/year
   - Metadata-only archiving for closed plans and outlets
   - **New**: Complete approval workflow archival, settlement archival, credit ledger archival, webhook delivery archival for compliance purposes
   - **New**: Batch-based credit archival with FIFO consumption history, adjustment request archival, policy version archival
   - **New**: Email notification archival with send history and failure analysis
+  - **New**: Password reset audit trail with token usage tracking and security monitoring
 
 ### Appendix B: Enhanced Security, Privacy, and Access Control
 - **Enhanced multi-tenancy**:
@@ -1340,54 +1373,69 @@ The NonCash data model centers on a robust relational design with clear entity r
   - **New**: BrandManager role for brand-specific administrative access, integration partner brand authorization
   - **New**: Brand group support for bulk policy application with proper access controls
   - **New**: Brand registration workflow with proper approval and audit trail
+  - **New**: Password reset functionality with proper user authentication and authorization
 - **Enhanced dynamic security**:
   - VoucherPlanDetail.VoucherCodeSecret rotates with secure storage; POS verification validates against current rules
   - **New**: POS transaction locking prevents unauthorized concurrent usage, settlement entry uniqueness prevents duplicate settlements
   - **New**: Credit consumption unique constraint prevents double charging, maker-checker approval workflow prevents unauthorized adjustments
   - **New**: Email notification security with proper recipient validation and template sanitization
+  - **New**: Secure password reset with cryptographically secure tokens, time-limited expiry, and automatic cleanup
 - **Enhanced authentication and authorization**:
   - JWT for back-office users; API Keys for POS systems bound to approved ranges
   - **New**: Role-based access control for approval workflows and plan management, integration partner API key management with BCrypt hashing
   - **New**: FinancialController role for adjustment approvals, brand manager role for policy management within brand scope
   - **New**: Email notification permissions based on user roles and brand membership
+  - **New**: Password reset API endpoints with anonymous access for security, token validation, and proper user authentication
 - **Enhanced privacy**:
   - Pseudonymization of Customer.PhoneNumber; minimal PII collection
   - **New**: POS transaction data anonymization for audit trails, webhook payload sanitization, member account separation from customer data
   - **New**: Evidence image URLs stored securely, adjustment request evidence handled with proper access controls
   - **New**: Email address protection in audit logs, notification content sanitization
+  - **New**: Password reset token security with secure random generation, Base64 encoding, and temporary storage
 - **Enhanced audit logging**:
   - Track all sensitive operations (usage, approvals, distribution, version changes)
   - **New**: Complete approval workflow audit trail, settlement processing logs, credit ledger entries, webhook delivery attempts, transfer lifecycle tracking
   - **New**: Credit consumption audit trail, adjustment request audit trail, policy change audit trail, expiry event audit trail
   - **New**: Comprehensive email notification audit trail with send attempts, retry logic, and failure analysis
+  - **New**: Password reset audit trail with token generation, email delivery, usage tracking, and security monitoring
 - **Enhanced data protection**:
   - Encryption at rest for sensitive fields (password hashes, API keys, webhook secrets)
   - **New**: Secure webhook signature verification, transfer expiration enforcement, credit balance calculation validation
   - **New**: Bank slip/evidence image security, adjustment request evidence protection, policy version integrity
   - **New**: Email template security, SMTP credential protection, notification content encryption
+  - **New**: Password reset token security with secure random generation, time-limited storage, and automatic cleanup
+- **Enhanced password reset security**:
+  - Cryptographically secure token generation using RandomNumberGenerator
+  - 30-minute token expiry with automatic cleanup
+  - Base64 encoding for safe transmission
+  - Token validation against active user status
+  - Automatic token cleanup on successful password reset or expiry
+  - Email notification with token and expiry information
+  - Audit trail through EmailLog for security monitoring
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
 - [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
-- [architecture.md:36-41](file://docs/architecture.md#L36-41)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
+- [UserAccount.cs:20-37](file://src/NonCash.Core/Entities/UserAccount.cs#L20-L37)
+- [architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
-- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
-- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
-- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-L24)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-L416)
+- [AuthService.cs:122-171](file://src/NonCash.Core\Services/AuthService.cs#L122-L171)
 
 ### Appendix C: Enhanced Data Migration Paths and Version Management
 - **Enhanced migration strategy**:
@@ -1397,30 +1445,36 @@ The NonCash data model centers on a robust relational design with clear entity r
   - **New**: Batch-based credit system migrations with proper dependency ordering, maker-checker workflow migrations, brand group migrations, policy resolution migrations
   - **New**: Email notification system migrations with comprehensive audit trail support
   - **New**: Brand registration workflow migrations with approval process support
+  - **New**: Password reset functionality migrations with secure token storage and indexed lookup
 - **Enhanced version management**:
   - Tag database versions alongside application releases
   - Maintain rollback scripts for critical migrations
   - **New**: Version-aware migration scripts for plan header versioning, settlement processing, credit ledger operations, webhook delivery system
   - **New**: Migration scripts for credit batch system, adjustment request workflow, policy resolution, brand group management
   - **New**: Migration scripts for email notification system, brand registration workflow, user account email support
+  - **New**: Migration script 20260814114913_AddPasswordResetToken.cs for password reset functionality
 - **Enhanced zero-downtime deployments**:
   - Shadow deployments for large schema changes; blue/green deployment for API and services
   - **New**: Support for gradual rollout of approval workflow enhancements, settlement processing, credit ledger operations, integration partner features
   - **New**: Support for gradual rollout of batch-based credit system, maker-checker approvals, policy management features
   - **New**: Support for gradual rollout of email notification system, brand registration workflow, enhanced user account features
+  - **New**: Support for gradual rollout of password reset functionality with proper testing and monitoring
 - **Enhanced data migration considerations**:
   - Backfill existing data with new required fields using default values
   - Implement data transformation scripts for legacy data compatibility
   - **New**: Migrate Customer references to MemberAccount relationships, populate settlement entries for historical transactions, calculate credit balances from existing data
   - **New**: Migrate existing credit data to batch model, establish FIFO consumption history, populate adjustment request audit trails, migrate policy configurations
   - **New**: Populate email notification history, establish brand registration workflow data, migrate user account email addresses
+  - **New**: No data migration required for password reset functionality as it adds optional nullable columns
 
 **Section sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
 - [description.txt:11-22](file://description.txt#L11-L22)
-- [CreditBatchConfiguration.cs:1-104](file://src/NonCash.Infrastructure/Data/Configurations/CreditBatchConfiguration.cs#L1-104)
-- [CreditPricingPolicyConfiguration.cs:1-40](file://src/NonCash.Infrastructure/Data/Configurations/CreditPricingPolicyConfiguration.cs#L1-40)
-- [BrandGroupConfiguration.cs:1-47](file://src/NonCash.Infrastructure/Data/Configurations/BrandGroupConfiguration.cs#L1-47)
-- [CreditAdjustmentRequestConfiguration.cs:1-46](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs#L1-46)
-- [EmailLogConfiguration.cs:1-28](file://src/NonCash.Infrastructure/Data/Configurations/EmailLogConfiguration.cs#L1-28)
-- [BrandRegistrationRequestConfiguration.cs:1-49](file://src/NonCash.Infrastructure/Data/Configurations/BrandRegistrationRequestConfiguration.cs#L1-49)
+- [CreditBatchConfiguration.cs:1-104](file://src/NonCash.Infrastructure/Data/Configurations/CreditBatchConfiguration.cs#L1-L104)
+- [CreditPricingPolicyConfiguration.cs:1-40](file://src/NonCash.Infrastructure/Data/Configurations/CreditPricingPolicyConfiguration.cs#L1-L40)
+- [BrandGroupConfiguration.cs:1-47](file://src/NonCash.Infrastructure/Data/Configurations/BrandGroupConfiguration.cs#L1-L47)
+- [CreditAdjustmentRequestConfiguration.cs:1-46](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs#L1-L46)
+- [EmailLogConfiguration.cs:1-28](file://src/NonCash.Infrastructure/Data/Configurations/EmailLogConfiguration.cs#L1-L28)
+- [BrandRegistrationRequestConfiguration.cs:1-49](file://src/NonCash.Infrastructure/Data/Configurations/BrandRegistrationRequestConfiguration.cs#L1-L49)
+- [UserAccountConfiguration.cs:48-55](file://src/NonCash.Infrastructure/Data/Configurations/UserAccountConfiguration.cs#L48-L55)
+- [20260814114913_AddPasswordResetToken.cs:12-35](file://src/NonCash.Infrastructure/Migrations/20260814114913_AddPasswordResetToken.cs#L12-L35)

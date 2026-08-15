@@ -36,8 +36,9 @@ public class IntegrationController : ControllerBase
     // ===== Epic 6.2: Segment Distribution API =====
 
     /// <summary>
-    /// Distributes vouchers to a segment of members identified by external_member_id.
+    /// Distributes vouchers to a segment of members identified by phone number.
     /// Reuses PromotionService logic with idempotency and blacklist enforcement.
+    /// Sends email notification to each recipient (future: Zalo notification by phone).
     /// </summary>
     [HttpPost("distribute")]
     public async Task<ActionResult> Distribute(
@@ -51,15 +52,36 @@ public class IntegrationController : ControllerBase
 
         try
         {
+            // Build phone→email mapping from member details (if supplied)
+            var phoneToEmail = new Dictionary<string, string>();
+            if (request.Members != null)
+            {
+                foreach (var m in request.Members)
+                {
+                    if (!string.IsNullOrWhiteSpace(m.Phone) && !string.IsNullOrWhiteSpace(m.Email))
+                        phoneToEmail[m.Phone.Trim()] = m.Email.Trim();
+                }
+            }
+            else if (request.ExternalMemberIds != null)
+            {
+                // Legacy: ExternalMemberIds dict can contain email as value for backward compat
+                // (deprecated — use Members array instead)
+            }
+
+            // NotificationChannel.Email for now; future: NotificationChannel.Zalo when Zalo OA integration is ready
+            var notifyChannel = phoneToEmail.Count > 0
+                ? NotificationChannel.Email
+                : NotificationChannel.None;
+
             var result = await _promotionService.DistributeAsync(
                 request.PlanId,
                 request.BrandId,
                 request.PhoneNumbers,
-                // Partner apps notify their own members; platform channels stay silent here.
-                NotificationChannel.None,
-                cancellationToken);
+                notifyChannel,
+                cancellationToken,
+                phoneToEmail.Count > 0 ? phoneToEmail : null);
 
-            // Publish distribution events
+            // Publish webhook events for each distributed member
             foreach (var phone in request.PhoneNumbers)
             {
                 await _eventPublisher.PublishAsync(
@@ -67,7 +89,7 @@ public class IntegrationController : ControllerBase
                     null,
                     phone,
                     request.BrandId,
-                    new { planId = request.PlanId, partnerId },
+                    new { planId = request.PlanId, partnerId, emailSent = phoneToEmail.ContainsKey(phone) },
                     cancellationToken);
             }
 
@@ -166,7 +188,18 @@ public record IntegrationDistributeRequest(
     Guid PlanId,
     Guid BrandId,
     IReadOnlyList<string> PhoneNumbers,
-    Dictionary<string, string>? ExternalMemberIds);
+    Dictionary<string, string>? ExternalMemberIds,
+    IReadOnlyList<IntegrationMember>? Members = null);
+
+/// <summary>
+/// Member details supplied by the Loyalty App for email notification and correlation.
+/// Future: Zalo notification will use Phone directly instead of Email.
+/// </summary>
+public record IntegrationMember(
+    string Phone,
+    string? Email,
+    string? ExternalMemberId,
+    string? FullName);
 
 public record IntegrationDistributeResponse(
     int DistributedCount,

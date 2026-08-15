@@ -10,19 +10,22 @@ public class TransferService : ITransferService
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
     private readonly INotificationService _notificationService;
+    private readonly IVoucherEventPublisher _eventPublisher;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IVoucherEventPublisher eventPublisher)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<TransferResult> TransferAsync(
@@ -157,6 +160,22 @@ public class TransferService : ITransferService
             catch (Exception)
             {
                 // Notification failures must not break the transfer flow.
+            }
+
+            // Epic 6.4: Publish webhook event for each transferred voucher.
+            try
+            {
+                await _eventPublisher.PublishAsync(
+                    "voucher.transferred",
+                    detail.Id,
+                    phone,
+                    detail.Parent?.BrandId,
+                    new { fromMemberId, toMemberId = recipientMemberId, direction = "outgoing" },
+                    cancellationToken);
+            }
+            catch
+            {
+                // Best-effort: event publishing errors must not fail the transfer.
             }
         }
 

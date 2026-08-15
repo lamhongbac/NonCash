@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using NonCash.Core.Entities;
 
 namespace NonCash.Core.Interfaces;
@@ -7,6 +8,7 @@ public interface IVoucherTransferRepository
     Task<VoucherTransfer?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<VoucherTransfer> AddAsync(VoucherTransfer transfer, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<VoucherTransfer>> FindAsync(Expression<Func<VoucherTransfer, bool>> predicate, CancellationToken cancellationToken = default);
 
     Task<VoucherTransfer?> FindPendingByVoucherAsync(Guid voucherId, CancellationToken cancellationToken = default);
 

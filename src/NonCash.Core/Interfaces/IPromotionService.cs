@@ -9,7 +9,8 @@ public interface IPromotionService
         Guid brandId,
         IReadOnlyList<string> phoneNumbers,
         NotificationChannel notifyChannels = NotificationChannel.Email,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? phoneToEmail = null);
 
     // Epic 6.3: Wallet & Event History for Integration API
     Task<IReadOnlyList<MemberWalletVoucher>> GetMemberVouchersByPhoneAsync(

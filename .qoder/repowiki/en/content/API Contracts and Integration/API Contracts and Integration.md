@@ -25,10 +25,6 @@
 - [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
 - [CreditAdjustmentsController.cs](file://src/NonCash.API/Controllers/CreditAdjustmentsController.cs)
 - [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
-- [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
-- [ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
-- [ICreditAdjustmentService.cs](file://src/NonCash.Core/Interfaces/ICreditAdjustmentService.cs)
-- [ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
@@ -39,6 +35,12 @@
 - [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
+- [AuthDtos.cs](file://src/NonCash.API/DTOs/AuthDtos.cs)
+- [INotificationService.cs](file://src/NonCash.Core/Interfaces/INotificationService.cs)
+- [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
+- [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
+- [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
+- [notification-matrix.md](file://docs/notification-matrix.md)
 </cite>
 
 ## Update Summary
@@ -47,7 +49,9 @@
 - Integrated Email Logging system for audit trail of all outbound email notifications with success/failure tracking
 - Enhanced Business Management API with improved entity operations and validation
 - Updated authentication and authorization patterns for customer management endpoints
-- Added new notification types and email template support for various business events
+- **Updated**: Password Reset Authentication Endpoints: Enhanced POST /api/v1/auth/forgot-password and POST /api/v1/auth/reset-password with complete token-based workflow, secure token generation, and 30-minute expiry
+- **Enhanced**: Email Notification System: Added PasswordReset, StaffAccountCreated, and VoucherTransferInitiated notification types with complete template support and audit trail integration
+- **Updated**: Authentication API section with enhanced password reset functionality and security considerations including token validation and user enumeration prevention
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -79,6 +83,7 @@ This document provides comprehensive API contracts and integration guidance for 
 - **New**: Business Management API: Administrative operations for business entities
 - **New**: Customer Management API: Comprehensive customer record management with blacklist functionality and bulk import
 - **New**: Email Notification System: Complete audit trail for all outbound email communications with retry logic and error tracking
+- **Enhanced**: Password Reset Authentication: Secure password reset workflow with token-based verification, email notifications, and enhanced security measures
 
 It covers HTTP methods, URL patterns, request/response schemas, authentication, security, common use cases, client implementation guidelines, error handling strategies, rate limiting considerations, versioning, transaction security model, rollback mechanisms, performance optimization tips, and debugging approaches.
 
@@ -129,12 +134,15 @@ end
 subgraph "Email & Notifications"
 AA["EmailNotificationService"]
 BB["EmailLog Entity"]
+CC["PasswordReset Template"]
+DD["StaffAccountCreated Template"]
+EE["VoucherTransferInitiated Template"]
 end
 subgraph "Planning Artifacts"
-CC["_bmad-output/planning-artifacts/epics.md"]
+FF["_bmad-output/planning-artifacts/epics.md"]
 end
 subgraph "Business Rules"
-DD["Key Functionalities.txt"]
+GG["Key Functionalities.txt"]
 end
 A --> B
 A --> C
@@ -142,8 +150,8 @@ A --> D
 A --> E
 C --> B
 D --> B
-CC --> B
-DD --> B
+FF --> B
+GG --> B
 F --> B
 G --> B
 H --> B
@@ -167,6 +175,9 @@ Y --> B
 Z --> B
 AA --> B
 BB --> B
+CC --> B
+DD --> B
+EE --> B
 ```
 
 **Diagram sources**
@@ -190,6 +201,9 @@ BB --> B
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
+- [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
+- [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
+- [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
 
 **Section sources**
 - [index.md](file://docs/index.md)
@@ -212,11 +226,13 @@ BB --> B
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
 - **New**: Business Management API: Administrative operations for business entities
 - **New**: Customer Management API: Comprehensive customer record management with search, CRUD operations, blacklist functionality, and CSV import capabilities
-- **New**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, and template rendering
+- **Enhanced**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, template rendering, and additional notification types (PasswordReset, StaffAccountCreated, VoucherTransferInitiated)
+- **Enhanced**: Password Reset Authentication: Secure password reset workflow with token generation, email delivery, verification, and enhanced security measures
 
 Authentication:
 - API Key: Provided via the X-API-Key header for POS clients and integration partners
 - JWT: Provided via Authorization: Bearer <JWT> for all business API clients
+- **Enhanced**: Password Reset: Token-based authentication for password reset flows with secure token management
 
 Versioning:
 - Base URL includes v1: https://api.noncash.service/v1
@@ -244,7 +260,8 @@ Security highlights:
 - **Enhanced**: Financial controls with maker-checker workflow for credit adjustments
 - **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
 - **New**: Customer data protection with role-based access controls
-- **New**: Email notification audit trail with comprehensive logging and retry mechanisms
+- **Enhanced**: Email notification audit trail with comprehensive logging and retry mechanisms
+- **Enhanced**: Password reset security with time-limited tokens (30 minutes), secure token storage, and user enumeration prevention
 
 ```mermaid
 graph TB
@@ -261,6 +278,7 @@ MC["Maker-Checker Workflow"]
 PA["Policy-Based Authorization"]
 CL["Customer Data Protection"]
 EL["Email Audit Trail"]
+PR["Password Reset Security"]
 end
 BLL --> MT
 BLL --> DS
@@ -272,6 +290,7 @@ BLL --> MC
 BLL --> PA
 BLL --> CL
 BLL --> EL
+BLL --> PR
 ```
 
 **Diagram sources**
@@ -393,12 +412,41 @@ API-->>App : "200 OK"
 #### Authentication API
 Endpoints:
 - Login: POST /api/v1/auth/login
-- Request body: { username, password }
-- Response: { token, expiresAt, user: { userId, fullName, role, brandId } }
+- Member Login: POST /api/v1/auth/member/login
+- **Enhanced**: Forgot Password: POST /api/v1/auth/forgot-password
+- **Enhanced**: Reset Password: POST /api/v1/auth/reset-password
+
+Request/Response Examples:
+- Login: { username, password } → { token, expiresAt, user: { userId, fullName, role, brandId } }
+- **Enhanced**: Forgot Password: { usernameOrEmail } → { message } - Always returns success to prevent user enumeration
+- **Enhanced**: Reset Password: { token, newPassword } → { message } - Validates token and updates password
 
 Authentication:
-- No authentication required for login endpoint
+- No authentication required for login and password reset endpoints
 - Subsequent endpoints require Authorization: Bearer <JWT>
+
+**Enhanced** Password Reset Workflow:
+1. User calls POST /api/v1/auth/forgot-password with username or email
+2. System generates secure 32-byte random token and stores it with 30-minute expiry
+3. Password reset email sent with token via EmailNotificationService using PasswordReset template
+4. User calls POST /api/v1/auth/reset-password with token and new password (minimum 8 characters)
+5. System validates token existence, expiry, and user status before updating password
+6. Success response returned regardless of whether account exists (prevents enumeration)
+
+Security Considerations:
+- Token-based authentication prevents brute force attacks
+- Time-limited tokens (30 minutes) reduce security risks
+- Always returns success message to prevent user enumeration
+- Password validation enforces minimum length requirements (8 characters)
+- Token validation checks user status and token expiry
+- Secure token generation using cryptographic random number generator
+
+**Updated** Enhanced with comprehensive password reset functionality, secure token management, and enhanced security measures
+
+**Section sources**
+- [AuthController.cs:19-86](file://src/NonCash.API/Controllers/AuthController.cs#L19-L86)
+- [AuthDtos.cs:48-50](file://src/NonCash.API/DTOs/AuthDtos.cs#L48-L50)
+- [UsersController.cs](file://src/NonCash.API/Controllers/UsersController.cs)
 
 #### Users Management API
 Endpoints:
@@ -411,7 +459,6 @@ Access Control:
 - Brand managers can access outlet management endpoints
 
 **Section sources**
-- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
 - [UsersController.cs](file://src/NonCash.API/Controllers/UsersController.cs)
 
 ### Voucher Planning API
@@ -919,7 +966,7 @@ Import Functionality:
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [CustomerDtos.cs](file://src/NonCash.API/DTOs/CustomerDtos.cs)
 
-### **New**: Email Notification System
+### **Enhanced**: Email Notification System
 
 #### Email Log Entity
 The EmailLog entity provides comprehensive audit trail for all outbound email communications:
@@ -928,7 +975,7 @@ Fields:
 - ToAddress: Recipient email address
 - Subject: Email subject line
 - TemplateName: Template used for email rendering
-- NotificationType: Category of notification (e.g., "NewRegistration", "VoucherDistribution", "AdjustmentPending")
+- NotificationType: Category of notification (e.g., "NewRegistration", "VoucherDistribution", "AdjustmentPending", "PasswordReset")
 - RelatedEntityId: Optional reference to related business entity
 - Success: Boolean indicating delivery success
 - ErrorMessage: Error details for failed deliveries
@@ -938,7 +985,7 @@ Fields:
 #### Email Notification Service
 The EmailNotificationService handles all email communications with robust error handling and retry logic:
 
-Supported Notification Types:
+**Enhanced** Supported Notification Types:
 - AdminNewRegistration: Business registration notifications to administrators
 - ApplicantReviewResult: Registration approval/rejection notifications
 - ApplicantRegistrationSubmitted: Confirmation emails for new registrations
@@ -951,21 +998,30 @@ Supported Notification Types:
 - LowCreditBalance: Low balance warning notifications
 - CreditsForfeited: Expired credit notifications
 - PlanReviewed: Voucher plan approval/rejection notifications
+- **Enhanced**: StaffAccountCreated: Staff account creation notifications with role and brand information
+- **Enhanced**: VoucherTransferInitiated: Voucher transfer notifications with sender and recipient details
+- **Enhanced**: PasswordReset: Password reset request notifications with secure token delivery
 
-Features:
+**Enhanced** Features:
 - SMTP configuration with SSL/TLS support
 - Automatic retry logic with exponential backoff (max 3 retries)
-- HTML email template rendering
+- HTML email template rendering with professional templates
 - Comprehensive error logging and audit trail
 - Configurable sender information and display names
 - Transient error detection and handling
+- **Enhanced**: Additional notification types for staff management and voucher transfers
+- **Enhanced**: Enhanced template rendering with personalized content
 
-**New** Complete email notification system with comprehensive audit trail, retry logic, and template rendering capabilities
+**Updated** Complete email notification system with comprehensive audit trail, retry logic, template rendering, and enhanced notification capabilities
 
 **Section sources**
 - [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
-- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [EmailNotificationService.cs:44-384](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L44-L384)
 - [AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
+- [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
+- [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
+- [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
+- [notification-matrix.md](file://docs/notification-matrix.md)
 
 ### Data Model Context for POS Redemption
 
@@ -992,7 +1048,7 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 ## Dependency Analysis
 - POS Integration API depends on the Usage Service for verification, locking, committing, and rolling back voucher usage
 - Member App API depends on Distribution/Transfer Service for listing and transferring vouchers
-- Brand Management API depends on Auth Service for user authentication and authorization
+- Brand Management API depends on Auth Service for user authentication, authorization, and enhanced password reset functionality
 - Voucher Planning API depends on VoucherPlanService for plan management and approval workflows
 - Distribution API depends on VoucherGenerationService and PromotionService for batch operations
 - Reporting API depends on DistributionReportService for analytics and insights
@@ -1003,7 +1059,8 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 - **New**: Image Upload API depends on ImageStorageService for CDN integration
 - **New**: Business API depends on BusinessRepository and BrandRepository
 - **New**: Customer API depends on CustomerService and ICustomerImportService for bulk operations
-- **New**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository
+- **Enhanced**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository with enhanced notification types
+- **Enhanced**: Password Reset functionality depends on AuthService, INotificationService, and EmailNotificationService for secure token management and email delivery
 - All services rely on the Data Access Layer for persistence and transactional integrity
 - Security controls (multi-tenancy, dynamic codes, API keys, JWT) are enforced at the Business Logic Layer
 
@@ -1029,7 +1086,7 @@ PAYMENTS["Payment API"] --> PSVC2["PaymentService"]
 UPLOAD["Image Upload API"] --> ISVC["ImageStorageService"]
 BUSINESS["Business API"] --> BR["BusinessRepository"]
 CUSTOMERS["Customer API"] --> CSVC2["CustomerService"]
-EMAIL["Email System"] --> ENSVC["EmailNotificationService"]
+EMAIL["Enhanced Email System"] --> ENSVC["EmailNotificationService"]
 IPARTNERS["Integration Partners API"] --> IPSVC["IntegrationPartnerService"]
 USVC --> DAL["Data Access Layer"]
 TSVC --> DAL
@@ -1077,8 +1134,9 @@ DAL --> DB["PostgreSQL"]
 - **New**: Webhook handling: Implement idempotent webhook processing for payment confirmations
 - **New**: Settlement computation: Optimize netting calculations with database indexes for date ranges and brand pairs
 - **New**: Customer search: Utilize database indexes for phone number, name, and email searches
-- **New**: Email delivery: Implement asynchronous email sending with retry logic to avoid blocking operations
+- **Enhanced**: Email delivery: Implement asynchronous email sending with retry logic to avoid blocking operations and enhanced notification types
 - **New**: Bulk imports: Process CSV imports in batches with transactional integrity and progress reporting
+- **Enhanced**: Password reset: Implement efficient token generation and validation with database indexing for security tokens and enhanced security measures
 
 ## Troubleshooting Guide
 Common issues and strategies:
@@ -1127,10 +1185,17 @@ Common issues and strategies:
   - Verify phone number normalization for consistent searching
   - Check blacklist status impacts on voucher distribution
   - Validate CSV import format and data quality
-- **New**: Email notification issues:
+- **Enhanced**: Email notification issues:
   - Check SMTP configuration and connectivity
   - Review email logs for delivery failures and retry attempts
   - Validate email template rendering and recipient addresses
+  - **Enhanced**: Check additional notification types (StaffAccountCreated, VoucherTransferInitiated, PasswordReset) for proper template rendering
+- **Enhanced**: Password reset issues:
+  - Verify token generation and storage in user accounts with secure random generation
+  - Check email delivery for password reset notifications with PasswordReset template
+  - Validate token expiry handling (30-minute timeout) and user enumeration prevention
+  - Ensure password validation meets security requirements (minimum 8 characters)
+  - **Enhanced**: Check token validation for user status and expiry before password updates
 - Debugging:
   - Capture request IDs and timestamps; correlate with backend logs
   - Validate outletID against the sales range defined in the associated VoucherPlanHeader
@@ -1138,13 +1203,14 @@ Common issues and strategies:
   - Check JWT claims for brand and role information
   - Review email log entries for notification delivery status
   - Monitor customer search query performance with appropriate indexing
+  - **Enhanced**: Check password reset token validity, expiry times, and security token generation
 
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 
 ## Conclusion
-NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, and a complete email notification system with audit trails. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
+NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, an enhanced email notification system with comprehensive audit trails and additional notification types, and secure password reset functionality with enhanced security measures. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
 
 ## Appendices
 
@@ -1174,6 +1240,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 
 **Brand Management API**:
 - POST /api/v1/auth/login: { username, password } → { token, expiresAt, user }
+- POST /api/v1/auth/member/login: { username, password } → { token, expiresAt, user }
+- **Enhanced**: POST /api/v1/auth/forgot-password: { usernameOrEmail } → { message } - Always returns success to prevent enumeration
+- **Enhanced**: POST /api/v1/auth/reset-password: { token, newPassword } → { message } - Validates token and updates password
 - GET /api/v1/users: Header: Authorization: Bearer <JWT> → List of users
 - POST /api/v1/users: Header: Authorization: Bearer <JWT> → Created user
 
@@ -1290,6 +1359,8 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [CustomerDtos.cs](file://src/NonCash.API/DTOs/CustomerDtos.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [AuthDtos.cs](file://src/NonCash.API/DTOs/AuthDtos.cs)
 
 ### Security Considerations
 - Multi-tenancy: BrandID isolates data between tenants across all business APIs
@@ -1305,8 +1376,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Webhook Security: Signature validation for payment provider callbacks
 - **New**: File Upload Security: Format validation and size limits for image uploads
 - **New**: Customer Data Protection: Role-based access controls for customer management operations
-- **New**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking
+- **Enhanced**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking and enhanced notification types
 - **New**: Blacklist Enforcement: Automatic exclusion of blacklisted customers from distributions and purchases
+- **Enhanced**: Password Reset Security: Time-limited tokens (30 minutes), secure cryptographic token generation, user enumeration prevention, and comprehensive token validation
 
 **Section sources**
 - [architecture.md](file://docs/architecture.md)
@@ -1319,6 +1391,7 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
 
 ### Versioning
 - All endpoints are under v1 of the base path
@@ -1342,8 +1415,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Payment processing integrates with ZaloPay for B2C purchases
 - **New**: Image uploads support rich voucher display with CDN integration
 - **New**: Customer blacklist status prevents participation in promotions and purchases
-- **New**: Email notifications provide audit trail for all outbound communications with retry logic
+- **Enhanced**: Email notifications provide audit trail for all outbound communications with retry logic and enhanced notification types
 - **New**: Customer import supports upsert logic for duplicate phone numbers with error reporting
+- **Enhanced**: Password reset workflow includes secure cryptographic token generation, email delivery, time-limited validation, and user enumeration prevention
 
 **Section sources**
 - [Key Functionalities.txt](file://Key%20Functionalities.txt)
@@ -1357,3 +1431,4 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)

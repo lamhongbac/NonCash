@@ -58,6 +58,12 @@ public class ConsoleNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
+    public Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Business/brand '{notification.BrandName}' created under '{notification.BusinessName}' (tax code {notification.TaxCode}). Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
     public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[NOTIFICATION] '{notification.BrandName}' purchased {notification.Amount:N0} credit(s) for {notification.TotalPaidVnd:N0} VND. Email: {notification.BrandEmail ?? "n/a"}.");

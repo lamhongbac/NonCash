@@ -4,6 +4,7 @@
 **Referenced Files in This Document**
 - [Program.cs](file://src/NonCash.API/Program.cs)
 - [appsettings.json](file://src/NonCash.API/appsettings.json)
+- [appsettings.Development.json](file://src/NonCash.API/appsettings.Development.json)
 - [ApiKeyMiddleware.cs](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs)
 - [BrandScopeMiddleware.cs](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs)
 - [JwtTokenService.cs](file://src/NonCash.API/Services/JwtTokenService.cs)
@@ -17,6 +18,8 @@
 - [ICurrentUserService.cs](file://src/NonCash.Core/Interfaces/ICurrentUserService.cs)
 - [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
 - [Outlet.cs](file://src/NonCash.Core/Entities/Outlet.cs)
+- [database-setup-guide.md](file://docs/database-setup-guide.md)
+- [session-log-2026-08-15.md](file://_bmad-output/session-log-2026-08-15.md)
 - [BMAD_STRUCTURE.md](file://BMAD_STRUCTURE.md)
 - [description.txt](file://description.txt)
 - [docs/index.md](file://docs/index.md)
@@ -38,6 +41,7 @@
 - Implemented comprehensive role-based access control with multi-tenant enforcement
 - Strengthened multi-tenant architecture with brand scoping middleware
 - Integrated new authentication and authorization infrastructure throughout the platform
+- **Updated**: Enhanced database security measures implemented following ransomware attack, including rotated credentials and hardened pg_hba.conf configuration with IP restrictions
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -52,14 +56,14 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document presents the enhanced security architecture for the NonCash SaaS platform. The architecture has been significantly strengthened with new JWT token support, dedicated API key middleware for POS systems, comprehensive role-based access control, and robust multi-tenant enforcement via BrandID. The platform now implements a layered security approach covering authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project's documentation and implementation artifacts.
+This document presents the enhanced security architecture for the NonCash SaaS platform. The architecture has been significantly strengthened with new JWT token support, dedicated API key middleware for POS systems, comprehensive role-based access control, and robust multi-tenant enforcement via BrandID. Following a ransomware attack incident, the platform has implemented critical database security enhancements including rotated credentials, hardened PostgreSQL configuration with IP restrictions, and improved connection string management. The platform now implements a layered security approach covering authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project's documentation and implementation artifacts.
 
 ## Project Structure
 The NonCash project organizes its enhanced security-relevant logic across four primary layers with supporting documentation:
 - Documentation layer: architecture, data models, API contracts, and implementation artifacts define security policies and flows.
 - Backend services: microservices implementing identity, planning, approval, distribution, and usage orchestration with enhanced authentication.
 - Infrastructure layer: middleware components providing authentication and authorization enforcement.
-- Data access: PostgreSQL-backed repositories enforcing tenant scoping and transactional integrity.
+- Data access: PostgreSQL-backed repositories enforcing tenant scoping and transactional integrity with hardened security configurations.
 
 ```mermaid
 graph TB
@@ -71,12 +75,15 @@ API["docs/api-contracts.md"]
 DESC["description.txt"]
 BMAD["BMAD_STRUCTURE.md"]
 KF["Key Functionalities.txt"]
+DBGUID["docs/database-setup-guide.md"]
+INCIDENT["_bmad-output/session-log-2026-08-15.md"]
 end
 subgraph "Infrastructure Layer"
 JWTMW["JWT Authentication Middleware"]
 BRANDMW["BrandScopeMiddleware"]
 APIKEYMW["ApiKeyMiddleware"]
 AUTHPIPE["Authentication Pipeline"]
+DBSEC["Database Security Hardening"]
 end
 subgraph "Business Services Layer"
 AUTHSVC["AuthService & JwtTokenService"]
@@ -99,6 +106,8 @@ DM --> API
 BMAD --> ARCH
 DESC --> ARCH
 KF --> ARCH
+DBGUID --> DBSEC
+INCIDENT --> DBSEC
 RBAC --> ARCH
 VERIFY --> API
 LOCK --> API
@@ -107,6 +116,7 @@ ROLLBACK --> API
 JWTMW --> AUTHPIPE
 BRANDMW --> AUTHPIPE
 APIKEYMW --> AUTHPIPE
+DBSEC --> AUTHPIPE
 AUTHPIPE --> AUTHSVC
 AUTHPIPE --> POSSVC
 AUTHPIPE --> USERSVC
@@ -121,6 +131,8 @@ AUTHPIPE --> USERSVC
 - [description.txt:1-31](file://description.txt#L1-L31)
 - [BMAD_STRUCTURE.md:1-82](file://BMAD_STRUCTURE.md#L1-L82)
 - [Key Functionalities.txt:1-167](file://Key Functionalities.txt#L1-L167)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [1-4-staff-accounts-rbac.md:1-125](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L1-L125)
 - [4-1-check-for-information.md:1-116](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L1-L116)
 - [4-2-prepare-and-lock.md:1-115](file://_bmad-output/implementation-artifacts/4-2-prepare-and-lock.md#L1-L115)
@@ -140,12 +152,15 @@ AUTHPIPE --> USERSVC
 - **Dynamic Voucher Code Generation**: Rotating codes (similar to JWT logic) prevent static reuse and unauthorized scanning; validation ensures expiry, time windows, and outlet scope.
 - **Transactional Integrity**: POS flow enforces BEGIN (lock), COMMIT (permanent state change), and ROLLBACK (compensating transaction) with atomic updates, idempotency, and audit trail records.
 - **Comprehensive Authentication Pipeline**: Layered approach combining JWT bearer authentication, custom brand scoping middleware, and API key validation for different client types.
+- **Enhanced Database Security**: Post-ransomware attack hardening including rotated credentials, restricted pg_hba.conf access, and secure connection string management.
 
 **Section sources**
 - [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
 - [ApiKeyMiddleware.cs:1-69](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L1-L69)
 - [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
 - [JwtTokenService.cs:1-59](file://src/NonCash.API/Services/JwtTokenService.cs#L1-L59)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [docs/api-contracts.md:5-109](file://docs/api-contracts.md#L5-L109)
 - [Key Functionalities.txt:56-68](file://Key Functionalities.txt#L56-L68)
@@ -163,6 +178,7 @@ The enhanced security architecture integrates:
   - API Keys for POS systems with dedicated middleware and outlet-specific authentication.
 - **Enhanced Transaction Security**: POS flow with improved lock/commit/rollback operations, comprehensive validation, and robust audit trails.
 - **Comprehensive RBAC**: Role-based access control with multi-tenant enforcement and strict authorization boundaries.
+- **Hardened Database Security**: PostgreSQL server secured against ransomware attacks with IP restrictions, rotated credentials, and secure connection management.
 
 ```mermaid
 graph TB
@@ -174,9 +190,17 @@ BrandMW --> IdentitySvc["Identity & Tenant Service"]
 IdentitySvc --> RBAC["RBAC Enforcement<br/>BrandID Scope"]
 POS --> ApiKeyMW["ApiKeyMiddleware<br/>X-API-Key Validation"]
 ApiKeyMW --> PosSvc["POS Usage Service"]
-PosSvc --> DB[("PostgreSQL")]
+PosSvc --> DB[("PostgreSQL<br/>Hardened Security")]
 RBAC --> DB
 ApiKeyMW --> DB
+subgraph "Enhanced Database Security"
+PGCONF["pg_hba.conf<br/>IP Restrictions"]
+CREDROT["Credential Rotation<br/>Secure Management"]
+SSLCONN["SSL/TLS Connections<br/>Encrypted Traffic"]
+end
+DB --> PGCONF
+DB --> CREDROT
+DB --> SSLCONN
 subgraph "Enhanced POS Transaction Flow"
 Verify["Verify (Read-only)<br/>Stateless Validation"]
 Lock["Lock (BEGIN)<br/>Atomic Conditional Update"]
@@ -198,6 +222,8 @@ Rollback --> DB
 - [ApiKeyMiddleware.cs:1-69](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L1-L69)
 - [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
 - [PosController.cs:1-193](file://src/NonCash.API/Controllers/PosController.cs#L1-L193)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:17-35](file://docs/architecture.md#L17-L35)
 - [docs/api-contracts.md:14-88](file://docs/api-contracts.md#L14-L88)
 - [1-4-staff-accounts-rbac.md:28-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L28-L44)
@@ -275,13 +301,13 @@ Issue --> End(["Return Token with User Details"])
 **Diagram sources**
 - [AuthController.cs:21-41](file://src/NonCash.API/Controllers/AuthController.cs#L21-L41)
 - [JwtTokenService.cs:28-47](file://src/NonCash.API/Services/JwtTokenService.cs#L28-L47)
-- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
+- [appsettings.json:27-31](file://src/NonCash.API/appsettings.json#L27-L31)
 
 **Section sources**
 - [AuthController.cs:21-41](file://src/NonCash.API/Controllers/AuthController.cs#L21-L41)
 - [JwtTokenService.cs:20-59](file://src/NonCash.API/Services/JwtTokenService.cs#L20-L59)
 - [docs/api-contracts.md:7](file://docs/api-contracts.md#L7)
-- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
+- [appsettings.json:27-31](file://src/NonCash.API/appsettings.json#L27-L31)
 
 ### API Key Authentication (POS Integration)
 - **Dedicated API Key Middleware**: Validates X-API-Key header for POS endpoints with route prefix /api/v1/pos.
@@ -414,16 +440,67 @@ PosCtrl-->>POS : "{ status, message }"
 - [PosService.cs:135-154](file://src/NonCash.Core/Services/PosService.cs#L135-L154)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
+### Enhanced Database Security Measures
+**Updated** Following a ransomware attack incident, the platform has implemented critical database security enhancements to prevent future attacks and protect sensitive business data.
+
+- **Incident Response**: Emergency response to ransomware attack on shared DEV PostgreSQL server where attacker gained access via open `pg_hba.conf` configuration (`0.0.0.0/0`) and dropped all databases, leaving ransom note.
+- **Credential Rotation**: All database credentials have been rotated including:
+  - `postgres` superuser password changed via pgAdmin
+  - `noncash_app` application user password updated to strong random value
+  - Connection strings updated across all environments with new credentials
+- **Network Access Restriction**: PostgreSQL `pg_hba.conf` hardened with IP restrictions:
+  - Restricted to localhost only: `127.0.0.1/32`, `::1/128`
+  - Server self-access allowed: `45.119.87.247/32`
+  - Removed dangerous `0.0.0.0/0` wildcard access
+- **Secure Connection Management**: 
+  - SSL/TLS enabled for all connections with `SSL Mode=Require`
+  - Environment-specific connection strings with proper credential isolation
+  - Secure fallback mechanism via environment variables
+- **Security Best Practices**:
+  - Firewall rules restricting port 5432 to authorized clients only
+  - VPN strategy planned for team scaling instead of individual IP whitelisting
+  - Regular backup procedures and disaster recovery testing
+
+```mermaid
+sequenceDiagram
+participant Attacker as "Attacker"
+participant PG as "PostgreSQL Server"
+participant App as "Application"
+Note over Attacker : Attempted Access
+Attacker->>PG : Port Scan (5432)
+PG-->>Attacker : Connection Rejected (IP Restricted)
+Note over App : Legitimate Access
+App->>PG : SSL Connection with Valid Credentials
+PG-->>App : Connection Established
+Note over PG : Hardened Configuration
+Note over App : Secure Operations
+```
+
+**Diagram sources**
+- [session-log-2026-08-15.md:15-28](file://_bmad-output/session-log-2026-08-15.md#L15-L28)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [appsettings.json:21-26](file://src/NonCash.API/appsettings.json#L21-L26)
+- [appsettings.Development.json:23-25](file://src/NonCash.API/appsettings.Development.json#L23-L25)
+
+**Section sources**
+- [session-log-2026-08-15.md:5-28](file://_bmad-output/session-log-2026-08-15.md#L5-L28)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [appsettings.json:21-26](file://src/NonCash.API/appsettings.json#L21-L26)
+- [appsettings.Development.json:23-25](file://src/NonCash.API/appsettings.Development.json#L23-L25)
+- [Program.cs:36-38](file://src/NonCash.API/Program.cs#L36-L38)
+
 ### Data Encryption and Secure API Communication
 - **Data-at-Rest**: PostgreSQL is the target database; encryption at rest should be enabled at the storage layer.
 - **Data-in-Motion**: TLS termination at the ingress/load balancer; all internal and external APIs use HTTPS.
 - **Secrets Management**: JWT signing key and API keys are stored in configuration files; never in source code.
 - **Enhanced Hashing**: Passwords are hashed with salt using secure hashing algorithms; API keys are stored as hashes with prefix validation.
+- **Database Security**: PostgreSQL connections enforced with SSL/TLS and IP restrictions to prevent unauthorized access.
 
 **Section sources**
 - [description.txt:13](file://description.txt#L13)
-- [appsettings.json:12-16](file://src/NonCash.API/appsettings.json#L12-L16)
+- [appsettings.json:27-31](file://src/NonCash.API/appsettings.json#L27-L31)
 - [Outlet.cs:15](file://src/NonCash.Core/Entities/Outlet.cs#L15)
+- [database-setup-guide.md:82-90](file://docs/database-setup-guide.md#L82-L90)
 
 ### Enhanced Role-Based Access Control (RBAC)
 - **Comprehensive Role Structure**:
@@ -451,6 +528,7 @@ The enhanced security architecture depends on:
 - **User Context Management**: CurrentUserService providing centralized access to current user claims and brand context.
 - **Data Models**: Entities enforcing referential integrity, outlet API key validation, and user role assignments.
 - **Service Layer**: Enhanced PosService with comprehensive validation, error handling, and transaction management.
+- **Database Security**: Hardened PostgreSQL configuration with IP restrictions, SSL/TLS encryption, and secure credential management.
 
 ```mermaid
 graph TB
@@ -460,9 +538,13 @@ JWTAuth --> JwtSvc["JwtTokenService"]
 BrandMW --> CurrentUser["CurrentUserService"]
 AuthPipe --> RBAC["RBAC Enforcement"]
 ApiKeyMW["ApiKeyMiddleware"] --> PosSvc["PosService"]
-PosSvc --> DB[("PostgreSQL")]
+PosSvc --> DB[("PostgreSQL<br/>Hardened Security")]
 RBAC --> DB
 AllEndpoints["Protected Endpoints"] --> DB
+DBSec["Database Security Layer"] --> DB
+DBSec --> PGConf["pg_hba.conf<br/>IP Restrictions"]
+DBSec --> SSLConn["SSL/TLS<br/>Encryption"]
+DBSec --> CredMgr["Credential<br/>Management"]
 ```
 
 **Diagram sources**
@@ -471,6 +553,8 @@ AllEndpoints["Protected Endpoints"] --> DB
 - [CurrentUserService.cs:6-13](file://src/NonCash.API/Services/CurrentUserService.cs#L6-L13)
 - [ApiKeyMiddleware.cs:11-20](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L11-L20)
 - [PosService.cs:6-31](file://src/NonCash.Core/Services/PosService.cs#L6-L31)
+- [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:25](file://docs/architecture.md#L25)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
@@ -486,6 +570,7 @@ AllEndpoints["Protected Endpoints"] --> DB
 - **API Key Rotation**: Automate periodic rotation and maintain historical keys for short transition windows with enhanced security.
 - **JWT Token Management**: Implement token expiration and refresh strategies to balance security and performance.
 - **Database Optimization**: Indexes on BrandId, OutletId, and VoucherCode fields for optimal query performance.
+- **Connection Pooling**: Optimize database connection pooling to handle concurrent requests efficiently while maintaining security restrictions.
 
 ## Troubleshooting Guide
 Common issues and resolutions with enhanced error handling:
@@ -513,6 +598,12 @@ Common issues and resolutions with enhanced error handling:
 - **API Key Authentication Issues**:
   - Cause: missing headers, invalid keys, or inactive outlets.
   - Resolution: enhanced error responses with specific failure reasons.
+- **Database Connection Issues**:
+  - Cause: IP restrictions blocking legitimate connections or credential mismatches.
+  - Resolution: verify pg_hba.conf configuration, check firewall rules, validate connection strings.
+- **SSL/TLS Connection Errors**:
+  - Cause: certificate validation failures or SSL mode mismatches.
+  - Resolution: ensure SSL certificates are properly configured and connection strings specify correct SSL mode.
 
 **Section sources**
 - [PosController.cs:27-51](file://src/NonCash.API/Controllers/PosController.cs#L27-L51)
@@ -521,9 +612,10 @@ Common issues and resolutions with enhanced error handling:
 - [PosController.cs:145-166](file://src/NonCash.API/Controllers/PosController.cs#L145-L166)
 - [ApiKeyMiddleware.cs:33-53](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L33-L53)
 - [BrandScopeMiddleware.cs:21-28](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L21-L28)
+- [database-setup-guide.md:218-241](file://docs/database-setup-guide.md#L218-L241)
 
 ## Conclusion
-The enhanced NonCash security architecture establishes robust multi-tenancy via comprehensive BrandID enforcement, sophisticated authentication using JWT for web/member apps with enhanced claim structure and API keys for POS systems with dedicated middleware. The architecture incorporates comprehensive role-based access control with strict tenant isolation, dynamic code validation with enhanced security measures, and a secure, transactional voucher redemption flow with improved error handling and audit trails. The layered approach combining JWT bearer authentication, custom brand scoping middleware, and API key validation ensures transaction integrity, traceability, and protection against unauthorized access across all client types.
+The enhanced NonCash security architecture establishes robust multi-tenancy via comprehensive BrandID enforcement, sophisticated authentication using JWT for web/member apps with enhanced claim structure and API keys for POS systems with dedicated middleware. Following a ransomware attack incident, the platform has implemented critical database security enhancements including rotated credentials, hardened PostgreSQL configuration with IP restrictions, and secure connection management. The architecture incorporates comprehensive role-based access control with strict tenant isolation, dynamic code validation with enhanced security measures, and a secure, transactional voucher redemption flow with improved error handling and audit trails. The layered approach combining JWT bearer authentication, custom brand scoping middleware, API key validation, and hardened database security ensures transaction integrity, traceability, and protection against unauthorized access across all client types.
 
 ## Appendices
 - **Enhanced Cross-Cutting Security Guidelines**:
@@ -535,3 +627,5 @@ The enhanced NonCash security architecture establishes robust multi-tenancy via 
   - Regular security audits of authentication and authorization mechanisms.
   - Implement rate limiting and abuse detection for authentication endpoints.
   - Maintain comprehensive audit logs for all security-relevant operations.
+  - **Database Security**: Restrict PostgreSQL access via pg_hba.conf IP whitelisting, enable SSL/TLS encryption, rotate credentials regularly, and monitor for suspicious connection attempts.
+  - **Incident Response**: Maintain documented procedures for responding to security incidents including database compromise, credential theft, and unauthorized access attempts.

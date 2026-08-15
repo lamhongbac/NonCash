@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-27T00:00:00
-last_updated: 2026-08-14T18:00:00
+last_updated: 2026-08-15T12:00:00
 project: NonCash
 project_key: NOKEY
 tracking_system: file-system
@@ -88,6 +88,12 @@ development_status:
   # Notification matrix: docs/notification-matrix.md
   email-notification-system: done
 
+  # Security Incident (2026-08-15)
+  # Ransomware attack on DEV PostgreSQL server - database dropped, rebuilt from EF migrations + SeedTool
+  # pg_hba.conf hardened to localhost + server IP only
+  # All passwords changed, 29 migrations reapplied, SeedTool fixed
+  database-security-incident: done
+
   # Epic 5: Social Engagement & Gifting (FR5 - peer-to-peer transfer)
   epic-5: done
   5-1-initiate-voucher-transfer: done
@@ -96,12 +102,12 @@ development_status:
   epic-5-retrospective: optional
 
   # Epic 6: Loyalty App Integration (External Partner API)
-  epic-6: backlog
-  6-1-loyalty-app-partner-onboarding: backlog
-  6-2-segment-distribution-api: backlog
-  6-3-member-wallet-event-history-api: backlog
-  6-4-webhook-lifecycle-events: backlog
-  6-5-campaign-performance-api: backlog
+  epic-6: done
+  6-1-loyalty-app-partner-onboarding: done
+  6-2-segment-distribution-api: done  # email notification wired; future: Zalo by phone
+  6-3-member-wallet-event-history-api: done
+  6-4-webhook-lifecycle-events: done  # event hooks in PosService + TransferService + IntegrationController
+  6-5-campaign-performance-api: done  # per-outlet breakdown populated
   epic-6-retrospective: optional
 
   # Epic 7: Cross-Tenant Settlement & Campaign Sponsorship

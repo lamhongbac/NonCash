@@ -13,11 +13,13 @@ public class BusinessesController : ControllerBase
 {
     private readonly IBusinessRepository _businessRepository;
     private readonly IBrandRepository _brandRepository;
+    private readonly INotificationService _notificationService;
 
-    public BusinessesController(IBusinessRepository businessRepository, IBrandRepository brandRepository)
+    public BusinessesController(IBusinessRepository businessRepository, IBrandRepository brandRepository, INotificationService notificationService)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
         _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
+        _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
     }
 
     [HttpGet]
@@ -74,6 +76,21 @@ public class BusinessesController : ControllerBase
 
         await _businessRepository.AddAsync(business, cancellationToken);
         await _businessRepository.SaveChangesAsync(cancellationToken);
+
+        // Notify the business contact that the business has been created and activated.
+        if (!string.IsNullOrWhiteSpace(business.ContactEmail))
+        {
+            try
+            {
+                await _notificationService.NotifyBrandCreatedAsync(
+                    new BrandCreatedNotification(business.ContactEmail, business.BusinessName, business.BusinessName, business.TaxCode),
+                    cancellationToken);
+            }
+            catch
+            {
+                // Best-effort: notification failure should not block business creation.
+            }
+        }
 
         return CreatedAtAction(nameof(GetById), new { id = business.Id }, MapToResponse(business, 0));
     }

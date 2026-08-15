@@ -40,6 +40,23 @@ The system is designed as a Software as a Service (SaaS) platform using a robust
 - **Dynamic Security**: Vouchers use a rotating dynamic code (similar to JWT logic) to prevent reuse and unauthorized scanning.
 - **Integration Security**: POS systems are authenticated via API Keys and locked to specific ranges defined in the planning phase.
 
+### Database Security (PostgreSQL)
+
+**Incident (2026-08-15):** The DEV PostgreSQL server was exposed to the internet with `0.0.0.0/0` in `pg_hba.conf`, resulting in a ransomware attack that dropped the `noncash` database.
+
+**Hardening measures applied:**
+
+| Measure | Configuration |
+|---------|---------------|
+| `pg_hba.conf` | Restricted to `127.0.0.1/32`, `::1/128`, `45.119.87.247/32` only |
+| `postgres` superuser password | Changed immediately after incident |
+| `noncash_app` password | Changed to strong password |
+| Ransom database | `readme_to_recover` dropped |
+
+**Recovery:** Database rebuilt from EF migrations (29 migrations) + SeedTool. All 135 tests verified passing.
+
+**Future scaling:** When team grows beyond 1-2 developers, set up WireGuard VPN instead of managing individual IPs in `pg_hba.conf`.
+
 ---
 
 ## External Integration Boundary: Loyalty App Partnership Model

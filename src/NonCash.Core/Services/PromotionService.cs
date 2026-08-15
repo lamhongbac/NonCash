@@ -10,6 +10,9 @@ public class PromotionService : IPromotionService
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
+    private readonly IRepository<VoucherUsage> _usageRepository;
+    private readonly IVoucherTransferRepository _transferRepository;
+    private readonly IRepository<Outlet> _outletRepository;
     private readonly ICreditService _creditService;
     private readonly INotificationService _notificationService;
 
@@ -19,6 +22,9 @@ public class PromotionService : IPromotionService
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository,
+        IRepository<VoucherUsage> usageRepository,
+        IVoucherTransferRepository transferRepository,
+        IRepository<Outlet> outletRepository,
         ICreditService creditService,
         INotificationService notificationService)
     {
@@ -27,6 +33,9 @@ public class PromotionService : IPromotionService
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
+        _usageRepository = usageRepository;
+        _transferRepository = transferRepository;
+        _outletRepository = outletRepository;
         _creditService = creditService;
         _notificationService = notificationService;
     }
@@ -36,7 +45,8 @@ public class PromotionService : IPromotionService
         Guid brandId,
         IReadOnlyList<string> phoneNumbers,
         NotificationChannel notifyChannels = NotificationChannel.Email,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? phoneToEmail = null)
     {
         if (phoneNumbers == null || phoneNumbers.Count == 0)
             return new PromotionResult(false, ErrorCode: "EmptyList", ErrorMessage: "Phone number list is empty.");
@@ -88,7 +98,8 @@ public class PromotionService : IPromotionService
                 {
                     PhoneNumber = phone,
                     FullName = phone,
-                    Status = CustomerStatus.Active
+                    Status = CustomerStatus.Active,
+                    Email = ResolveEmail(phone, phoneToEmail)
                 };
                 await _customerRepository.AddAsync(newCustomer, cancellationToken);
                 await _customerRepository.SaveChangesAsync(cancellationToken);
@@ -102,6 +113,15 @@ public class PromotionService : IPromotionService
             }
             else
             {
+                // Upsert email from integration payload if not already on file
+                var suppliedEmail = ResolveEmail(phone, phoneToEmail);
+                if (!string.IsNullOrEmpty(suppliedEmail) && string.IsNullOrEmpty(existing.Email))
+                {
+                    existing.Email = suppliedEmail;
+                    _customerRepository.Update(existing);
+                    await _customerRepository.SaveChangesAsync(cancellationToken);
+                }
+
                 var member = await EnsureMemberAccountAsync(existing, cancellationToken);
                 eligibleMembers.Add((phone, member.Id, existing.Email, existing.FullName));
             }
@@ -223,29 +243,113 @@ public class PromotionService : IPromotionService
         var member = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
         if (member == null) return new List<MemberWalletVoucher>();
 
-        var vouchers = await _detailRepository.FindAsync(
+        // Load all vouchers for this member, joined with plan header for display fields
+        var details = await _detailRepository.FindAsync(
             d => d.MemberId == member.Id, cancellationToken);
 
-        return vouchers.Select(v =>
+        var result = new List<MemberWalletVoucher>();
+        foreach (var v in details)
         {
-            // Load plan info for display fields
-            return new MemberWalletVoucher(
+            var plan = await _planRepository.GetByIdAsync(v.ParentId, cancellationToken);
+            if (plan == null || !brandIds.Contains(plan.BrandId)) continue;
+
+            result.Add(new MemberWalletVoucher(
                 v.Id,
                 v.SerialNo,
-                0, // FaceValue comes from plan
-                null,
-                null,
+                plan.FaceValue,
+                plan.ValueType,
+                plan.ExpiryDate,
                 v.UsageStatus,
-                null, null, null, null, null, null, null, null);
-        }).ToList();
+                plan.ImageUrl,
+                plan.IconUrl,
+                plan.CoverImageUrl,
+                plan.BrandColor,
+                plan.DisplayName ?? plan.DisplayName,
+                plan.ShortDescription,
+                plan.TermsAndConditions,
+                plan.Brand?.Name));
+        }
+        return result;
     }
 
     // Epic 6.3: Event history for Integration API
     public async Task<IReadOnlyList<MemberEventRecord>> GetMemberEventsByPhoneAsync(
         string phone, List<Guid> brandIds, int limit, CancellationToken cancellationToken = default)
     {
-        // Stub: aggregate from VoucherDistribution + VoucherUsage + VoucherTransfer
-        return new List<MemberEventRecord>();
+        var normalized = Customer.NormalizePhoneNumber(phone);
+        var customer = await _customerRepository.GetByPhoneNumberAsync(normalized, cancellationToken);
+        if (customer == null) return new List<MemberEventRecord>();
+
+        var member = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
+        if (member == null) return new List<MemberEventRecord>();
+
+        var events = new List<MemberEventRecord>();
+
+        // 1. Distribution events
+        var distributions = await _distributionRepository.FindAsync(
+            d => d.MemberId == member.Id, cancellationToken);
+        foreach (var dist in distributions)
+        {
+            // VoucherDistribution.VoucherId points to VoucherPlanDetail.Id; get the plan via ParentId
+            var detail = await _detailRepository.GetByIdAsync(dist.VoucherId, cancellationToken);
+            if (detail == null) continue;
+            var header = await _planRepository.GetByIdAsync(detail.ParentId, cancellationToken);
+            if (header == null || !brandIds.Contains(header.BrandId)) continue;
+
+            events.Add(new MemberEventRecord(
+                "Distributed",
+                dist.DistributionDate,
+                dist.VoucherId,
+                detail.SerialNo,
+                header.Brand?.Name ?? header.DisplayName,
+                $"Method: {dist.Method}"));
+        }
+
+        // 2. Redemption events (from VoucherUsage)
+        var memberVoucherIds = distributions.Select(d => d.VoucherId).ToList();
+        var usages = await _usageRepository.FindAsync(
+            u => memberVoucherIds.Contains(u.VoucherId), cancellationToken);
+        foreach (var usage in usages)
+        {
+            var detail = await _detailRepository.GetByIdAsync(usage.VoucherId, cancellationToken);
+            if (detail == null) continue;
+            var header = await _planRepository.GetByIdAsync(detail.ParentId, cancellationToken);
+            if (header == null || !brandIds.Contains(header.BrandId)) continue;
+
+            events.Add(new MemberEventRecord(
+                "Redeemed",
+                usage.UsageDate,
+                usage.VoucherId,
+                detail.SerialNo,
+                header.Brand?.Name ?? header.DisplayName,
+                $"TransactionId: {usage.TransactionId}, Amount: {usage.AmountUsed}"));
+        }
+
+        // 3. Transfer events (sent or received)
+        var transfers = await _transferRepository.FindAsync(
+            t => t.SenderId == member.Id || t.RecipientId == member.Id, cancellationToken);
+        foreach (var transfer in transfers)
+        {
+            var detail = await _detailRepository.GetByIdAsync(transfer.VoucherId, cancellationToken);
+            if (detail == null) continue;
+            var header = await _planRepository.GetByIdAsync(detail.ParentId, cancellationToken);
+            if (header == null || !brandIds.Contains(header.BrandId)) continue;
+
+            var direction = transfer.SenderId == member.Id ? "Sent" : "Received";
+            events.Add(new MemberEventRecord(
+                $"Transfer{direction}",
+                transfer.InitiatedAt,
+                transfer.VoucherId,
+                detail.SerialNo,
+                header.Brand?.Name ?? header.DisplayName,
+                $"Status: {transfer.Status}, Type: {transfer.TransferType}"));
+        }
+
+        // Sort chronologically descending, apply limit
+        return events
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(limit)
+            .ToList();
     }
 
     // Epic 6.5: Campaign performance
@@ -262,6 +366,20 @@ public class PromotionService : IPromotionService
         var redeemed = allDetails.Count(d => d.UsageStatus == UsageStatus.Complete);
         var rate = total > 0 ? (decimal)redeemed / total : 0;
 
+        // Epic 6.5: Per-outlet breakdown from completed vouchers with LockedOutletId
+        var outletBreakdown = new List<OutletPerformance>();
+        var redeemedDetails = allDetails.Where(d => d.UsageStatus == UsageStatus.Complete && d.LockedOutletId.HasValue).ToList();
+        var grouped = redeemedDetails.GroupBy(d => d.LockedOutletId!.Value);
+        foreach (var group in grouped)
+        {
+            var outlet = await _outletRepository.GetByIdAsync(group.Key, cancellationToken);
+            outletBreakdown.Add(new OutletPerformance(
+                group.Key,
+                outlet?.Name ?? "Unknown",
+                group.Count(),
+                group.Count() * plan.FaceValue));
+        }
+
         return new CampaignPerformanceResult(
             planId,
             plan.DisplayName,
@@ -269,6 +387,27 @@ public class PromotionService : IPromotionService
             distributed,
             redeemed,
             rate,
-            new List<OutletPerformance>());
+            outletBreakdown);
+    }
+
+    /// <summary>
+    /// Resolves email from the phoneToEmail mapping (normalized phone → email).
+    /// Used by Integration API (Story 6.2) to supply member emails from the partner payload.
+    /// Future: Zalo-based notification will use phone number directly instead of email.
+    /// </summary>
+    private static string? ResolveEmail(string phone, IReadOnlyDictionary<string, string>? phoneToEmail)
+    {
+        if (phoneToEmail == null || phoneToEmail.Count == 0)
+            return null;
+
+        // Try exact match first, then normalized phone
+        if (phoneToEmail.TryGetValue(phone, out var email))
+            return email;
+
+        var normalized = Customer.NormalizePhoneNumber(phone);
+        if (!string.IsNullOrEmpty(normalized) && phoneToEmail.TryGetValue(normalized, out email))
+            return email;
+
+        return null;
     }
 }

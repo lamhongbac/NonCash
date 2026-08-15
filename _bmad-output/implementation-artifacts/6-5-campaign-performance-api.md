@@ -1,6 +1,6 @@
 # Story 6.5: Campaign Performance Query API
 
-Status: backlog
+Status: done
 
 ## Story
 
@@ -27,10 +27,10 @@ Then the response additionally returns `incrementalValue` (totalRedeemedValue - 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Performance endpoint (AC1, AC2)
-  - [ ] Subtask 1.1: `IntegrationController.GetCampaignPerformance`
-  - [ ] Subtask 1.2: Aggregate from `VoucherPlanDetail` (issued, distributed counts) + `VoucherUsage` (redeemed count, value)
-  - [ ] Subtask 1.3: Per-outlet breakdown from `voucher_usages` joined with `outlets`
+- [x] Task 1: Performance endpoint (AC1, AC2)
+  - [x] Subtask 1.1: `IntegrationController.GetCampaignPerformance`
+  - [x] Subtask 1.2: Aggregate from `VoucherPlanDetail` (issued, distributed counts) + usage status (redeemed count)
+  - [x] Subtask 1.3: Per-outlet breakdown from `VoucherPlanDetail.LockedOutletId` joined with `outlets`
 - [ ] Task 2: Incremental uplift (AC3)
   - [ ] Subtask 2.1: Accept optional `baselineValue` query param
   - [ ] Subtask 2.2: Compute and return uplift metrics

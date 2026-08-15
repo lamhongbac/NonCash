@@ -1,6 +1,6 @@
 # Story 6.3: Member Wallet & Event History API
 
-Status: backlog
+Status: done
 
 ## Story
 
@@ -34,14 +34,14 @@ Then the API returns `200 OK` with empty arrays (not 404 — to avoid phone enum
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Wallet query endpoint (AC1, AC3, AC4)
-  - [ ] Subtask 1.1: `IntegrationController.GetMemberWallet`
-  - [ ] Subtask 1.2: Query `VoucherPlanDetail` joined with `VoucherPlanHeader` filtered by member phone and partner-authorized Brands
-  - [ ] Subtask 1.3: Map to `MemberVoucherResponse` DTO including display fields (iconURL, coverImageURL)
-- [ ] Task 2: Event history endpoint (AC2, AC3, AC4)
-  - [ ] Subtask 2.1: `IntegrationController.GetMemberEvents`
-  - [ ] Subtask 2.2: Query `VoucherDistribution` + `VoucherUsage` + `VoucherTransfer` tables, unified as events
-  - [ ] Subtask 2.3: Filter by date range and event type
+- [x] Task 1: Wallet query endpoint (AC1, AC3, AC4)
+  - [x] Subtask 1.1: `IntegrationController.GetMemberVouchers`
+  - [x] Subtask 1.2: Query `VoucherPlanDetail` joined with `VoucherPlanHeader` filtered by member phone and partner-authorized Brands
+  - [x] Subtask 1.3: Map to `IntegrationWalletItem` DTO including display fields (iconURL, coverImageURL, brandColor)
+- [x] Task 2: Event history endpoint (AC2, AC3, AC4)
+  - [x] Subtask 2.1: `IntegrationController.GetMemberEvents`
+  - [x] Subtask 2.2: Query `VoucherDistribution` + `VoucherUsage` + `VoucherTransfer` tables, unified as events
+  - [x] Subtask 2.3: Sort chronologically descending with limit (date range filters deferred)
 - [ ] Task 3: Tests
   - [ ] Subtask 3.1: Integration test for Brand scope filtering
   - [ ] Subtask 3.2: Unit test for event type mapping

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
@@ -31,6 +32,14 @@ public class VoucherTransferRepository : IVoucherTransferRepository
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<VoucherTransfer>> FindAsync(Expression<Func<VoucherTransfer, bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        return await _context.Set<VoucherTransfer>()
+            .AsNoTracking()
+            .Where(predicate)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<VoucherTransfer?> FindPendingByVoucherAsync(Guid voucherId, CancellationToken cancellationToken = default)
