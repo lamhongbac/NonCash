@@ -26,13 +26,19 @@
 - [CreditAdjustmentRequest.cs](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs)
 - [CreditConsumption.cs](file://src/NonCash.Core/Entities/CreditConsumption.cs)
 - [CreditExpiryLog.cs](file://src/NonCash.Core/Entities/CreditExpiryLog.cs)
+- [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
+- [BrandRegistrationRequest.cs](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs)
+- [Customer.cs](file://src/NonCash.Core/Entities/Customer.cs)
 - [CreditBatchConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/CreditBatchConfiguration.cs)
 - [CreditPricingPolicyConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/CreditPricingPolicyConfiguration.cs)
 - [BrandGroupConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/BrandGroupConfiguration.cs)
 - [CreditAdjustmentRequestConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs)
+- [EmailLogConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/EmailLogConfiguration.cs)
+- [BrandRegistrationRequestConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/BrandRegistrationRequestConfiguration.cs)
 - [ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
 - [CreditService.cs](file://src/NonCash.Infrastructure/Services/CreditService.cs)
 - [CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs)
 - [architecture.md](file://docs/architecture.md)
 - [source-tree-analysis.md](file://docs/source-tree-analysis.md)
 - [Key Functionalities.txt](file://Key Functionalities.txt)
@@ -41,13 +47,12 @@
 
 ## Update Summary
 **Changes Made**
-- Added new batch-based credit system entities: CreditBatch, CreditPricingPolicy, BrandGroup, CreditAdjustmentRequest, CreditConsumption, CreditExpiryLog
-- Enhanced existing entities with batch-based credit relationships and approval workflows
-- Added comprehensive credit lifecycle management with FIFO consumption model
-- Implemented maker-checker adjustment request workflow for credit adjustments
-- Added brand group support for policy targeting and bulk policy application
-- Integrated credit expiry management with automated sweep service
-- Enhanced data validation rules for credit consumption and batch integrity
+- Added comprehensive email logging functionality through EmailLog entity and EmailNotificationService with full audit trail capabilities
+- Enhanced UserAccount entity with email field for direct email notifications
+- Added BrandRegistrationRequest entity for brand onboarding workflow management
+- Enhanced Customer entity with email field support
+- Integrated email notification system across all business processes including voucher distribution, credit operations, and approval workflows
+- Added comprehensive email retry logic with exponential backoff and failure tracking
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -62,7 +67,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. The platform now includes enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms for voucher management across brands and outlets, settlement tracking for cross-tenant operations, credit ledger management, integration partner support, improved member identity management, and a sophisticated batch-based credit system with maker-checker approval workflows.
+This document provides comprehensive data model documentation for the NonCash platform, focusing on core business entities and the relational database schema. The platform now includes enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms for voucher management across brands and outlets, settlement tracking for cross-tenant operations, credit ledger management, integration partner support, improved member identity management, sophisticated batch-based credit system with maker-checker approval workflows, and comprehensive email notification system with complete audit trail capabilities.
 
 ## Project Structure
 The NonCash project follows a layered architecture with a clear separation of concerns:
@@ -333,6 +338,8 @@ This section defines the core entities and their attributes, primary keys, forei
     - FullName: String
     - Role: Enum (Admin, BrandManager, Planner, Approver)
     - Status: Enum (PendingActivation, Active, Locked)
+    - Email: String? (Optional email for notifications)
+  - **Enhanced**: Added email field for direct email notifications and user communication
 
 - **Customer** (End-User / App Member)
   - Purpose: Consumers who hold and use distributed vouchers.
@@ -340,8 +347,9 @@ This section defines the core entities and their attributes, primary keys, forei
     - ID: GUID (Primary Key)
     - PhoneNumber: String (Primary identifier)
     - FullName: String
-    - Email: String
+    - Email: String? (Optional email for communications)
     - Status: Enum (Active, Blacklisted)
+  - **Enhanced**: Added email field for customer communications and notifications
 
 ### New Batch-Based Credit System Entities
 
@@ -438,6 +446,34 @@ This section defines the core entities and their attributes, primary keys, forei
     - ExpiredCredits: Integer (Credits forfeited at expiry time)
     - ExpiredAt: DateTime (When expiry was executed)
 
+### New Email Notification System
+
+- **EmailLog** (Email Audit Trail)
+  - Purpose: Comprehensive audit trail for all outbound email notifications with success/failure tracking and retry information.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - ToAddress: String (Recipient email address)
+    - Subject: String (Email subject line)
+    - TemplateName: String (Email template used)
+    - NotificationType: String (Category like "PlanReviewed", "AdjustmentPending", "VoucherDistribution")
+    - RelatedEntityId: GUID? (Optional related entity ID for traceability)
+    - Success: Boolean (Whether email was successfully sent)
+    - ErrorMessage: String? (Error details if failed)
+    - RetryCount: Integer (Number of retry attempts)
+    - SentAt: DateTime (Timestamp of send attempt)
+
+- **BrandRegistrationRequest** (Brand Onboarding Workflow)
+  - Purpose: Manages brand registration process with approval workflow and audit trail.
+  - Key attributes:
+    - ID: GUID (Primary Key)
+    - BrandId: GUID (Foreign Key to Brand)
+    - SubmittedByUserId: GUID (Foreign Key to UserAccount who submitted)
+    - SubmittedAt: DateTime (Submission timestamp)
+    - Status: Enum (Submitted, UnderReview, Approved, Rejected)
+    - ReviewNotes: String? (Reviewer comments)
+    - ReviewedAt: DateTime? (Review completion timestamp)
+    - ReviewedByUserId: GUID? (Foreign Key to UserAccount who reviewed)
+
 ### New Junction Entities
 
 - **PlanOutlet** (Outlet Assignment)
@@ -491,6 +527,9 @@ Entity relationships and constraints:
 - **NEW**: CreditPricingPolicy.BrandId → Brand.ID (many-to-1)
 - **NEW**: BrandGroupMember.BrandGroupId → BrandGroup.ID (many-to-1)
 - **NEW**: BrandGroupMember.BrandId → Brand.ID (many-to-1)
+- **NEW**: BrandRegistrationRequest.BrandId → Brand.ID (many-to-1)
+- **NEW**: BrandRegistrationRequest.SubmittedByUserId → UserAccount.ID (many-to-1)
+- **NEW**: BrandRegistrationRequest.ReviewedByUserId → UserAccount.ID (many-to-1)
 
 **Section sources**
 - [data-models.md:9-113](file://docs/data-models.md#L9-L113)
@@ -502,20 +541,23 @@ Entity relationships and constraints:
 - [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
 - [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
 - [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
-- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
-- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
-- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-19)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-20)
 
 ## Architecture Overview
 The NonCash system employs a relational model managed via Entity Framework Core and PostgreSQL. The Data Access Layer uses the Repository pattern to abstract persistence concerns, enabling decoupling from the Business Logic Layer and supporting schema evolution and technology changes.
@@ -543,17 +585,17 @@ DC --> MIG
 ```
 
 **Diagram sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
 
 **Section sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
 
 ## Detailed Component Analysis
 
 ### Enhanced Entity Relationship Model
-The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities. The model now includes enhanced approval workflows, versioning, comprehensive tracking, settlement management, credit ledger, integration partners, member identity management, and a sophisticated batch-based credit system.
+The following ER diagram captures the core entities and their relationships, highlighting primary and foreign keys and cardinalities. The model now includes enhanced approval workflows, versioning, comprehensive tracking, settlement management, credit ledger, integration partners, member identity management, sophisticated batch-based credit system, and comprehensive email notification system.
 
 ```mermaid
 erDiagram
@@ -580,6 +622,7 @@ string PasswordHash
 string FullName
 enum Role
 enum Status
+string Email
 }
 CUSTOMER {
 uuid ID PK
@@ -835,6 +878,28 @@ uuid BrandId FK
 int ExpiredCredits
 datetime ExpiredAt
 }
+EMAILLOG {
+uuid ID PK
+string ToAddress
+string Subject
+string TemplateName
+string NotificationType
+uuid RelatedEntityId
+bool Success
+string ErrorMessage
+int RetryCount
+datetime SentAt
+}
+BRANDREGISTRATIONREQUEST {
+uuid ID PK
+uuid BrandId FK
+uuid SubmittedByUserId FK
+uuid ReviewedByUserId FK
+enum Status
+string ReviewNotes
+datetime SubmittedAt
+datetime ReviewedAt
+}
 BRAND ||--o{ OUTLET : "owns"
 BRAND ||--o{ VOUCHERPLANHEADER : "creates"
 BRAND ||--o{ SETTLEMENTENTRY : "sponsor/issue/redeem"
@@ -845,9 +910,11 @@ BRAND ||--o{ CREDITCONSUMPTION : "consumes"
 BRAND ||--o{ CREDITEXPIRYLOG : "expires"
 BRAND ||--o{ CREDITADJUSTMENTREQUEST : "requests"
 BRAND ||--o{ CREDITPRICINGPOLICY : "targets"
+BRAND ||--o{ BRANDREGISTRATIONREQUEST : "registered by"
 BUSINESS ||--o{ BRAND : "owns"
 USERACCOUNT ||--o{ VOUCHERPLANHEADER : "creates/approves"
 USERACCOUNT ||--o{ VOUCHERREVIEW : "reviews"
+USERACCOUNT ||--o{ BRANDREGISTRATIONREQUEST : "submits/reviews"
 CUSTOMER ||--o{ VOICEDISTRIBUTION : "receives"
 CUSTOMER ||--o{ MEMBERACCOUNT : "has account"
 MEMBERACCOUNT ||--o{ VOUCHEPLANDetail : "assigned"
@@ -868,31 +935,34 @@ CREDITPRICINGPOLICY ||--|| CREDITBATCH : "snapshotted by"
 CREDITPRICINGPOLICY ||--|| CREDITADJUSTMENTREQUEST : "governs"
 BRANDGROUP ||--o{ BRANDGROUPMEMBER : "contains"
 BRAND ||--o{ BRANDGROUPMEMBER : "member of"
+EMAILLOG ||..| USERACCOUNT : "sent to"
 ```
 
 **Diagram sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
-- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L21)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
-- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
-- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-L17)
-- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-L19)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
+- [VoucherDistribution.cs:10-21](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-21)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-30)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
+- [Brand.cs:10-17](file://src/NonCash.Core/Entities/Brand.cs#L10-17)
+- [Outlet.cs:9-19](file://src/NonCash.Core/Entities/Outlet.cs#L9-19)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
 
 ### Enhanced Data Validation and Business Rules Embedded in Schema
 - **Multi-tenancy isolation**: BrandId ensures tenant boundaries across entities.
@@ -909,27 +979,34 @@ BRAND ||--o{ BRANDGROUPMEMBER : "member of"
 - **Integration partner security**: IntegrationPartner uses BCrypt hashing for API keys and HMAC-SHA256 for webhooks.
 - **Member identity separation**: MemberAccount separates authentication from customer data for better security.
 - **Voucher transfer lifecycle**: VoucherTransfer manages complete transfer workflow with expiration and rejection handling.
-- **NEW**: Batch-based credit system with FIFO consumption model and unique voucher consumption constraint.
-- **NEW**: Maker-checker adjustment workflow with approval thresholds and audit trail.
-- **NEW**: Brand group support for bulk policy application and scope-based policy resolution.
-- **NEW**: Automated credit expiry management with one-time warning system.
+- **Batch-based credit system with FIFO consumption model and unique voucher consumption constraint**.
+- **Maker-checker adjustment workflow with approval thresholds and audit trail**.
+- **Brand group support for bulk policy application and scope-based policy resolution**.
+- **Automated credit expiry management with one-time warning system**.
+- **NEW**: Comprehensive email notification system with complete audit trail and retry logic.
+- **NEW**: Brand registration workflow with approval process and audit trail.
+- **NEW**: Enhanced user accounts with email support for direct notifications.
+- **NEW**: Customer email support for personalized communications.
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [Customer.cs:1-20](file://src/NonCash.Core/Entities/Customer.cs#L1-20)
 
 ### Enhanced Data Access Patterns Using Entity Framework Core and Repository Pattern
 - DbContext encapsulates all entity sets and manages change tracking and transactions.
@@ -941,9 +1018,11 @@ BRAND ||--o{ BRANDGROUPMEMBER : "member of"
 - **Credit ledger operations**: CreditService handles append-only ledger entries with balance calculations.
 - **Integration partner management**: IntegrationPartnerService manages API keys, webhooks, and brand authorizations.
 - **Event-driven architecture**: VoucherEvent and WebhookDelivery enable reliable webhook delivery with retry logic.
-- **NEW**: Batch-based credit consumption with FIFO algorithm and idempotent processing.
-- **NEW**: Maker-checker adjustment workflow with approval matrix and audit trail.
-- **NEW**: Automated credit expiry sweep service with one-time warning system.
+- **Batch-based credit consumption with FIFO algorithm and idempotent processing**.
+- **Maker-checker adjustment workflow with approval matrix and audit trail**.
+- **Automated credit expiry sweep service with one-time warning system**.
+- **NEW**: Comprehensive email notification system with retry logic and audit trail.
+- **NEW**: Brand registration workflow with email notifications and approval process.
 - Migrations manage schema evolution and version control for PostgreSQL.
 
 ```mermaid
@@ -953,6 +1032,7 @@ participant API as "API Controller"
 participant Service as "Business Service"
 participant Repo as "Repository"
 participant DB as "DbContext/DB"
+participant EmailSvc as "EmailNotificationService"
 Client->>API : "POST /api/usage"
 API->>Service : "VerifyAndApply(voucherCode, posId, amount)"
 Service->>Repo : "GetByCodeWithLock(voucherCode)"
@@ -964,7 +1044,9 @@ Service->>Repo : "Create(SettlementEntry if cross-tenant)"
 Service->>Repo : "Create(CreditLedgerEntry for consumption)"
 Service->>Repo : "Create(VoucherEvent for webhooks)"
 Service->>Repo : "TryConsumeAsync(brandId, voucherDetailId)"
-Repo->>DB : "Begin Transaction"
+Service->>EmailSvc : "Send notification if needed"
+EmailSvc->>Repo : "Create(EmailLog)"
+Service->>Repo : "Begin Transaction"
 DB-->>Repo : "Commit"
 Repo-->>Service : "Success"
 Service-->>API : "Result"
@@ -972,12 +1054,14 @@ API-->>Client : "Response"
 ```
 
 **Diagram sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
 
 **Section sources**
-- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [architecture.md:28-52](file://docs/architecture.md#L28-52)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
+- [EmailNotificationService.cs:1-428](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L1-428)
 
 ### Enhanced Sample Data Examples
 Below are representative rows illustrating typical data entries across entities with the enhanced functionality. These examples illustrate relationships and constraints without exposing sensitive information.
@@ -988,10 +1072,10 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], Name: "The Coffee House", TaxCode: "THC-12345", ContactEmail: "admin@thecoffeehouse.example", Status: Active
 - **Outlet**
   - ID: [GUID], BrandId: [Brand GUID], Name: "Downtown Store", Address: "123 Main St", Status: Active, ApiKeyPrefix: "POS-101"
-- **UserAccount**
-  - ID: [GUID], BrandId: [Brand GUID], Username: "brand_manager", PasswordHash: "[hash]", FullName: "Jane Brand Manager", Role: BrandManager, Status: Active
-- **Customer**
-  - ID: [GUID], PhoneNumber: "+8490xxxxxxx", FullName: "John Doe", Email: "john.doe@example", Status: Active
+- **UserAccount** *(Enhanced)*
+  - ID: [GUID], BrandId: [Brand GUID], Username: "brand_manager", PasswordHash: "[hash]", FullName: "Jane Brand Manager", Role: BrandManager, Status: Active, Email: "jane.brandmanager@example.com"
+- **Customer** *(Enhanced)*
+  - ID: [GUID], PhoneNumber: "+8490xxxxxxx", FullName: "John Doe", Email: "john.doe@example.com", Status: Active
 - **MemberAccount**
   - ID: [GUID], CustomerId: [Customer GUID], Username: "johndoe", PasswordHash: "[hash]", FullName: "John Doe", Status: Active
 - **IntegrationPartner**
@@ -1020,6 +1104,10 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], SenderId: [Member GUID], RecipientId: [Member GUID], VoucherId: [Detail GUID], Status: PendingAcceptance, TransferType: Gift, InitiatedAt: 2026-06-16T15:00:00Z, ExpiresAt: 2026-06-23T15:00:00Z, Note: "Birthday gift!", RejectReason: null, RespondedAt: null
 - **PlanOutlet**
   - PlanId: [Plan GUID], OutletId: [Outlet GUID]
+- **EmailLog** *(New)*
+  - ID: [GUID], ToAddress: "admin@example.com", Subject: "New business registration: Coffee House", TemplateName: "AdminNewRegistration", NotificationType: "NewRegistration", RelatedEntityId: [Request GUID], Success: true, ErrorMessage: null, RetryCount: 0, SentAt: 2026-06-17T10:30:00Z
+- **BrandRegistrationRequest** *(New)*
+  - ID: [GUID], BrandId: [Brand GUID], SubmittedByUserId: [User GUID], SubmittedAt: 2026-06-16T09:00:00Z, Status: UnderReview, ReviewNotes: "Under review for compliance check", ReviewedAt: null, ReviewedByUserId: null
 - **NEW**: **CreditBatch**
   - ID: [GUID], BrandId: [Brand GUID], PolicyId: [Policy GUID], BatchType: Purchase, OriginalAmount: 1000, RemainingAmount: 999, PricePerCreditVnd: 100m, TotalPaidVnd: 100000m, ExpiresAt: 2027-06-17, EvidenceImageUrl: "/bank-slip-001.jpg", Reference: "Bank transfer #BT-001", AdjustmentRequestId: null, CreatedBy: [User GUID]
 - **NEW**: **CreditPricingPolicy**
@@ -1034,25 +1122,27 @@ Below are representative rows illustrating typical data entries across entities 
   - ID: [GUID], BatchId: [Batch GUID], BrandId: [Brand GUID], ExpiredCredits: 50, ExpiredAt: 2027-06-17T00:00:00Z
 
 **Section sources**
-- [data-models.md:9-113](file://docs/data-models.md#L9-L113)
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-L30)
-- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-L18)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-L17)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [data-models.md:9-113](file://docs/data-models.md#L9-113)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [PaymentTransaction.cs:12-30](file://src/NonCash.Core/Entities/PaymentTransaction.cs#L12-30)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [Business.cs:6-18](file://src/NonCash.Core/Entities/Business.cs#L6-18)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [BrandGroup.cs:7-17](file://src/NonCash.Core/Entities/BrandGroup.cs#L7-17)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
 
 ## Dependency Analysis
 The following diagram highlights dependencies among layers and components relevant to data modeling and access.
@@ -1067,10 +1157,10 @@ CORE --> INFRA
 ```
 
 **Diagram sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
 
 **Section sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
 
 ## Performance Considerations
 - **Enhanced indexing strategy**:
@@ -1090,6 +1180,8 @@ CORE --> INFRA
   - Brand/Outlet/UserAccount/Customer: Index on primary keys and frequently filtered columns
   - PlanOutlet: Composite index on PlanId, OutletId
   - PartnerBrand: Composite index on PartnerId, BrandId
+  - **NEW**: EmailLog: Index on NotificationType, SentAt, Success for email audit queries
+  - **NEW**: BrandRegistrationRequest: Index on Status, SubmittedAt for approval queue, BrandId, SubmittedByUserId
   - **NEW**: CreditBatch: Index on BrandId, ExpiresAt, CreatedAt for FIFO consumption and expiry scanning
   - **NEW**: CreditConsumption: Unique index on VoucherDetailId, composite index on BrandId, CreatedAt
   - **NEW**: CreditExpiryLog: Unique index on BatchId for one-time expiry logging
@@ -1104,6 +1196,7 @@ CORE --> INFRA
   - **New**: Support for plan versioning queries, approval workflow filtering, settlement reporting, credit balance calculations, webhook delivery optimization
   - **New**: FIFO consumption queries with ordering by CreatedAt, policy resolution queries with scope priority
   - **new**: Adjustment request queue queries with status-based filtering
+  - **new**: Email notification queries with retry logic and failure analysis
 - **Enhanced concurrency**:
   - Optimistic concurrency with row versioning for entities updated by multiple users
   - **New**: POS transaction locking prevents concurrent usage conflicts
@@ -1112,14 +1205,17 @@ CORE --> INFRA
   - **New**: Credit ledger unique constraint on VoucherDetailId prevents double consumption
   - **New**: Credit consumption unique constraint on VoucherDetailId prevents double charging
   - **New**: One-time expiry warning system prevents duplicate notifications
+  - **New**: Email retry logic with exponential backoff prevents duplicate sends
 - **Enhanced caching**:
   - Cache static reference data (enums, Brand/Outlet lists) with invalidation on change
   - **New**: Cache approval workflow states, plan version hierarchies, integration partner configurations, credit balances
   - **New**: Cache resolved pricing policies per brand with invalidation on policy changes
+  - **New**: Cache email templates and notification configurations
 - **Enhanced monitoring**:
   - Track slow queries and long-running transactions; alert on unusual spikes
   - **New**: Monitor POS transaction lock timeouts, approval workflow bottlenecks, settlement processing delays, webhook delivery failures, credit balance anomalies
   - **New**: Monitor credit consumption performance, adjustment request processing times, expiry sweep efficiency
+  - **New**: Monitor email delivery success rates, retry patterns, SMTP configuration issues
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -1156,39 +1252,51 @@ Common issues and resolutions:
 - **Voucher transfer problems**:
   - Symptom: Transfers not completing or expiring prematurely
   - Resolution: Check transfer expiration dates, recipient acceptance workflow, and voucher ownership validation
-- **NEW**: Credit consumption failures:
+- **Credit consumption failures**:
   - Symptom: Voucher charged multiple times or consumption not recorded
   - Resolution: Check CreditConsumption unique constraint on VoucherDetailId; verify FIFO consumption logic and batch availability
-- **NEW**: Adjustment request workflow issues:
+- **Adjustment request workflow issues**:
   - Symptom: Requests stuck in pending or self-approval detected
   - Resolution: Verify approval matrix logic, ensure RequestedBy ≠ ReviewedBy, check policy thresholds
-- **NEW**: Policy resolution problems:
+- **Policy resolution problems**:
   - Symptom: Incorrect pricing or expiry applied to batches
   - Resolution: Check policy scope priority (Brand > BrandGroup > Global), verify effective date ranges, validate brand group memberships
-- **NEW**: Credit expiry issues:
+- **Credit expiry issues**:
   - Symptom: Batches not expiring or duplicate warnings sent
   - Resolution: Verify expiry sweep service execution, check ExpiryWarningSentAt deduplication, validate ExpiresAt calculations
+- **NEW**: Email delivery failures:
+  - Symptom: Emails not sent or SMTP connection issues
+  - Resolution: Check SMTP configuration, verify recipient addresses, monitor retry counts and error messages in EmailLog
+- **NEW**: Brand registration workflow issues:
+  - Symptom: Registration requests stuck or approval delays
+  - Resolution: Check BrandRegistrationRequest status, verify reviewer assignments, validate brand uniqueness constraints
+- **NEW**: Email notification routing problems:
+  - Symptom: Wrong recipients or missing notifications
+  - Resolution: Verify UserAccount.Email fields, check notification type mappings, validate template rendering
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [architecture.md:28-52](file://docs/architecture.md#L28-L52)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [architecture.md:28-52](file://docs/architecture.md#L28-52)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
 
 ## Conclusion
-The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms, settlement management, credit ledger system, integration partner support, improved member identity management, and sophisticated batch-based credit system provide enhanced governance and operational control. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, enhanced security through POS transaction locking, strict POS integration controls, cross-tenant settlement tracking, comprehensive audit logging, and automated credit expiry management underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time with support for complex approval processes, outlet-specific campaign management, integration ecosystem expansion, and advanced credit management capabilities.
+The NonCash data model centers on a robust relational design with clear entity relationships and embedded business rules. The enhanced approval workflows, versioning capabilities, comprehensive tracking mechanisms, settlement management, credit ledger system, integration partner support, improved member identity management, sophisticated batch-based credit system, and comprehensive email notification system provide enhanced governance and operational control. The use of Entity Framework Core and the Repository pattern supports maintainability and scalability. Multi-tenancy, enhanced security through POS transaction locking, strict POS integration controls, cross-tenant settlement tracking, comprehensive audit logging, automated credit expiry management, and complete email notification audit trail underpin data integrity and compliance. Proper indexing, transactional semantics, and monitoring ensure performance and reliability. Migration and versioning strategies keep the schema evolving safely over time with support for complex approval processes, outlet-specific campaign management, integration ecosystem expansion, advanced credit management capabilities, and comprehensive email communication tracking.
 
 ## Appendices
 
@@ -1202,6 +1310,7 @@ The NonCash data model centers on a robust relational design with clear entity r
   - Expiration: Automatic deactivation via ExpiryDate and ValidFrom/ValidTo periods
   - **New**: Approval workflow tracking, plan version archival, webhook event generation, transfer lifecycle management
   - **New**: Batch-based credit lifecycle with purchase, welcome grant, adjustment, consumption, and expiry phases
+  - **New**: Email notification lifecycle with send attempts, retry logic, and audit trail
 - **Enhanced retention policy**:
   - VoucherUsage/VoucherDistribution: Retain for statutory periods (5-7 years)
   - VoucherPlanHeader/VoucherPlanDetail: Retain indefinitely for auditability with version history
@@ -1211,6 +1320,8 @@ The NonCash data model centers on a robust relational design with clear entity r
   - PaymentTransaction: Retain for payment processing compliance
   - VoucherEvent/WebhookDelivery: Retain for integration audit trails
   - UserAccount/Customer/MemberAccount: Retain per privacy regulations; anonymization on request
+  - **New**: EmailLog: Retain permanently for email audit trail and compliance
+  - **New**: BrandRegistrationRequest: Retain permanently for brand onboarding audit trail
   - **New**: CreditBatch: Retain indefinitely for credit history and audit purposes
   - **New**: CreditConsumption: Retain permanently for consumption audit trail
   - **New**: CreditExpiryLog: Retain permanently for expiry audit trail
@@ -1221,52 +1332,62 @@ The NonCash data model centers on a robust relational design with clear entity r
   - Metadata-only archiving for closed plans and outlets
   - **New**: Complete approval workflow archival, settlement archival, credit ledger archival, webhook delivery archival for compliance purposes
   - **New**: Batch-based credit archival with FIFO consumption history, adjustment request archival, policy version archival
+  - **New**: Email notification archival with send history and failure analysis
 
 ### Appendix B: Enhanced Security, Privacy, and Access Control
 - **Enhanced multi-tenancy**:
   - Strict BrandId enforcement across queries and writes
   - **New**: BrandManager role for brand-specific administrative access, integration partner brand authorization
   - **New**: Brand group support for bulk policy application with proper access controls
+  - **New**: Brand registration workflow with proper approval and audit trail
 - **Enhanced dynamic security**:
   - VoucherPlanDetail.VoucherCodeSecret rotates with secure storage; POS verification validates against current rules
   - **New**: POS transaction locking prevents unauthorized concurrent usage, settlement entry uniqueness prevents duplicate settlements
   - **New**: Credit consumption unique constraint prevents double charging, maker-checker approval workflow prevents unauthorized adjustments
+  - **New**: Email notification security with proper recipient validation and template sanitization
 - **Enhanced authentication and authorization**:
   - JWT for back-office users; API Keys for POS systems bound to approved ranges
   - **New**: Role-based access control for approval workflows and plan management, integration partner API key management with BCrypt hashing
   - **New**: FinancialController role for adjustment approvals, brand manager role for policy management within brand scope
+  - **New**: Email notification permissions based on user roles and brand membership
 - **Enhanced privacy**:
   - Pseudonymization of Customer.PhoneNumber; minimal PII collection
   - **New**: POS transaction data anonymization for audit trails, webhook payload sanitization, member account separation from customer data
   - **New**: Evidence image URLs stored securely, adjustment request evidence handled with proper access controls
+  - **New**: Email address protection in audit logs, notification content sanitization
 - **Enhanced audit logging**:
   - Track all sensitive operations (usage, approvals, distribution, version changes)
   - **New**: Complete approval workflow audit trail, settlement processing logs, credit ledger entries, webhook delivery attempts, transfer lifecycle tracking
   - **New**: Credit consumption audit trail, adjustment request audit trail, policy change audit trail, expiry event audit trail
+  - **New**: Comprehensive email notification audit trail with send attempts, retry logic, and failure analysis
 - **Enhanced data protection**:
   - Encryption at rest for sensitive fields (password hashes, API keys, webhook secrets)
   - **New**: Secure webhook signature verification, transfer expiration enforcement, credit balance calculation validation
   - **New**: Bank slip/evidence image security, adjustment request evidence protection, policy version integrity
+  - **New**: Email template security, SMTP credential protection, notification content encryption
 
 **Section sources**
-- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L76)
-- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-L28)
-- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-L22)
-- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L14)
-- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-L49)
-- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-L42)
-- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-L62)
-- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-L46)
-- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-L35)
-- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-L20)
-- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-L29)
-- [architecture.md:36-41](file://docs/architecture.md#L36-L41)
+- [VoucherPlanHeader.cs:22-76](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-76)
+- [VoucherPlanDetail.cs:10-28](file://src/NonCash.Core/Entities/VoucherPlanDetail.cs#L10-28)
+- [VoucherReview.cs:9-22](file://src/NonCash.Core/Entities/VoucherReview.cs#L9-22)
+- [VoucherUsage.cs:3-14](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-14)
+- [SettlementEntry.cs:7-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L7-49)
+- [CreditLedgerEntry.cs:8-42](file://src/NonCash.Core/Entities/CreditLedgerEntry.cs#L8-42)
+- [VoucherEvent.cs:8-62](file://src/NonCash.Core/Entities/VoucherEvent.cs#L8-62)
+- [IntegrationPartner.cs:8-46](file://src/NonCash.Core/Entities/IntegrationPartner.cs#L8-46)
+- [VoucherTransfer.cs:17-35](file://src/NonCash.Core/Entities/VoucherTransfer.cs#L17-35)
+- [MemberAccount.cs:10-20](file://src/NonCash.Core/Entities/MemberAccount.cs#L10-20)
+- [UserAccount.cs:18-29](file://src/NonCash.Core/Entities/UserAccount.cs#L18-29)
+- [architecture.md:36-41](file://docs/architecture.md#L36-41)
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
-- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-L70)
-- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-L64)
-- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-L70)
-- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-L22)
-- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-L21)
+- [CreditBatch.cs:27-70](file://src/NonCash.Core/Entities/CreditBatch.cs#L27-70)
+- [CreditPricingPolicy.cs:16-64](file://src/NonCash.Core/Entities/CreditPricingPolicy.cs#L16-64)
+- [CreditAdjustmentRequest.cs:20-70](file://src/NonCash.Core/Entities/CreditAdjustmentRequest.cs#L20-70)
+- [CreditConsumption.cs:7-22](file://src/NonCash.Core/Entities/CreditConsumption.cs#L7-22)
+- [CreditExpiryLog.cs:6-21](file://src/NonCash.Core/Entities/CreditExpiryLog.cs#L6-21)
+- [EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-24)
+- [BrandRegistrationRequest.cs:1-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L1-24)
+- [EmailNotificationService.cs:327-416](file://src/NonCash.Infrastructure\Services\EmailNotificationService.cs#L327-416)
 
 ### Appendix C: Enhanced Data Migration Paths and Version Management
 - **Enhanced migration strategy**:
@@ -1274,25 +1395,32 @@ The NonCash data model centers on a robust relational design with clear entity r
   - Add indexes and constraints in separate migration steps to minimize downtime
   - **New**: Support for plan versioning migrations, approval workflow schema changes, settlement tracking migrations, credit ledger migrations, integration partner migrations, member identity split migrations
   - **New**: Batch-based credit system migrations with proper dependency ordering, maker-checker workflow migrations, brand group migrations, policy resolution migrations
+  - **New**: Email notification system migrations with comprehensive audit trail support
+  - **New**: Brand registration workflow migrations with approval process support
 - **Enhanced version management**:
   - Tag database versions alongside application releases
   - Maintain rollback scripts for critical migrations
   - **New**: Version-aware migration scripts for plan header versioning, settlement processing, credit ledger operations, webhook delivery system
   - **New**: Migration scripts for credit batch system, adjustment request workflow, policy resolution, brand group management
+  - **New**: Migration scripts for email notification system, brand registration workflow, user account email support
 - **Enhanced zero-downtime deployments**:
   - Shadow deployments for large schema changes; blue/green deployment for API and services
   - **New**: Support for gradual rollout of approval workflow enhancements, settlement processing, credit ledger operations, integration partner features
   - **New**: Support for gradual rollout of batch-based credit system, maker-checker approvals, policy management features
+  - **New**: Support for gradual rollout of email notification system, brand registration workflow, enhanced user account features
 - **Enhanced data migration considerations**:
   - Backfill existing data with new required fields using default values
   - Implement data transformation scripts for legacy data compatibility
   - **New**: Migrate Customer references to MemberAccount relationships, populate settlement entries for historical transactions, calculate credit balances from existing data
   - **New**: Migrate existing credit data to batch model, establish FIFO consumption history, populate adjustment request audit trails, migrate policy configurations
+  - **New**: Populate email notification history, establish brand registration workflow data, migrate user account email addresses
 
 **Section sources**
-- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-L28)
+- [source-tree-analysis.md:15-28](file://docs/source-tree-analysis.md#L15-28)
 - [description.txt:11-22](file://description.txt#L11-L22)
-- [CreditBatchConfiguration.cs:1-104](file://src/NonCash.Infrastructure/Data/Configurations/CreditBatchConfiguration.cs#L1-L104)
-- [CreditPricingPolicyConfiguration.cs:1-40](file://src/NonCash.Infrastructure/Data/Configurations/CreditPricingPolicyConfiguration.cs#L1-L40)
-- [BrandGroupConfiguration.cs:1-47](file://src/NonCash.Infrastructure/Data/Configurations/BrandGroupConfiguration.cs#L1-L47)
-- [CreditAdjustmentRequestConfiguration.cs:1-46](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs#L1-L46)
+- [CreditBatchConfiguration.cs:1-104](file://src/NonCash.Infrastructure/Data/Configurations/CreditBatchConfiguration.cs#L1-104)
+- [CreditPricingPolicyConfiguration.cs:1-40](file://src/NonCash.Infrastructure/Data/Configurations/CreditPricingPolicyConfiguration.cs#L1-40)
+- [BrandGroupConfiguration.cs:1-47](file://src/NonCash.Infrastructure/Data/Configurations/BrandGroupConfiguration.cs#L1-47)
+- [CreditAdjustmentRequestConfiguration.cs:1-46](file://src/NonCash.Infrastructure/Data/Configurations/CreditAdjustmentRequestConfiguration.cs#L1-46)
+- [EmailLogConfiguration.cs:1-28](file://src/NonCash.Infrastructure/Data/Configurations/EmailLogConfiguration.cs#L1-28)
+- [BrandRegistrationRequestConfiguration.cs:1-49](file://src/NonCash.Infrastructure/Data/Configurations/BrandRegistrationRequestConfiguration.cs#L1-49)

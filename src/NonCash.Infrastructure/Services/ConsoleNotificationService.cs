@@ -82,4 +82,24 @@ public class ConsoleNotificationService : INotificationService
         Console.WriteLine($"[NOTIFICATION] Plan '{notification.PlanDisplayName}' {outcome}. Email: {notification.CreatorEmail ?? "n/a"}.");
         return Task.CompletedTask;
     }
+
+    public Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Staff account created for '{notification.FullName}' ({notification.Username}) with role {notification.Role}. " +
+                          $"Brand: {notification.BrandName ?? "n/a"}. Email: {notification.UserEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Voucher transfer: {notification.VoucherCount} voucher(s) from {notification.SenderName} to {notification.RecipientName} " +
+                          $"(phone: {notification.RecipientPhone}, email: {notification.RecipientEmail ?? "n/a"}).");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Password reset requested for '{notification.FullName}'. Token expires {notification.TokenExpiry:yyyy-MM-dd HH:mm}. Email: {notification.UserEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
 }

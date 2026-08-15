@@ -45,6 +45,15 @@ public class UserAccountConfiguration : IEntityTypeConfiguration<UserAccount>
             .HasConversion<string>()
             .HasMaxLength(20);
 
+        builder.Property(u => u.PasswordResetToken)
+            .HasMaxLength(255);
+
+        builder.HasIndex(u => u.PasswordResetToken)
+            .HasDatabaseName("IX_user_accounts_password_reset_token")
+            .HasFilter("password_reset_token IS NOT NULL");
+
+        builder.Property(u => u.PasswordResetTokenExpiry);
+
         builder.Property(u => u.CreatedAt)
             .IsRequired();
 

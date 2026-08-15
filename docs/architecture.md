@@ -71,6 +71,7 @@ NonCash is designed as a **generic voucher engine** that integrates with **any b
 | Segmentation and targeting | Primary | — |
 | Campaign marketing decisions | Primary | — |
 | Push notifications | Primary | — |
+| **Internal email notifications** (admin/brand) | — | **Primary** |
 | Voucher wallet display | Primary (consumes NonCash data) | Data provider |
 | Voucher production and lifecycle | — | Primary |
 | Distribution execution | Triggers via API | Primary |
@@ -95,6 +96,64 @@ NonCash exposes a **Loyalty App Integration API** (see `docs/api-contracts.md`) 
 - **Any Loyalty App can integrate** using the same API, with partner-specific API keys for isolation.
 - **Event-driven architecture** ensures the Loyalty App receives real-time updates without polling.
 - **No data duplication** — NonCash stores only the minimum member reference (phone number) needed for voucher ownership. Full customer profiles remain in the Loyalty App.
+
+## Internal Email Notification System
+
+NonCash includes a built-in email notification subsystem for **admin and brand-facing** operational alerts. This is distinct from the Loyalty App's push notifications (which target end consumers).
+
+### Notification Scenarios (15 total)
+
+See [docs/notification-matrix.md](notification-matrix.md) for the full matrix with triggers and recipients.
+
+| # | Scenario | Template | Recipients |
+|---|---|---|---|
+| 1 | New business registration | `AdminNewRegistration` | All Admin users |
+| 2 | Registration submitted | `ApplicantRegistrationSubmitted` | Applicant |
+| 3 | Registration approved/rejected | `ApplicantReviewResult` | Brand representative |
+| 4 | Voucher received | `VoucherReceived` | Member |
+| 5 | Adjustment pending | `AdjustmentPending` | FinancialControllers |
+| 6 | Adjustment reviewed | `AdjustmentReviewed` | Requester |
+| 7 | Credits expiring | `CreditsExpiring` | Brand contact |
+| 8 | Welcome credit granted | `WelcomeCreditGranted` | Brand contact |
+| 9 | Credit purchased | `CreditPurchased` | Brand contact |
+| 10 | Low credit balance | `LowCreditBalance` | Brand contact |
+| 11 | Credits forfeited | `CreditsForfeited` | Brand contact |
+| 12 | Plan reviewed | `PlanReviewed` | Plan creator |
+| 13 | Staff account created | `StaffAccountCreated` | New staff user |
+| 14 | Voucher transfer received | `VoucherTransferInitiated` | Transfer recipient |
+| 15 | Password reset | `PasswordReset` | User |
+
+### Architecture
+
+```
+INotificationService (15 methods)
+  └── EmailNotificationService (SMTP delivery)
+        ├── IEmailTemplateRenderer → PlaceholderEmailTemplateRenderer
+        ├── SmtpClient (configurable via appsettings / user secrets)
+        ├── Retry policy: 3 retries, exponential backoff for transient SMTP errors
+        ├── Feature flag: Notifications:EmailEnabled
+        └── EmailLog entity → email_logs table (audit trail)
+```
+
+### Configuration
+
+SMTP settings are configured in `appsettings.json` (or user secrets for development):
+
+```json
+"Smtp": {
+  "Host": "smtp.gmail.com",
+  "Port": 587,
+  "EnableSsl": true,
+  "FromName": "NonCash Platform",
+  "FromAddress": "noreply@noncash.app"
+}
+```
+
+Credentials (Username, Password) are stored in **user secrets** (dev) or environment variables (production).
+
+### Audit Trail
+
+Every send attempt is recorded in the `email_logs` table with: `ToAddress`, `Subject`, `TemplateName`, `NotificationType`, `Success`, `ErrorMessage`, `RetryCount`, `SentAt`.
 
 ## Technical Stack Summary
 

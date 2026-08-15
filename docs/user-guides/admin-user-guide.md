@@ -131,7 +131,7 @@ The system atomically:
 - Activates the linked Brand (`Status = Active`).
 - Activates the linked UserAccount (`Status = Active`).
 - Records `ReviewedAt`, `ReviewedByUserId`, and `ReviewNotes`.
-- Sends a notification to the business representative with login instructions.
+- Sends an **email notification** to the business representative with login instructions (delivered via SMTP; recorded in the email audit log).
 
 ### 4.4 Reject a Registration
 
@@ -145,7 +145,7 @@ The system atomically:
 - Sets the linked Brand status to `Rejected`.
 - Sets the linked UserAccount status to `Rejected` (or deletes it based on configuration).
 - Records `ReviewedAt` and `ReviewedByUserId`.
-- Sends a rejection notification with the reason.
+- Sends a **rejection email** to the business representative with the reason (delivered via SMTP; recorded in the email audit log).
 
 ### 4.5 Approval Rules
 

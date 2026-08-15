@@ -9,17 +9,20 @@ public class TransferService : ITransferService
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
+    private readonly INotificationService _notificationService;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
-        IRepository<VoucherDistribution> distributionRepository)
+        IRepository<VoucherDistribution> distributionRepository,
+        INotificationService notificationService)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
+        _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
     }
 
     public async Task<TransferResult> TransferAsync(
@@ -127,6 +130,35 @@ public class TransferService : ITransferService
         }
 
         await _detailRepository.SaveChangesAsync(cancellationToken);
+
+        // Send transfer notifications to eligible recipients
+        var senderMember = await _memberRepository.GetByIdAsync(fromMemberId, cancellationToken);
+        var senderCustomer = senderMember != null
+            ? await _customerRepository.GetByIdAsync(senderMember.CustomerId, cancellationToken)
+            : null;
+        var senderName = senderCustomer?.FullName ?? senderMember?.FullName ?? "A member";
+
+        foreach (var (detail, recipientMemberId, phone) in transfers)
+        {
+            try
+            {
+                var recipientCustomer = await _customerRepository.GetByIdAsync(
+                    (await _memberRepository.GetByIdAsync(recipientMemberId, cancellationToken))!.CustomerId,
+                    cancellationToken);
+
+                await _notificationService.NotifyVoucherTransferInitiatedAsync(new VoucherTransferInitiatedNotification(
+                    recipientCustomer?.Email,
+                    phone,
+                    recipientCustomer?.FullName ?? phone,
+                    senderName,
+                    1,
+                    now), cancellationToken);
+            }
+            catch (Exception)
+            {
+                // Notification failures must not break the transfer flow.
+            }
+        }
 
         return new TransferResult(
             Success: true,

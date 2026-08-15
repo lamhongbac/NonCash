@@ -7,11 +7,19 @@ public class UserService
 {
     private readonly IUserAccountRepository _userRepository;
     private readonly IAuthService _authService;
+    private readonly INotificationService _notificationService;
+    private readonly IBrandRepository _brandRepository;
 
-    public UserService(IUserAccountRepository userRepository, IAuthService authService)
+    public UserService(
+        IUserAccountRepository userRepository,
+        IAuthService authService,
+        INotificationService notificationService,
+        IBrandRepository brandRepository)
     {
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+        _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+        _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
     }
 
     public async Task<UserAccount> CreateAsync(string username, string password, string fullName, UserRole role, Guid? brandId, string? email = null, CancellationToken cancellationToken = default)
@@ -44,6 +52,18 @@ public class UserService
 
         await _userRepository.AddAsync(user, cancellationToken);
         await _userRepository.SaveChangesAsync(cancellationToken);
+
+        // Send staff account created notification
+        string? brandName = null;
+        if (brandId.HasValue)
+        {
+            var brand = await _brandRepository.GetByIdAsync(brandId.Value, cancellationToken);
+            brandName = brand?.Name;
+        }
+
+        await _notificationService.NotifyStaffAccountCreatedAsync(new StaffAccountCreatedNotification(
+            user.Email, user.Username, user.FullName, role.ToString(), brandName), cancellationToken);
+
         return user;
     }
 

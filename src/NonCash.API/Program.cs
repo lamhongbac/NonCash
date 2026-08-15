@@ -121,7 +121,8 @@ builder.Services.AddScoped<IRegistrationService, RegistrationService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddScoped<IEmailTemplateRenderer, PlaceholderEmailTemplateRenderer>();
 var smtpHost = builder.Configuration["Smtp:Host"];
-if (!string.IsNullOrWhiteSpace(smtpHost))
+var emailEnabled = builder.Configuration.GetValue<bool?>("Notifications:EmailEnabled") ?? true;
+if (!string.IsNullOrWhiteSpace(smtpHost) && emailEnabled)
 {
     builder.Services.AddScoped<INotificationService, EmailNotificationService>();
 }

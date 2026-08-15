@@ -34,15 +34,20 @@
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [CustomerDtos.cs](file://src/NonCash.API/DTOs/CustomerDtos.cs)
+- [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Enhanced CreditsController with new batch-focused endpoints: /batches, /consumptions, /pricing, /expiring for comprehensive credit management
-- Added CreditAdjustmentsController with full maker-checker workflow for credit adjustments (create, approve, reject)
-- Added CreditPoliciesController with complete CRUD operations for credit pricing policies and brand group management
-- Updated Credit Ledger API section with expanded functionality for batch operations, consumption tracking, and policy resolution
-- Enhanced security model with role-based access control for financial operations
+- Added comprehensive Customer Management API with search, CRUD operations, blacklist management, and CSV import capabilities
+- Integrated Email Logging system for audit trail of all outbound email notifications with success/failure tracking
+- Enhanced Business Management API with improved entity operations and validation
+- Updated authentication and authorization patterns for customer management endpoints
+- Added new notification types and email template support for various business events
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -72,6 +77,8 @@ This document provides comprehensive API contracts and integration guidance for 
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
 - **New**: Business Management API: Administrative operations for business entities
+- **New**: Customer Management API: Comprehensive customer record management with blacklist functionality and bulk import
+- **New**: Email Notification System: Complete audit trail for all outbound email communications with retry logic and error tracking
 
 It covers HTTP methods, URL patterns, request/response schemas, authentication, security, common use cases, client implementation guidelines, error handling strategies, rate limiting considerations, versioning, transaction security model, rollback mechanisms, performance optimization tips, and debugging approaches.
 
@@ -81,7 +88,7 @@ The repository organizes API-related knowledge across several documentation file
 - Architecture describes the 3-layer SaaS design and security posture
 - Data Models outline core entities and relationships
 - Index and scan report provide project metadata and current state
-- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, and enhanced credit management
+- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, enhanced credit management, customer management, and email logging
 
 ```mermaid
 graph TB
@@ -117,12 +124,17 @@ V["ImageUploadController"]
 W["MemberTransfersController"]
 X["BusinessesController"]
 Y["IntegrationPartnersController"]
+Z["CustomersController"]
+end
+subgraph "Email & Notifications"
+AA["EmailNotificationService"]
+BB["EmailLog Entity"]
 end
 subgraph "Planning Artifacts"
-Z["_bmad-output/planning-artifacts/epics.md"]
+CC["_bmad-output/planning-artifacts/epics.md"]
 end
 subgraph "Business Rules"
-AA["Key Functionalities.txt"]
+DD["Key Functionalities.txt"]
 end
 A --> B
 A --> C
@@ -130,8 +142,8 @@ A --> D
 A --> E
 C --> B
 D --> B
-Z --> B
-AA --> B
+CC --> B
+DD --> B
 F --> B
 G --> B
 H --> B
@@ -152,6 +164,9 @@ V --> B
 W --> B
 X --> B
 Y --> B
+Z --> B
+AA --> B
+BB --> B
 ```
 
 **Diagram sources**
@@ -172,6 +187,9 @@ Y --> B
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
 
 **Section sources**
 - [index.md](file://docs/index.md)
@@ -193,6 +211,8 @@ Y --> B
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
 - **New**: Business Management API: Administrative operations for business entities
+- **New**: Customer Management API: Comprehensive customer record management with search, CRUD operations, blacklist functionality, and CSV import capabilities
+- **New**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, and template rendering
 
 Authentication:
 - API Key: Provided via the X-API-Key header for POS clients and integration partners
@@ -223,6 +243,8 @@ Security highlights:
 - Partner API key management for external loyalty apps
 - **Enhanced**: Financial controls with maker-checker workflow for credit adjustments
 - **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
+- **New**: Customer data protection with role-based access controls
+- **New**: Email notification audit trail with comprehensive logging and retry mechanisms
 
 ```mermaid
 graph TB
@@ -237,6 +259,8 @@ BS["Brand Scope Middleware"]
 PK["Partner API Key Management"]
 MC["Maker-Checker Workflow"]
 PA["Policy-Based Authorization"]
+CL["Customer Data Protection"]
+EL["Email Audit Trail"]
 end
 BLL --> MT
 BLL --> DS
@@ -246,6 +270,8 @@ BLL --> BS
 BLL --> PK
 BLL --> MC
 BLL --> PA
+BLL --> CL
+BLL --> EL
 ```
 
 **Diagram sources**
@@ -849,6 +875,98 @@ Business Entity Features:
 **Section sources**
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 
+### **New**: Customer Management API
+
+#### Customer CRUD Operations
+Endpoints:
+- Search Customers: GET /api/v1/customers?phoneNumber=&name=&email=&status=&pageNumber=1&pageSize=20
+- Get Customer: GET /api/v1/customers/{id}
+- Create Customer: POST /api/v1/customers
+- Update Customer: PUT /api/v1/customers/{id}
+
+#### Blacklist Management
+Endpoints:
+- Blacklist Customer: PUT /api/v1/customers/{id}/blacklist (BrandManager/Admin)
+- Unblacklist Customer: PUT /api/v1/customers/{id}/unblacklist (BrandManager/Admin)
+
+#### Bulk Import
+Endpoints:
+- Import Customers: POST /api/v1/customers/import (CSV file upload)
+
+Customer Data Model:
+- PhoneNumber: Unique identifier, required field
+- FullName: Customer display name
+- Email: Optional contact email
+- Status: Active or Blacklisted
+- CreatedAt/UpdatedAt: Timestamps
+
+Search Capabilities:
+- Phone number search with normalization
+- Name search with partial matching
+- Email search with exact matching
+- Status filtering (Active, Blacklisted)
+- Pagination support (default 20, max 100)
+
+Import Functionality:
+- CSV file upload with validation
+- Upsert logic for duplicate phone numbers
+- Error reporting with detailed failure reasons
+- Bulk processing with transactional integrity
+
+**New** Comprehensive customer management system with advanced search, blacklist functionality, and bulk import capabilities
+
+**Section sources**
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [CustomerDtos.cs](file://src/NonCash.API/DTOs/CustomerDtos.cs)
+
+### **New**: Email Notification System
+
+#### Email Log Entity
+The EmailLog entity provides comprehensive audit trail for all outbound email communications:
+
+Fields:
+- ToAddress: Recipient email address
+- Subject: Email subject line
+- TemplateName: Template used for email rendering
+- NotificationType: Category of notification (e.g., "NewRegistration", "VoucherDistribution", "AdjustmentPending")
+- RelatedEntityId: Optional reference to related business entity
+- Success: Boolean indicating delivery success
+- ErrorMessage: Error details for failed deliveries
+- RetryCount: Number of delivery attempts
+- SentAt: Timestamp of delivery attempt
+
+#### Email Notification Service
+The EmailNotificationService handles all email communications with robust error handling and retry logic:
+
+Supported Notification Types:
+- AdminNewRegistration: Business registration notifications to administrators
+- ApplicantReviewResult: Registration approval/rejection notifications
+- ApplicantRegistrationSubmitted: Confirmation emails for new registrations
+- VoucherReceived: Voucher distribution notifications to recipients
+- AdjustmentPending: Credit adjustment approval requests
+- AdjustmentReviewed: Credit adjustment decision notifications
+- CreditsExpiring: Warning notifications for expiring credits
+- WelcomeCreditGranted: Welcome credit notifications
+- CreditPurchased: Credit purchase receipts
+- LowCreditBalance: Low balance warning notifications
+- CreditsForfeited: Expired credit notifications
+- PlanReviewed: Voucher plan approval/rejection notifications
+
+Features:
+- SMTP configuration with SSL/TLS support
+- Automatic retry logic with exponential backoff (max 3 retries)
+- HTML email template rendering
+- Comprehensive error logging and audit trail
+- Configurable sender information and display names
+- Transient error detection and handling
+
+**New** Complete email notification system with comprehensive audit trail, retry logic, and template rendering capabilities
+
+**Section sources**
+- [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
+
 ### Data Model Context for POS Redemption
 
 Core entities and relationships inform POS redemption semantics:
@@ -884,6 +1002,8 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 - **New**: Payment API depends on PaymentService, PurchaseService, and ZaloPay integration
 - **New**: Image Upload API depends on ImageStorageService for CDN integration
 - **New**: Business API depends on BusinessRepository and BrandRepository
+- **New**: Customer API depends on CustomerService and ICustomerImportService for bulk operations
+- **New**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository
 - All services rely on the Data Access Layer for persistence and transactional integrity
 - Security controls (multi-tenancy, dynamic codes, API keys, JWT) are enforced at the Business Logic Layer
 
@@ -908,6 +1028,8 @@ SETTLEMENT["Settlement API"] --> SSVC["SettlementService"]
 PAYMENTS["Payment API"] --> PSVC2["PaymentService"]
 UPLOAD["Image Upload API"] --> ISVC["ImageStorageService"]
 BUSINESS["Business API"] --> BR["BusinessRepository"]
+CUSTOMERS["Customer API"] --> CSVC2["CustomerService"]
+EMAIL["Email System"] --> ENSVC["EmailNotificationService"]
 IPARTNERS["Integration Partners API"] --> IPSVC["IntegrationPartnerService"]
 USVC --> DAL["Data Access Layer"]
 TSVC --> DAL
@@ -925,6 +1047,8 @@ PSVC2 --> DAL
 SSVC --> DAL
 ISVC --> DAL
 BR --> DAL
+CSVC2 --> DAL
+ENSVC --> DAL
 IPSVC --> DAL
 DAL --> DB["PostgreSQL"]
 ```
@@ -952,6 +1076,9 @@ DAL --> DB["PostgreSQL"]
 - **New**: CDN integration: Leverage CDN for image delivery to reduce server load
 - **New**: Webhook handling: Implement idempotent webhook processing for payment confirmations
 - **New**: Settlement computation: Optimize netting calculations with database indexes for date ranges and brand pairs
+- **New**: Customer search: Utilize database indexes for phone number, name, and email searches
+- **New**: Email delivery: Implement asynchronous email sending with retry logic to avoid blocking operations
+- **New**: Bulk imports: Process CSV imports in batches with transactional integrity and progress reporting
 
 ## Troubleshooting Guide
 Common issues and strategies:
@@ -996,18 +1123,28 @@ Common issues and strategies:
 - **New**: Image upload issues:
   - Validate file format and size constraints
   - Ensure uniqueCode prevents duplicate uploads
+- **New**: Customer management issues:
+  - Verify phone number normalization for consistent searching
+  - Check blacklist status impacts on voucher distribution
+  - Validate CSV import format and data quality
+- **New**: Email notification issues:
+  - Check SMTP configuration and connectivity
+  - Review email logs for delivery failures and retry attempts
+  - Validate email template rendering and recipient addresses
 - Debugging:
   - Capture request IDs and timestamps; correlate with backend logs
   - Validate outletID against the sales range defined in the associated VoucherPlanHeader
   - Monitor usage status transitions (Pending → In-Use → Complete/Pending) to detect anomalies
   - Check JWT claims for brand and role information
+  - Review email log entries for notification delivery status
+  - Monitor customer search query performance with appropriate indexing
 
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 
 ## Conclusion
-NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, and comprehensive credit adjustment workflows with maker-checker controls. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
+NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, and a complete email notification system with audit trails. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
 
 ## Appendices
 
@@ -1130,6 +1267,15 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - POST /api/v1/businesses: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse
 - PUT /api/v1/businesses/{id}: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse
 
+**Customer Management API**:
+- GET /api/v1/customers: Header: Authorization: Bearer <JWT> → PagedResult<CustomerResponse>
+- GET /api/v1/customers/{id}: Header: Authorization: Bearer <JWT> → CustomerResponse
+- POST /api/v1/customers: Header: Authorization: Bearer <JWT> → CustomerResponse
+- PUT /api/v1/customers/{id}: Header: Authorization: Bearer <JWT> → CustomerResponse
+- PUT /api/v1/customers/{id}/blacklist: Header: Authorization: Bearer <JWT> (BrandManager/Admin) → CustomerResponse
+- PUT /api/v1/customers/{id}/unblacklist: Header: Authorization: Bearer <JWT> (BrandManager/Admin) → CustomerResponse
+- POST /api/v1/customers/import: Header: Authorization: Bearer <JWT> (BrandManager/Admin) → CustomerImportResponse
+
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
 - [CreditsController.cs](file://src/NonCash.API/Controllers/CreditsController.cs)
@@ -1142,6 +1288,8 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [CustomerDtos.cs](file://src/NonCash.API/DTOs/CustomerDtos.cs)
 
 ### Security Considerations
 - Multi-tenancy: BrandID isolates data between tenants across all business APIs
@@ -1156,6 +1304,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Partner API Key Management: Secure key generation and rotation for external loyalty apps
 - **New**: Webhook Security: Signature validation for payment provider callbacks
 - **New**: File Upload Security: Format validation and size limits for image uploads
+- **New**: Customer Data Protection: Role-based access controls for customer management operations
+- **New**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking
+- **New**: Blacklist Enforcement: Automatic exclusion of blacklisted customers from distributions and purchases
 
 **Section sources**
 - [architecture.md](file://docs/architecture.md)
@@ -1166,6 +1317,8 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 
 ### Versioning
 - All endpoints are under v1 of the base path
@@ -1188,6 +1341,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Settlement tracking occurs automatically for cross-tenant redemptions
 - **New**: Payment processing integrates with ZaloPay for B2C purchases
 - **New**: Image uploads support rich voucher display with CDN integration
+- **New**: Customer blacklist status prevents participation in promotions and purchases
+- **New**: Email notifications provide audit trail for all outbound communications with retry logic
+- **New**: Customer import supports upsert logic for duplicate phone numbers with error reporting
 
 **Section sources**
 - [Key Functionalities.txt](file://Key%20Functionalities.txt)
@@ -1199,3 +1355,5 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
+- [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)

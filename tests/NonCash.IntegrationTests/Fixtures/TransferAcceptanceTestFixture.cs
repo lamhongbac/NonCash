@@ -61,7 +61,7 @@ public class TransferAcceptanceTestFixture : IDisposable
 
         var jwtConfig = TestJwtConfig.Create();
         JwtTokenService = new JwtTokenService(jwtConfig);
-        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService);
+        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService, new ConsoleNotificationService());
 
         TransferService = new VoucherTransferService(
             VoucherRepository,

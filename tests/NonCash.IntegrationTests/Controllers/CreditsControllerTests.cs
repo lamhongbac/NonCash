@@ -509,6 +509,9 @@ public class CreditsControllerTests : IDisposable
         public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>

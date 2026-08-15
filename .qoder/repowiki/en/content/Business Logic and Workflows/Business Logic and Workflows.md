@@ -9,7 +9,6 @@
 - [docs/data-models.md](file://docs/data-models.md)
 - [docs/api-contracts.md](file://docs/api-contracts.md)
 - [docs/source-tree-analysis.md](file://docs/source-tree-analysis.md)
-- [docs/pos-integration-guide.md](file://docs/pos-integration-guide.md)
 - [_bmad-output/planning-artifacts/epics.md](file://_bmad-output/planning-artifacts/epics.md)
 - [_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md)
 - [_bmad/bmm/config.yaml](file://_bmad/bmm/config.yaml)
@@ -24,6 +23,9 @@
 - [src/NonCash.Core/Entities/CreditConsumption.cs](file://src/NonCash.Core/Entities/CreditConsumption.cs)
 - [src/NonCash.Core/Entities/CreditExpiryLog.cs](file://src/NonCash.Core/Entities/CreditExpiryLog.cs)
 - [src/NonCash.Core/Entities/WelcomeGrantPolicy.cs](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs)
+- [src/NonCash.Core/Entities/EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
+- [src/NonCash.Core/Entities/Business.cs](file://src/NonCash.Core/Entities/Business.cs)
+- [src/NonCash.Core/Entities/Customer.cs](file://src/NonCash.Core/Entities/Customer.cs)
 - [src/NonCash.Core/Interfaces/ISettlementService.cs](file://src/NonCash.Core/Interfaces/ISettlementService.cs)
 - [src/NonCash.Core/Interfaces/ICreditService.cs](file://src/NonCash.Core/Interfaces/ICreditService.cs)
 - [src/NonCash.Core/Interfaces/ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
@@ -34,26 +36,27 @@
 - [src/NonCash.API/Controllers/CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [src/NonCash.API/Controllers/WelcomePoliciesController.cs](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs)
 - [src/NonCash.API/Controllers/PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
+- [src/NonCash.API/Controllers/BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [src/NonCash.Infrastructure/Services/SettlementService.cs](file://src/NonCash.Infrastructure/Services/SettlementService.cs)
 - [src/NonCash.Infrastructure/Services/CreditService.cs](file://src/NonCash.Infrastructure/Services/CreditService.cs)
 - [src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs](file://src/NonCash.Infrastructure/Services/CreditAdjustmentService.cs)
 - [src/NonCash.Infrastructure/Services/CreditPolicyService.cs](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs)
 - [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
+- [src/NonCash.Infrastructure/Services/EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [src/NonCash.API/HostedServices/CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
-- [src/NonCash.Core/Entities/IntegrationPartner.cs](file://src/NonCash.Core/Entities/IntegrationPartner.cs)
 - [src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs](file://src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs)
 - [src/NonCash.Core/Configuration/CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
 - [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
+- [src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated welcome credit system to use business-scoped policies instead of brand-scoped configuration
-- Added migration details for transforming existing brand-level welcome credits to business-level policies with 'Migrated:' prefix preservation
-- Enhanced policy resolution engine documentation to support business-scope welcome grants alongside existing global, brand group, and brand scopes
-- Updated CreditBatch entity documentation to include WelcomePolicyId field for tracking welcome grant sources
-- Added new WelcomePoliciesController API endpoints for business-level welcome policy management
-- Updated CreditService implementation to use new business-scoped welcome policy resolution
+- Added comprehensive email logging system with audit trail for all outbound notifications
+- Enhanced business management capabilities with dedicated Business entity and CRUD operations
+- Improved customer management with enhanced blacklist functionality and search capabilities
+- Updated notification service to integrate with email logging system for complete audit trails
+- Added new API endpoints for business management and improved customer operations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -64,23 +67,26 @@
 6. [Epic 10 Batch-Based Credit System](#epic-10-batch-based-credit-system)
 7. [Credit Pricing Policy Management](#credit-pricing-policy-management)
 8. [Business-Scoped Welcome Credit Policies](#business-scoped-welcome-credit-policies)
-9. [Maker-Checker Adjustment Workflow](#maker-checker-adjustment-workflow)
-10. [Automated Credit Expiry Management](#automated-credit-expiry-management)
-11. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
-12. [Payment Processing Integration](#payment-processing-integration)
-13. [Loyalty App Integrations](#loyalty-app-integrations)
-14. [Enhanced Display Data Handling](#enhanced-display-data-handling)
-15. [Dependency Analysis](#dependency-analysis)
-16. [Performance Considerations](#performance-considerations)
-17. [Troubleshooting Guide](#troubleshooting-guide)
-18. [Conclusion](#conclusion)
-19. [Appendices](#appendices)
+9. [Enhanced Email Logging System](#enhanced-email-logging-system)
+10. [Business Management Capabilities](#business-management-capabilities)
+11. [Enhanced Customer Management](#enhanced-customer-management)
+12. [Maker-Checker Adjustment Workflow](#maker-checker-adjustment-workflow)
+13. [Automated Credit Expiry Management](#automated-credit-expiry-management)
+14. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
+15. [Payment Processing Integration](#payment-processing-integration)
+16. [Loyalty App Integrations](#loyalty-app-integrations)
+17. [Enhanced Display Data Handling](#enhanced-display-data-handling)
+18. [Dependency Analysis](#dependency-analysis)
+19. [Performance Considerations](#performance-considerations)
+20. [Troubleshooting Guide](#troubleshooting-guide)
+21. [Conclusion](#conclusion)
+22. [Appendices](#appendices)
 
 ## Introduction
 This document explains the NonCash business logic and workflows across production planning, distribution, POS redemption, customer and brand management, approvals, reporting, and the newly implemented Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. It synthesizes the project's functional requirements, architecture, and API contracts into a cohesive guide for both technical and non-technical stakeholders. Practical scenarios and edge cases are included to illustrate real-world usage.
 
 ## Project Structure
-The NonCash project is organized around a 3-layer SaaS architecture with microservices for planning, approval, distribution, usage, identity, tenant management, settlement processing, credit management, and payment integration. The repository includes:
+The NonCash project is organized around a 3-layer SaaS architecture with microservices for planning, approval, distribution, usage, identity, tenant management, settlement processing, credit management, payment integration, and email notification services. The repository includes:
 - Business requirement and functional specification documents
 - Architectural and data model documentation
 - API contracts for POS and Member App
@@ -95,7 +101,6 @@ ARCH["docs/architecture.md"]
 DM["docs/data-models.md"]
 API["docs/api-contracts.md"]
 STA["docs/source-tree-analysis.md"]
-POS["docs/pos-integration-guide.md"]
 end
 subgraph "Requirements"
 KEY["Key Functionalities.txt"]
@@ -111,7 +116,6 @@ IDX --> ARCH
 IDX --> DM
 IDX --> API
 IDX --> STA
-IDX --> POS
 EPICS --> API
 EPICS --> DM
 IR --> EPICS
@@ -126,7 +130,6 @@ MAN --> BMM
 - [docs/data-models.md:1-98](file://docs/data-models.md#L1-L98)
 - [docs/api-contracts.md:1-109](file://docs/api-contracts.md#L1-L109)
 - [docs/source-tree-analysis.md:1-50](file://docs/source-tree-analysis.md#L1-L50)
-- [docs/pos-integration-guide.md:48-252](file://docs/pos-integration-guide.md#L48-L252)
 - [_bmad-output/planning-artifacts/epics.md:1-319](file://_bmad-output/planning-artifacts/epics.md#L1-L319)
 - [_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md:1-127](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md#L1-L127)
 - [_bmad/bmm/config.yaml:1-17](file://_bmad/bmm/config.yaml#L1-L17)
@@ -148,6 +151,8 @@ NonCash organizes business capabilities into microservices aligned with function
 - **Enhanced Credit Service**: Batch-based prepaid credit billing with FIFO consumption, pricing policies, and maker-checker workflows
 - Payment Service: Payment gateway integration and transaction management
 - Integration Service: Loyalty app partner management and member wallet APIs
+- **Email Notification Service**: Comprehensive email logging and audit trail system
+- **Business Management Service**: Multi-business support with brand relationships
 
 These services operate under JWT and API Key security, enforce multi-tenancy via BrandID, and use dynamic voucher codes to prevent fraud.
 
@@ -175,6 +180,8 @@ CREDIT["Enhanced Credit Service<br/>Batch-Based System"] --> DAL
 PAYMENT["Payment Service"] --> DAL
 INTEGRATION["Integration Service"] --> DAL
 EXPIRY["Credit Expiry Sweep Service"] --> DAL
+EMAIL["Email Notification Service"] --> DAL
+BUSINESS["Business Management Service"] --> DAL
 ```
 
 **Diagram sources**
@@ -239,7 +246,7 @@ Dist-->>Mem : "Vouchers Available in My Vouchers"
 
 **Diagram sources**
 - [_bmad-output/planning-artifacts/epics.md:199-257](file://_bmad-output/planning-artifacts/epics.md#L199-L257)
-- [docs/data-models.md:55-62](file://docs/data-models.md#L55-L62)
+- [docs/data-models.md:55-62](file://docs/data-models.md#L55-62)
 
 **Section sources**
 - [Key Functionalities.txt:87-134](file://Key%20Functionalities.txt#L87-L134)
@@ -303,56 +310,6 @@ API-->>POS : "Released"
 - [docs/api-contracts.md:14-87](file://docs/api-contracts.md#L14-L87)
 - [docs/data-models.md:46-54](file://docs/data-models.md#L46-L54)
 
-### Customer and Brand Management
-Core profiles and onboarding include:
-- Brand setup and management (multi-tenancy via BrandID)
-- Outlet configuration per Brand
-- Customer record management, including blacklist functionality
-- Staff account management with RBAC and JWT
-
-```mermaid
-classDiagram
-class Brand {
-+BrandID
-+Name
-+TaxCode
-+ContactEmail
-+Status
-}
-class Outlet {
-+OutletID
-+BrandID
-+Name
-+Address
-+Status
-}
-class UserAccount {
-+UserID
-+BrandID
-+Username
-+PasswordHash
-+FullName
-+Role
-+Status
-}
-class Customer {
-+CustomerID
-+PhoneNumber
-+FullName
-+Email
-+Status
-}
-Outlet --> Brand : "belongs to"
-UserAccount --> Brand : "scoped to"
-```
-
-**Diagram sources**
-- [docs/data-models.md:65-98](file://docs/data-models.md#L65-L98)
-
-**Section sources**
-- [_bmad-output/planning-artifacts/epics.md:79-137](file://_bmad-output/planning-artifacts/epics.md#L79-L137)
-- [docs/data-models.md:65-98](file://docs/data-models.md#L65-L98)
-
 ### Approval and Publication Workflow
 Approval involves:
 - Submission of a plan with Pending status
@@ -384,6 +341,7 @@ Pub --> Gen["Generate VoucherPlanDetail"]
 - Plan approval history preserved for traceability
 - Settlement ledger provides financial reconciliation between brands
 - **Enhanced credit ledger tracks batch-based credit consumption, adjustments, and expiry events**
+- **Email notification audit trail tracks all outbound communications with success/failure status**
 
 ```mermaid
 flowchart TD
@@ -391,10 +349,12 @@ DistLogs["VoucherDistribution Logs"] --> Dash["Distribution Dashboard"]
 UsageLogs["VoucherUsage Logs"] --> Audit["Audit Trail"]
 SettlementLogs["Settlement Entries"] --> Financial["Financial Reconciliation"]
 CreditLogs["Credit Batch & Consumption Logs"] --> Billing["Enhanced Billing Reports"]
+EmailLogs["Email Notification Logs"] --> EmailAudit["Email Audit Trail"]
 Dash --> Metrics["Volume vs Targets"]
 Audit --> Compliance["Compliance & Reconciliation"]
 Financial --> Netting["Netting Reports"]
 Billing --> Balance["Batch Balance Tracking"]
+EmailAudit --> Delivery["Delivery Success Rate"]
 ```
 
 **Diagram sources**
@@ -403,6 +363,7 @@ Billing --> Balance["Batch Balance Tracking"]
 - [src/NonCash.Core/Entities/SettlementEntry.cs:1-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L1-L49)
 - [src/NonCash.Core/Entities/CreditBatch.cs:1-71](file://src/NonCash.Core/Entities/CreditBatch.cs#L1-L71)
 - [src/NonCash.Core/Entities/CreditConsumption.cs:1-23](file://src/NonCash.Core/Entities/CreditConsumption.cs#L1-L23)
+- [src/NonCash.Core/Entities/EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:244-256](file://_bmad-output/planning-artifacts/epics.md#L244-L256)
@@ -603,6 +564,172 @@ New admin endpoints provide comprehensive welcome policy management:
 - [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:1-128](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L128)
 - [src/NonCash.API/Controllers/WelcomePoliciesController.cs:1-177](file://src/NonCash.API/Controllers/WelcomePoliciesController.cs#L1-L177)
 - [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:1-153](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L1-L153)
+
+## Enhanced Email Logging System
+
+**New** Comprehensive email logging system that provides complete audit trails for all outbound email notifications with retry mechanisms and error tracking.
+
+The email logging system captures every email send attempt, whether successful or failed, providing detailed audit trails for compliance and troubleshooting purposes.
+
+### Email Log Entity Structure
+The EmailLog entity provides comprehensive tracking of email notifications:
+- **ToAddress**: Recipient email address
+- **Subject**: Email subject line
+- **TemplateName**: Template used for email generation
+- **NotificationType**: Category of notification (e.g., "PlanReviewed", "AdjustmentPending")
+- **RelatedEntityId**: Optional reference to related business entity
+- **Success**: Boolean indicating send success/failure
+- **ErrorMessage**: Detailed error information for failed sends
+- **RetryCount**: Number of retry attempts made
+- **SentAt**: Timestamp when email was sent or attempted
+
+```mermaid
+flowchart TD
+EmailSend["Email Send Attempt"] --> SMTP["SMTP Server"]
+SMTP --> Success{"Send Successful?"}
+Success --> |Yes| LogSuccess["Log Success<br/>with SentAt timestamp"]
+Success --> |No| Retry{"Within Retry Limit?"}
+Retry --> |Yes| IncrementRetry["Increment RetryCount"]
+IncrementRetry --> SMTP
+Retry --> |No| LogFailure["Log Failure<br/>with ErrorMessage"]
+LogSuccess --> Complete["Complete"]
+LogFailure --> Complete
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Entities/EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:392-416](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L392-L416)
+
+### Email Notification Service Integration
+The EmailNotificationService integrates with all notification flows to ensure complete audit coverage:
+- **Admin Registration Notifications**: New business registration alerts
+- **Credit Expiry Warnings**: Automated warnings for expiring credits
+- **Welcome Credit Grants**: Notifications for new brand activations
+- **Credit Purchase Receipts**: Confirmation emails for credit purchases
+- **Low Balance Alerts**: Proactive warnings for low credit balances
+- **Credits Forfeited Notifications**: Alerts for expired credit batches
+
+### Retry Mechanism and Error Handling
+The system implements robust retry logic with exponential backoff:
+- **Maximum Retries**: Up to 3 retry attempts for transient failures
+- **Transient Error Detection**: Automatic detection of temporary SMTP issues
+- **Error Truncation**: Error messages limited to 2000 characters to prevent database bloat
+- **Logging Isolation**: Email logging failures don't break notification flows
+
+**Section sources**
+- [src/NonCash.Core/Entities/EmailLog.cs:1-24](file://src/NonCash.Core/Entities/EmailLog.cs#L1-L24)
+- [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:1-427](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L1-L427)
+- [src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs:1-65](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs#L1-L65)
+
+## Business Management Capabilities
+
+**New** Comprehensive business management system supporting multi-business organizations with brand relationships and administrative controls.
+
+The business management system enables organizations to manage multiple legal entities (businesses) that can own multiple brands, providing a hierarchical structure for enterprise deployments.
+
+### Business Entity Structure
+The Business entity provides core organizational information:
+- **BusinessName**: Legal company name
+- **TaxCode**: Unique tax identification number
+- **Address**: Physical business address
+- **ContactEmail**: Primary contact email for business communications
+- **PhoneNumber**: Business contact phone number
+- **IsActive**: Business status for soft deletion
+- **Brands**: Collection of brands owned by the business
+
+```mermaid
+classDiagram
+class Business {
++string BusinessName
++string TaxCode
++string Address
++string ContactEmail
++string PhoneNumber
++bool IsActive
++ICollection~Brand~ Brands
+}
+class Brand {
++Guid Id
++string Name
++Guid BusinessId
++Business Business
+}
+Business "1" --> "many" Brand : owns
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Entities/Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
+- [src/NonCash.Core/Entities/Brand.cs:1-50](file://src/NonCash.Core/Entities/Brand.cs#L1-L50)
+
+### Business Management API
+Comprehensive REST API endpoints for business administration:
+- **GET /api/v1/businesses**: List all businesses with brand counts
+- **GET /api/v1/businesses/{id}**: Get specific business details
+- **POST /api/v1/businesses**: Create new business with validation
+- **PUT /api/v1/businesses/{id}**: Update business information
+- **Tax Code Validation**: Ensures unique tax codes across system
+
+### Brand Relationship Management
+Business-brand relationships are automatically tracked:
+- **Brand Count Integration**: API responses include brand count per business
+- **Cascade Operations**: Business status affects brand availability
+- **Administrative Controls**: Admin-only access to business management
+
+**Section sources**
+- [src/NonCash.Core/Entities/Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
+- [src/NonCash.API/Controllers/BusinessesController.cs:1-123](file://src/NonCash.API/Controllers/BusinessesController.cs#L1-L123)
+- [src/NonCash.API/DTOs/BusinessDtos.cs:1-31](file://src/NonCash.API/DTOs/BusinessDtos.cs#L1-L31)
+- [src/NonCash.Infrastructure/Repositories/BusinessRepository.cs:1-26](file://src/NonCash.Infrastructure/Repositories/BusinessRepository.cs#L1-L26)
+
+## Enhanced Customer Management
+
+**Updated** Enhanced customer management system with improved blacklist functionality, search capabilities, and integration with email logging system.
+
+The customer management system provides comprehensive customer record management with advanced filtering, blacklist controls, and integration points for promotional campaigns.
+
+### Customer Entity Enhancements
+The Customer entity includes enhanced status management:
+- **CustomerStatus Enum**: Active and Blacklisted states
+- **Phone Number Normalization**: Automatic digit extraction for uniqueness
+- **Email Integration**: Support for email-based communications
+- **Search Optimization**: Indexed fields for efficient querying
+
+### Blacklist Management Features
+Advanced blacklist functionality with full audit trail:
+- **Blacklist/Unblacklist Operations**: Status toggling with validation
+- **Integration Points**: Blacklisted customers excluded from promotions
+- **Search Filtering**: Filter customers by blacklist status
+- **Bulk Operations**: Support for batch status updates
+
+### Search and Query Capabilities
+Enhanced search functionality with multiple filter options:
+- **Multi-field Search**: Phone number, name, email, and status filtering
+- **Phone Number Normalization**: Automatic normalization during search
+- **Pagination Support**: Efficient handling of large customer datasets
+- **Status-based Filtering**: Real-time blacklist status filtering
+
+```mermaid
+flowchart TD
+CustomerSearch["Customer Search Request"] --> Normalize["Normalize Phone Numbers"]
+Normalize --> Query["Execute Multi-field Query"]
+Query --> Results["Return Paginated Results"]
+Results --> Filter["Apply Status Filters"]
+Filter --> Response["Return Filtered Results"]
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Entities/Customer.cs:1-21](file://src/NonCash.Core/Entities/Customer.cs#L1-L21)
+- [src/NonCash.Core/Services/CustomerService.cs:61-96](file://src/NonCash.Core/Services/CustomerService.cs#L61-L96)
+
+### Integration with Email System
+Customer management integrates with the email logging system:
+- **Contact Information Tracking**: Email addresses linked to customer records
+- **Communication History**: Email logs associated with customer activities
+- **Notification Preferences**: Support for customer communication preferences
+
+**Section sources**
+- [src/NonCash.Core/Entities/Customer.cs:1-21](file://src/NonCash.Core/Entities/Customer.cs#L1-L21)
+- [src/NonCash.Core/Services/CustomerService.cs:61-96](file://src/NonCash.Core/Services/CustomerService.cs#L61-L96)
 
 ## Maker-Checker Adjustment Workflow
 
@@ -897,6 +1024,8 @@ CREDIT["Enhanced Credit Service"] --> DB
 PAYMENT["Payment Service"] --> DB
 INTEGRATION["Integration Service"] --> DB
 EXPIRY["Credit Expiry Sweep"] --> DB
+EMAIL["Email Notification Service"] --> DB
+BUSINESS["Business Management Service"] --> DB
 ```
 
 **Diagram sources**
@@ -919,6 +1048,9 @@ EXPIRY["Credit Expiry Sweep"] --> DB
 - **Optimize FIFO credit consumption queries with appropriate indexes on CreatedAt and ExpiresAt**
 - **Implement efficient policy resolution caching to reduce database queries**
 - **Optimize welcome policy resolution queries with composite indexes on BusinessId, IsActive, and EffectiveFrom**
+- **Index email log tables on notification_type, sent_at, and success for efficient querying**
+- **Implement connection pooling for email SMTP connections to improve performance**
+- **Cache business-brand relationships to reduce database queries during brand lookups**
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -936,6 +1068,10 @@ Common issues and resolutions:
 - **Policy resolution conflicts**: Check effective date ranges and scope precedence
 - **Welcome policy migration issues**: Verify business-brand mappings and 'Migrated:' policy prefixes
 - **Welcome grant not applied**: Check business-scoped welcome policy resolution and CreditConfig fallback
+- **Email delivery failures**: Check EmailLog entries for error messages and retry counts
+- **Business management errors**: Verify tax code uniqueness and business status
+- **Customer search performance**: Check phone number normalization and index usage
+- **Email notification timeouts**: Verify SMTP configuration and network connectivity
 
 **Section sources**
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
@@ -943,7 +1079,7 @@ Common issues and resolutions:
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ## Conclusion
-NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, and loyalty app integrations, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, and operational automation.
+NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, loyalty app integrations, comprehensive email logging, and enhanced business management, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, operational automation, and complete audit trails for compliance and troubleshooting.
 
 ## Appendices
 
@@ -980,6 +1116,14 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
   - Each brand receives welcome credits only once; subsequent activations are ignored
 - **Edge: Business policy resolution**
   - Welcome policy resolution falls back to CreditConfig when no business-specific policy exists
+- **Edge: Email delivery failure handling**
+  - System retries failed email sends up to 3 times with exponential backoff; failures are logged with detailed error information
+- **Edge: Business tax code conflicts**
+  - System prevents creation of businesses with duplicate tax codes; returns conflict error with guidance
+- **Edge: Customer blacklist cascade effects**
+  - Blacklisted customers are automatically excluded from batch promotions and self-purchase flows
+- **Edge: Email log storage limits**
+  - Error messages are truncated to 2000 characters to prevent database bloat; consider log rotation strategies
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
@@ -990,3 +1134,6 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
 - [src/NonCash.API/Controllers/PaymentsController.cs:108-163](file://src/NonCash.API/Controllers/PaymentsController.cs#L108-L163)
 - [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:74-99](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L74-L99)
 - [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)
+- [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:367-385](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L367-L385)
+- [src/NonCash.API/Controllers/BusinessesController.cs:50-79](file://src/NonCash.API/Controllers/BusinessesController.cs#L50-L79)
+- [src/NonCash.Core/Services/CustomerService.cs:61-78](file://src/NonCash.Core/Services/CustomerService.cs#L61-L78)

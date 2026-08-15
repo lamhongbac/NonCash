@@ -89,6 +89,30 @@ public record PlanReviewedNotification(
     string? ReviewNotes,
     DateTime? PublishDate);
 
+/// <summary>Payload sent to a staff user when their account is created by an admin.</summary>
+public record StaffAccountCreatedNotification(
+    string? UserEmail,
+    string Username,
+    string FullName,
+    string Role,
+    string? BrandName);
+
+/// <summary>Payload sent to a voucher recipient when a transfer is initiated.</summary>
+public record VoucherTransferInitiatedNotification(
+    string? RecipientEmail,
+    string RecipientPhone,
+    string RecipientName,
+    string SenderName,
+    int VoucherCount,
+    DateTime TransferredAt);
+
+/// <summary>Payload sent to a user who requested a password reset.</summary>
+public record PasswordResetNotification(
+    string? UserEmail,
+    string FullName,
+    string ResetToken,
+    DateTime TokenExpiry);
+
 public interface INotificationService
 {
     Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default);
@@ -103,4 +127,7 @@ public interface INotificationService
     Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default);
 }

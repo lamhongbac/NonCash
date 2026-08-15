@@ -201,7 +201,7 @@ The usage-based billing model (Epic 9) is configured in `src/NonCash.API/appsett
 ```
 
 - `WelcomeCredits` — credits granted automatically to every newly activated Brand (free period). Set to `0` to disable the welcome grant.
-- `LowBalanceWarningPercent` — reserved for UI low-balance warnings (no notification system in v1).
+- `LowBalanceWarningPercent` — reserved for UI low-balance warnings. Email notification system is available (see Email Notification System section below) if future low-balance alerts are needed.
 
 ### 6.5 Web Frontend API Base URL
 

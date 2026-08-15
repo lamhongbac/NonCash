@@ -63,4 +63,25 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        // Always return success to prevent user enumeration
+        await _authService.ForgotPasswordAsync(request.UsernameOrEmail, cancellationToken);
+        return Ok(new { message = "If an account with that email or username exists, a password reset email has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword, cancellationToken);
+
+        if (!result.Success)
+            return BadRequest(new { error = result.ErrorMessage });
+
+        return Ok(new { message = "Password has been reset successfully." });
+    }
 }

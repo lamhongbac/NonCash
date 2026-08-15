@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-27T00:00:00
-last_updated: 2026-04-27T19:00:00
+last_updated: 2026-08-14T18:00:00
 project: NonCash
 project_key: NOKEY
 tracking_system: file-system
@@ -53,8 +53,8 @@ development_status:
   1-2-outlet-configuration: done
   1-3-customer-record-management: done
   1-4-staff-accounts-rbac: done
-  1-5-business-self-registration: done
-  1-6-business-registration-approval: done
+  1-5-business-self-registration: done  # notification upgraded from console to full email (SMTP + HTML templates + audit log)
+  1-6-business-registration-approval: done  # email notifications wired for approve/reject flows
   epic-1-retrospective: optional
 
   # Epic 2: Campaign Planning & Approval
@@ -80,6 +80,13 @@ development_status:
   4-3-commit-and-log: done
   4-4-rollback-mechanism: done
   epic-4-retrospective: optional
+
+  # Cross-cutting: Email Notification System (2026-08-14)
+  # 15 notification methods with HTML templates, SMTP delivery, retry policy, and audit logging (email_logs table)
+  # Password reset flow with secure token + API endpoints
+  # Feature flag: Notifications:EmailEnabled
+  # Notification matrix: docs/notification-matrix.md
+  email-notification-system: done
 
   # Epic 5: Social Engagement & Gifting (FR5 - peer-to-peer transfer)
   epic-5: done

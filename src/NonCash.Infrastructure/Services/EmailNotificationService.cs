@@ -324,6 +324,65 @@ public class EmailNotificationService : INotificationService
         await SendAsync(notification.CreatorEmail, subject, body, cancellationToken, "PlanReviewed", "PlanReviewed");
     }
 
+    public async Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.UserEmail))
+        {
+            _logger.LogInformation("Staff account created notification skipped for {Username}: no email on file.", notification.Username);
+            return;
+        }
+
+        var subject = $"Your NonCash account has been created: {notification.Role}";
+        var body = await _templateRenderer.RenderAsync("StaffAccountCreated", new Dictionary<string, string?>
+        {
+            ["FullName"] = notification.FullName,
+            ["Username"] = notification.Username,
+            ["Role"] = notification.Role,
+            ["BrandName"] = notification.BrandName ?? "NonCash Platform"
+        }, cancellationToken);
+
+        await SendAsync(notification.UserEmail, subject, body, cancellationToken, "StaffAccountCreated", "StaffAccountCreated");
+    }
+
+    public async Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.RecipientEmail))
+        {
+            _logger.LogInformation("Voucher transfer notification skipped for {Phone}: no email on file.", notification.RecipientPhone);
+            return;
+        }
+
+        var subject = $"You've received {notification.VoucherCount} voucher(s) via transfer";
+        var body = await _templateRenderer.RenderAsync("VoucherTransferInitiated", new Dictionary<string, string?>
+        {
+            ["RecipientName"] = notification.RecipientName,
+            ["SenderName"] = notification.SenderName,
+            ["VoucherCount"] = notification.VoucherCount.ToString(),
+            ["TransferredAt"] = notification.TransferredAt.ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.RecipientEmail, subject, body, cancellationToken, "VoucherTransferInitiated", "VoucherTransfer");
+    }
+
+    public async Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.UserEmail))
+        {
+            _logger.LogInformation("Password reset notification skipped for {FullName}: no email on file.", notification.FullName);
+            return;
+        }
+
+        var subject = "NonCash password reset request";
+        var body = await _templateRenderer.RenderAsync("PasswordReset", new Dictionary<string, string?>
+        {
+            ["FullName"] = notification.FullName,
+            ["ResetToken"] = notification.ResetToken,
+            ["TokenExpiry"] = notification.TokenExpiry.ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.UserEmail, subject, body, cancellationToken, "PasswordReset", "PasswordReset");
+    }
+
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken, string templateName = "", string notificationType = "")
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromAddress))

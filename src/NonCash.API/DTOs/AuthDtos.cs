@@ -44,3 +44,7 @@ public record UserResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );
+
+public record ForgotPasswordRequest(string UsernameOrEmail);
+
+public record ResetPasswordRequest(string Token, string NewPassword);

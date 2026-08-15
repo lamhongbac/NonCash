@@ -13,6 +13,7 @@ using NonCash.Core.Interfaces;
 using NonCash.Core.Services;
 using NonCash.Infrastructure.Data;
 using NonCash.Infrastructure.Repositories;
+using NonCash.Infrastructure.Services;
 
 namespace NonCash.IntegrationTests.Controllers;
 
@@ -46,7 +47,7 @@ public class AuthControllerTests
             .Build();
 
         _jwtTokenService = new JwtTokenService(configuration);
-        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService);
+        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService, new ConsoleNotificationService());
     }
 
     private AuthController CreateController()
@@ -56,7 +57,7 @@ public class AuthControllerTests
 
     private UsersController CreateUsersController()
     {
-        var userService = new UserService(_userRepository, _authService);
+        var userService = new UserService(_userRepository, _authService, new ConsoleNotificationService(), new FakeBrandRepositoryForAuth());
         return new UsersController(userService);
     }
 
@@ -317,6 +318,20 @@ public class AuthControllerTests
         var users = okResult!.Value as IEnumerable<UserResponse>;
         users.Should().NotBeNull();
         users!.Count().Should().Be(2);
+    }
+
+    private class FakeBrandRepositoryForAuth : IBrandRepository
+    {
+        public Task<Brand?> GetByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Brand?>(null);
+        public Task<Brand> AddAsync(Brand entity, CancellationToken ct = default) => throw new NotImplementedException();
+        public void Update(Brand entity) => throw new NotImplementedException();
+        public void Delete(Brand entity) => throw new NotImplementedException();
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IEnumerable<Brand>> GetAllAsync(CancellationToken ct = default) => Task.FromResult<IEnumerable<Brand>>(Array.Empty<Brand>());
+        public Task<IEnumerable<Brand>> FindAsync(System.Linq.Expressions.Expression<Func<Brand, bool>> predicate, CancellationToken ct = default) => Task.FromResult<IEnumerable<Brand>>(Array.Empty<Brand>());
+        public Task<int> CountAsync(System.Linq.Expressions.Expression<Func<Brand, bool>> predicate, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<bool> TaxCodeExistsAsync(string taxCode, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<Brand?> GetByTaxCodeAsync(string taxCode, CancellationToken ct = default) => Task.FromResult<Brand?>(null);
     }
 }
 

@@ -27,5 +27,11 @@ public class UserAccount : BaseEntity
     public UserRole Role { get; set; }
     public UserStatus Status { get; set; } = UserStatus.Active;
 
+    /// <summary>One-time token for password reset. Null when no reset is pending.</summary>
+    public string? PasswordResetToken { get; set; }
+
+    /// <summary>Expiry time for the password reset token.</summary>
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+
     public Brand? Brand { get; set; }
 }

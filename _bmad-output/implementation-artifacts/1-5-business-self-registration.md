@@ -1,6 +1,6 @@
 # Story 1.5: Business Self-Registration & Onboarding
 
-Status: review
+Status: done
 
 ## Story
 
@@ -63,9 +63,10 @@ And if Rejected, they see the reason
   - [x] Subtask 4.1: `Register.razor` public page (no auth required)
   - [x] Subtask 4.2: Form validation mirroring backend rules
   - [x] Subtask 4.3: Status check page for applicants
-- [x] Task 5: Notification placeholder (AC5)
-  - [x] Subtask 5.1: `INotificationService` interface (placeholder for future email/SMS integration)
-  - [x] Subtask 5.2: Console notification logging for MVP
+- [x] Task 5: Notification system (AC5)
+  - [x] Subtask 5.1: `INotificationService` interface with 12 notification methods
+  - [x] Subtask 5.2: `EmailNotificationService` — full SMTP delivery with HTML templates, retry policy (3 retries, exponential backoff), and audit logging via `email_logs` table
+  - [x] Subtask 5.3: `ConsoleNotificationService` — retained as fallback/dev-mode logger
 - [x] Task 6: Database migration
   - [x] Subtask 6.1: `brand_registration_requests` table migration (AddBrandRegistrationRequest)
   - [x] Subtask 6.2: `PendingActivation` added to `BrandStatus` and `UserStatus` enums
@@ -140,7 +141,12 @@ Qoder AI Assistant
 - Registration flow: submit -> create Brand (PendingActivation) + UserAccount (BrandManager, PendingActivation) + RegistrationRequest (Submitted)
 - Tax code uniqueness enforced against Active and PendingActivation brands (Suspended brands can be re-registered)
 - ConsoleNotificationService logs admin notifications to stdout for MVP placeholder
-- All 77 tests pass (66 previous + 11 new registration tests)
+- **2026-08-14**: Notification system upgraded from console placeholder to full email delivery:
+  - `EmailNotificationService` with SMTP, 12 HTML templates, retry policy, audit logging
+  - `IEmailTemplateRenderer` + `PlaceholderEmailTemplateRenderer` for template rendering
+  - `email_logs` table for send-attempt audit trail
+  - 12 notification scenarios: registration, approval, rejection, plan review, adjustment, credits, voucher received, etc.
+- All 126 tests pass (52 unit + 74 integration)
 - Migration `AddBrandRegistrationRequest` applied to PostgreSQL
 
 ### File List
@@ -157,6 +163,12 @@ Qoder AI Assistant
 - src/NonCash.Infrastructure/Data/ApplicationDbContext.cs (DbSet<BrandRegistrationRequest>)
 - src/NonCash.Infrastructure/Repositories/BrandRegistrationRequestRepository.cs
 - src/NonCash.Infrastructure/Services/ConsoleNotificationService.cs
+- src/NonCash.Infrastructure/Services/EmailNotificationService.cs (added 2026-08-14)
+- src/NonCash.Infrastructure/Services/PlaceholderEmailTemplateRenderer.cs (added 2026-08-14)
+- src/NonCash.Core/Interfaces/IEmailTemplateRenderer.cs (added 2026-08-14)
+- src/NonCash.Core/Entities/EmailLog.cs (added 2026-08-14)
+- src/NonCash.Infrastructure/EmailTemplates/*.html (12 HTML templates, added 2026-08-14)
+- tools/migration-add-email-log.sql (added 2026-08-14)
 - src/NonCash.API/Controllers/PublicRegistrationController.cs
 - src/NonCash.API/DTOs/RegistrationDtos.cs
 - src/NonCash.API/Program.cs (DI registrations)

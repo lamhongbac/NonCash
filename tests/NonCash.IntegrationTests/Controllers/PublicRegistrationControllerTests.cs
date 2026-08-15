@@ -17,8 +17,8 @@ public class PublicRegistrationControllerTests
         var brandRepository = new FakeBrandRepository();
         var userAccountRepository = new FakeUserAccountRepository();
         var requestRepository = new FakeBrandRegistrationRequestRepository();
-        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService());
         var notificationService = new ConsoleNotificationService();
+        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService);
 
         _registrationService = new RegistrationService(
             new FakeBusinessRepository(),
