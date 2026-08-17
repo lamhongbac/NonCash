@@ -10,10 +10,9 @@ public class ConsoleNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
-    public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default)
+    public Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
-        var status = approved ? "APPROVED" : "REJECTED";
-        Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been {status}. User #{userId} notified. Note: {reviewNotes ?? "n/a"}");
+        Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been REJECTED. User #{userId} notified. Reason: {reviewNotes ?? "n/a"}");
         return Task.CompletedTask;
     }
 
@@ -61,6 +60,12 @@ public class ConsoleNotificationService : INotificationService
     public Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[NOTIFICATION] Business/brand '{notification.BrandName}' created under '{notification.BusinessName}' (tax code {notification.TaxCode}). Email: {notification.BrandEmail ?? "n/a"}.");
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[NOTIFICATION] Business '{notification.BusinessName}' activated; brand '{notification.BrandName}' granted {notification.CreditsGranted:N0} welcome credit(s). Email: {notification.BusinessEmail ?? "n/a"}.");
         return Task.CompletedTask;
     }
 

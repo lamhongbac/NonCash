@@ -55,7 +55,7 @@ public class BrandService
         // Epic 10: welcome credit grant for each newly activated brand (policy-driven).
         if (_creditService != null)
         {
-            await _creditService.GrantWelcomeAsync(brand.Id, cancellationToken);
+            await _creditService.GrantWelcomeAsync(brand.Id, cancellationToken: cancellationToken);
         }
 
         brand.Business = business;

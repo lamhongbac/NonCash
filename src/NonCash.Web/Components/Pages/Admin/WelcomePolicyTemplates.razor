@@ -1,0 +1,275 @@
+@page "/admin/welcome-policy-templates"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Welcome Policy Templates</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Welcome-Grant Policy Templates</MudText>
+
+<MudText Typo="Typo.body2" Class="mb-4" Color="Color.Surface">
+    Reusable onboarding terms. One template may be marked as the platform default; it is used
+    automatically when a new business is approved without an explicit template selection.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudSwitch T="bool" @bind-Value="_includeInactive" Color="Color.Primary" Label="Show inactive" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadTemplates">Refresh</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="NewTemplate">New Template</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_templates" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh Style="text-align:right">Welcome</MudTh>
+                <MudTh Style="text-align:right">Expiry (mo)</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    @context.Name
+                    @if (context.IsDefault)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">Default</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Welcome" Style="text-align:right">@context.WelcomeCredits</MudTd>
+                <MudTd DataLabel="Expiry" Style="text-align:right">@(context.WelcomeCreditExpiryMonths?.ToString() ?? "never")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditTemplate(context)" />
+                    @if (!context.IsDefault)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Info"
+                                       title="Set as default" OnClick="() => SetDefault(context)" />
+                    }
+                    @if (context.IsActive)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => DeactivateTemplate(context)" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@if (_editingTemplate != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">@(_editingTemplate.Id == Guid.Empty ? "New Template" : $"Edit Template — {_editingTemplate.Name}")</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_editingTemplate.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField @bind-Value="_editingTemplate.WelcomeCredits" Label="Welcome credits" Variant="Variant.Outlined" Min="0" />
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField @bind-Value="_editingTemplate.WelcomeCreditExpiryMonths" Label="Welcome expiry (mo)" Variant="Variant.Outlined" Min="1" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_editingTemplate.IsActive" Color="Color.Success" Label="Active" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_editingTemplate.IsDefault" Color="Color.Info" Label="Set as platform default" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTemplate" Disabled="_submitting">Save</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _editingTemplate = null">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = false;
+    private bool _submitting = false;
+    private bool _includeInactive = false;
+
+    private List<WelcomePolicyTemplateDto> _templates = new();
+
+    private WelcomePolicyTemplateEditModel? _editingTemplate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (AuthState.Role != "Admin")
+        {
+            Snackbar.Add("Access denied — Admin only.", Severity.Error);
+            return;
+        }
+        await LoadTemplates();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadTemplates()
+    {
+        _loading = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/welcome-policy-templates?includeInactive={_includeInactive}");
+            if (resp.IsSuccessStatusCode)
+                _templates = await resp.Content.ReadFromJsonAsync<List<WelcomePolicyTemplateDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load templates.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private void NewTemplate()
+    {
+        _editingTemplate = new WelcomePolicyTemplateEditModel();
+    }
+
+    private void EditTemplate(WelcomePolicyTemplateDto t)
+    {
+        _editingTemplate = new WelcomePolicyTemplateEditModel
+        {
+            Id = t.Id,
+            Name = t.Name,
+            WelcomeCredits = t.WelcomeCredits,
+            WelcomeCreditExpiryMonths = t.WelcomeCreditExpiryMonths,
+            IsActive = t.IsActive,
+            IsDefault = t.IsDefault
+        };
+    }
+
+    private async Task SaveTemplate()
+    {
+        if (_editingTemplate == null) return;
+        if (string.IsNullOrWhiteSpace(_editingTemplate.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                _editingTemplate.Name,
+                _editingTemplate.WelcomeCredits,
+                _editingTemplate.WelcomeCreditExpiryMonths,
+                _editingTemplate.IsActive,
+                _editingTemplate.IsDefault
+            };
+
+            var resp = _editingTemplate.Id == Guid.Empty
+                ? await SendAsync(HttpMethod.Post, "api/v1/welcome-policy-templates", payload)
+                : await SendAsync(HttpMethod.Put, $"api/v1/welcome-policy-templates/{_editingTemplate.Id}", payload);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Welcome policy template saved.", Severity.Success);
+                _editingTemplate = null;
+                await LoadTemplates();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Save failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private async Task SetDefault(WelcomePolicyTemplateDto t)
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/welcome-policy-templates/{t.Id}/set-default");
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{t.Name}' is now the default template.", Severity.Success);
+                await LoadTemplates();
+            }
+            else
+            {
+                Snackbar.Add("Set default failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeactivateTemplate(WelcomePolicyTemplateDto t)
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/welcome-policy-templates/{t.Id}/deactivate");
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Template '{t.Name}' deactivated.", Severity.Success);
+                await LoadTemplates();
+            }
+            else
+            {
+                Snackbar.Add("Deactivate failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class WelcomePolicyTemplateDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsDefault { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class WelcomePolicyTemplateEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public int WelcomeCredits { get; set; } = 500;
+        public int? WelcomeCreditExpiryMonths { get; set; } = 12;
+        public bool IsActive { get; set; } = true;
+        public bool IsDefault { get; set; }
+    }
+}

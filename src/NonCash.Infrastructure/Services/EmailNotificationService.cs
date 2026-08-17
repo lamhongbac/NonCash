@@ -66,31 +66,28 @@ public class EmailNotificationService : INotificationService
         }
     }
 
-    public async Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default)
+    public async Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
         var user = await _userAccountRepository.GetByIdAsync(userId, cancellationToken);
         if (string.IsNullOrWhiteSpace(user?.Email))
         {
-            _logger.LogInformation("Applicant review result notification for user {UserId} skipped: no email on file.", userId);
+            _logger.LogInformation("Registration rejected notification for user {UserId} skipped: no email on file.", userId);
             return;
         }
 
-        var outcome = approved ? "Approved" : "Rejected";
-        var headerColor = approved ? "#388e3c" : "#d32f2f";
-        var reviewNoteHtml = string.IsNullOrWhiteSpace(reviewNotes)
-            ? string.Empty
-            : $"<p><strong>Reviewer note:</strong> {HtmlEncode(reviewNotes)}</p>";
+        // Always present a reason; fall back to generic wording when the reviewer left no note.
+        var reason = string.IsNullOrWhiteSpace(reviewNotes)
+            ? "the submitted information did not meet our verification requirements"
+            : HtmlEncode(reviewNotes);
 
-        var subject = $"Your NonCash registration has been {outcome.ToLowerInvariant()}";
-        var body = await _templateRenderer.RenderAsync("ApplicantReviewResult", new Dictionary<string, string?>
+        var subject = $"Your NonCash registration for '{brandName}' was not approved";
+        var body = await _templateRenderer.RenderAsync("RegistrationRejected", new Dictionary<string, string?>
         {
             ["BrandName"] = brandName,
-            ["Outcome"] = outcome,
-            ["HeaderColor"] = headerColor,
-            ["ReviewNote"] = reviewNoteHtml
+            ["Reason"] = reason
         }, cancellationToken);
 
-        await SendAsync(user.Email, subject, body, cancellationToken, "ApplicantReviewResult", "RegistrationReview");
+        await SendAsync(user.Email, subject, body, cancellationToken, "RegistrationRejected", "RegistrationRejected");
     }
 
     public async Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
@@ -220,7 +217,7 @@ public class EmailNotificationService : INotificationService
             ? $"<p><strong>Expires at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
             : string.Empty;
 
-        var subject = $"Welcome to NonCash: {notification.CreditsGranted:N0} credit(s) granted";
+        var subject = $"Welcome to NonCash: {notification.CreditsGranted:N0} credit(s) granted to '{notification.BrandName}'";
         var body = await _templateRenderer.RenderAsync("WelcomeCreditGranted", new Dictionary<string, string?>
         {
             ["BrandName"] = notification.BrandName,
@@ -248,6 +245,30 @@ public class EmailNotificationService : INotificationService
         }, cancellationToken);
 
         await SendAsync(notification.BrandEmail, subject, body, cancellationToken, "BrandCreated", "BrandCreated");
+    }
+
+    public async Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BusinessEmail))
+        {
+            _logger.LogInformation("Business-activated notification skipped for {BusinessName}: no contact email.", notification.BusinessName);
+            return;
+        }
+
+        var expiresAtHtml = notification.ExpiresAt.HasValue
+            ? $"<p><strong>Welcome credits expire at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
+            : string.Empty;
+
+        var subject = $"Welcome to NonCash — '{notification.BusinessName}' is now active";
+        var body = await _templateRenderer.RenderAsync("ActiveBusiness", new Dictionary<string, string?>
+        {
+            ["BusinessName"] = notification.BusinessName,
+            ["BrandName"] = notification.BrandName,
+            ["CreditsGranted"] = notification.CreditsGranted.ToString("N0"),
+            ["ExpiresAt"] = expiresAtHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.BusinessEmail, subject, body, cancellationToken, "ActiveBusiness", "BusinessActivated");
     }
 
     public async Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)

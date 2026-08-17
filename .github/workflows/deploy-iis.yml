@@ -1,0 +1,87 @@
+name: Deploy to IIS
+
+# Runs on a self-hosted Windows runner installed ON the server (no WinRM/MSDeploy needed).
+# Adjust env paths/ports below to match your server layout.
+on:
+  push:
+    branches: [ main, deploy/* ]
+  workflow_dispatch:
+
+env:
+  DEPLOY_ROOT: C:\inetpub\noncash
+  DB_CONNECTION: Host=localhost;Database=noncash;Username=noncash_app;Password=CHANGE_ME;SSL Mode=Prefer
+
+jobs:
+  build-test-publish-deploy:
+    runs-on: [ self-hosted, windows ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore NonCash.sln
+
+      - name: Build
+        run: dotnet build NonCash.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test NonCash.sln -c Release --no-build --verbosity minimal
+
+      - name: Publish API
+        run: dotnet publish src\NonCash.API\NonCash.API.csproj -c Release -o "$env:DEPLOY_ROOT\_stage\api" --no-build
+
+      - name: Publish Web
+        run: dotnet publish src\NonCash.Web\NonCash.Web.csproj -c Release -o "$env:DEPLOY_ROOT\_stage\web" --no-build
+
+      - name: Stop app pools
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          foreach ($p in @('NonCashAPI','NonCashWeb')) {
+            if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Stop-WebAppPool $p }
+          }
+
+      - name: Deploy to IIS folders (with rollback copy)
+        shell: powershell
+        run: |
+          $root = $env:DEPLOY_ROOT
+          foreach ($app in @('api','web')) {
+            $stage  = Join-Path $root "_stage\$app"
+            $target = Join-Path $root $app
+            $prev   = Join-Path $root "$app`_prev"
+            if (Test-Path $target) {
+              if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
+              Rename-Item $target $prev
+            }
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            Copy-Item $stage $target -Recurse -Force
+          }
+          Remove-Item (Join-Path $root '_stage') -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Apply database migrations
+        run: dotnet ef database update --project src\NonCash.Infrastructure --startup-project src\NonCash.API --connection "$env:DB_CONNECTION"
+
+      - name: Start app pools
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          foreach ($p in @('NonCashAPI','NonCashWeb')) { Start-WebAppPool $p }
+
+      - name: Smoke test API health
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 5
+          try {
+            $r = Invoke-WebRequest -Uri 'http://localhost:8001/health' -UseBasicParsing -TimeoutSec 20
+            Write-Host "API health: $($r.StatusCode)"
+          } catch {
+            Write-Warning "Health check failed (endpoint may differ); check app logs."
+          }

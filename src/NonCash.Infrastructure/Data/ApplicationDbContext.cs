@@ -37,6 +37,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<CreditLedgerEntry> CreditLedgerEntries => Set<CreditLedgerEntry>();
     public DbSet<CreditPricingPolicy> CreditPricingPolicies => Set<CreditPricingPolicy>();
     public DbSet<WelcomeGrantPolicy> WelcomeGrantPolicies => Set<WelcomeGrantPolicy>();
+    public DbSet<WelcomeGrantPolicyTemplate> WelcomeGrantPolicyTemplates => Set<WelcomeGrantPolicyTemplate>();
     public DbSet<BrandGroup> BrandGroups => Set<BrandGroup>();
     public DbSet<BrandGroupMember> BrandGroupMembers => Set<BrandGroupMember>();
     public DbSet<CreditBatch> CreditBatches => Set<CreditBatch>();

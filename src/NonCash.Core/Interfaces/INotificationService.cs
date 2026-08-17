@@ -64,6 +64,14 @@ public record BrandCreatedNotification(
     string BusinessName,
     string TaxCode);
 
+/// <summary>Payload sent to the business contact when its self-registration is approved (business activated).</summary>
+public record BusinessActivatedNotification(
+    string? BusinessEmail,
+    string BusinessName,
+    string BrandName,
+    int CreditsGranted,
+    DateTime? ExpiresAt);
+
 /// <summary>Payload sent to a brand after a credit purchase batch is created.</summary>
 public record CreditPurchasedNotification(
     string? BrandEmail,
@@ -123,7 +131,7 @@ public record PasswordResetNotification(
 public interface INotificationService
 {
     Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default);
-    Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default);
+    Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default);
     Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default);
     Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default);
@@ -131,6 +139,7 @@ public interface INotificationService
     Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default);
     Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default);

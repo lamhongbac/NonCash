@@ -22,5 +22,10 @@ public class WelcomeGrantPolicyConfiguration : IEntityTypeConfiguration<WelcomeG
             .WithMany()
             .HasForeignKey(p => p.BusinessId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(p => p.WelcomeGrantPolicyTemplate)
+            .WithMany()
+            .HasForeignKey(p => p.WelcomeGrantPolicyTemplateId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

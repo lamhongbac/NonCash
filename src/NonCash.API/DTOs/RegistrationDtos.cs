@@ -41,5 +41,6 @@ public record AdminRegistrationRequestDto(
 );
 
 public record ReviewActionDto(
-    string? ReviewNotes
+    string? ReviewNotes,
+    Guid? WelcomeGrantPolicyTemplateId = null
 );

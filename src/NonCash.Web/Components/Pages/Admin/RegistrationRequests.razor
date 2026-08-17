@@ -42,10 +42,10 @@ else
                         {
                             <MudAlert Severity="Severity.Warning" Class="mb-2">Pending Review</MudAlert>
                             <MudStack Row="true" Spacing="2">
-                                <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => HandleReview(req, true))">
+                                <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
                                     <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
                                 </MudButton>
-                                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => HandleReview(req, false))">
+                                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => OpenRejectDialog(req))">
                                     <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Class="mr-1" /> Reject
                                 </MudButton>
                             </MudStack>
@@ -69,10 +69,80 @@ else
     }
 }
 
+<MudDialog @bind-Visible="_showApproveDialog" Options="_dialogOptions" TitleClass="mud-theme-primary py-2 px-4">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Approve Registration — @_selectedRequest?.BusinessName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Select the welcome-grant policy to apply. If none is chosen, the platform default is used.
+            </MudAlert>
+
+            <MudSelect T="Guid?" @bind-Value="_selectedTemplateId" Label="Welcome policy template" Variant="Variant.Outlined"
+                       ToStringFunc="@GetTemplateDisplayText">
+                <MudSelectItem T="Guid?" Value="(Guid?)null">Platform default</MudSelectItem>
+                @foreach (var t in _templates)
+                {
+                    <MudSelectItem T="Guid?" Value="(Guid?)t.Id">@t.Name (@t.WelcomeCredits credits, @(t.WelcomeCreditExpiryMonths?.ToString() ?? "never") mo)@(t.IsDefault ? " — default" : "")</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudText Typo="Typo.body2" Color="Color.Surface">
+                Resolved: <strong>@_resolvedCredits credits</strong>, expires in <strong>@(_resolvedExpiryMonths?.ToString() ?? "never") months</strong>.
+            </MudText>
+
+            <MudTextField @bind-Value="_reviewNotes" Label="Review notes (optional)" Variant="Variant.Outlined" Lines="3" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ConfirmApprove" Disabled="_submitting">Approve</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_showRejectDialog" Options="_dialogOptions" TitleClass="mud-theme-error py-2 px-4">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Reject Registration — @_selectedRequest?.BusinessName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudAlert Severity="Severity.Warning" Dense="true">
+                Please provide a reason; it will be included in the rejection email to the applicant.
+            </MudAlert>
+            <MudTextField @bind-Value="_reviewNotes" Label="Rejection reason" Variant="Variant.Outlined" Lines="3" Required="true" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="ConfirmReject" Disabled="_submitting">Reject</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private List<RegistrationRequestItem> _requests = new();
+    private List<WelcomePolicyTemplateItem> _templates = new();
     private bool _loading = true;
+    private bool _submitting = false;
     private string _filter = "pending";
+
+    private bool _showApproveDialog = false;
+    private bool _showRejectDialog = false;
+    private RegistrationRequestItem? _selectedRequest;
+    private Guid? _selectedTemplateId;
+    private string _reviewNotes = "";
+
+    private int _resolvedCredits => _selectedTemplateId.HasValue
+        ? (_templates.FirstOrDefault(t => t.Id == _selectedTemplateId.Value)?.WelcomeCredits ?? _defaultTemplate?.WelcomeCredits ?? 0)
+        : (_defaultTemplate?.WelcomeCredits ?? 0);
+
+    private int? _resolvedExpiryMonths => _selectedTemplateId.HasValue
+        ? (_templates.FirstOrDefault(t => t.Id == _selectedTemplateId.Value)?.WelcomeCreditExpiryMonths ?? _defaultTemplate?.WelcomeCreditExpiryMonths)
+        : _defaultTemplate?.WelcomeCreditExpiryMonths;
+
+    private WelcomePolicyTemplateItem? _defaultTemplate => _templates.FirstOrDefault(t => t.IsDefault);
+
+    private readonly DialogOptions _dialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
 
     protected override async Task OnInitializedAsync()
     {
@@ -83,6 +153,7 @@ else
             return;
         }
 
+        await LoadTemplates();
         await LoadRequests();
     }
 
@@ -126,49 +197,116 @@ else
         }
     }
 
-    private async Task HandleReview(RegistrationRequestItem item, bool approve)
+    private async Task LoadTemplates()
     {
-        var notes = "";
-        var confirmed = await ShowReviewDialog(item, approve, notes);
-        // Simple confirmation - review notes handled inline
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/welcome-policy-templates");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<WelcomePolicyTemplateItem>>();
+                _templates = result ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load policy templates: {ex.Message}", Severity.Warning);
+        }
     }
 
-    private async Task<bool> ShowReviewDialog(RegistrationRequestItem item, bool approve, string notes)
+    private void OpenApproveDialog(RegistrationRequestItem item)
     {
-        var action = approve ? "approve" : "reject";
+        _selectedRequest = item;
+        _selectedTemplateId = null;
+        _reviewNotes = "";
+        _showApproveDialog = true;
+    }
+
+    private void OpenRejectDialog(RegistrationRequestItem item)
+    {
+        _selectedRequest = item;
+        _reviewNotes = "";
+        _showRejectDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        _showApproveDialog = false;
+        _showRejectDialog = false;
+        _selectedRequest = null;
+        _selectedTemplateId = null;
+        _reviewNotes = "";
+    }
+
+    private async Task ConfirmApprove()
+    {
+        if (_selectedRequest == null) return;
+        await SubmitReview(_selectedRequest.RequestId, true, _reviewNotes, _selectedTemplateId);
+        CloseDialog();
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (_selectedRequest == null) return;
+        if (string.IsNullOrWhiteSpace(_reviewNotes))
+        {
+            Snackbar.Add("Please provide a rejection reason.", Severity.Warning);
+            return;
+        }
+        await SubmitReview(_selectedRequest.RequestId, false, _reviewNotes, null);
+        CloseDialog();
+    }
+
+    private async Task SubmitReview(Guid requestId, bool approve, string notes, Guid? templateId)
+    {
+        _submitting = true;
         var token = await AuthState.GetTokenAsync();
 
         try
         {
+            var action = approve ? "approve" : "reject";
             var request = new HttpRequestMessage(HttpMethod.Post,
-                $"api/v1/admin/registration-requests/{item.RequestId}/{action}");
+                $"api/v1/admin/registration-requests/{requestId}/{action}");
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            request.Content = JsonContent.Create(new { ReviewNotes = notes });
+            request.Content = JsonContent.Create(new { ReviewNotes = notes, WelcomeGrantPolicyTemplateId = templateId });
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(
-                    approve ? $"Approved: {item.BusinessName}" : $"Rejected: {item.BusinessName}",
+                    approve ? "Approved successfully." : "Rejected.",
                     approve ? Severity.Success : Severity.Warning);
                 await LoadRequests();
-                return true;
             }
             else
             {
                 var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
                 Snackbar.Add(error?.error ?? "Action failed.", Severity.Error);
-                return false;
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
-            return false;
         }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private string GetTemplateDisplayText(Guid? id)
+    {
+        if (id == null) return "Platform default";
+        var t = _templates.FirstOrDefault(x => x.Id == id);
+        return t == null ? id.ToString()! : $"{t.Name} ({t.WelcomeCredits} credits)";
     }
 
     public class RegistrationRequestItem
@@ -185,6 +323,16 @@ else
         public DateTime? ReviewedAt { get; set; }
         public string? ReviewNotes { get; set; }
         public string? ReviewedByName { get; set; }
+    }
+
+    private class WelcomePolicyTemplateItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public int WelcomeCredits { get; set; }
+        public int? WelcomeCreditExpiryMonths { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsDefault { get; set; }
     }
 
     private class ErrorResponse

@@ -470,7 +470,7 @@ public class CreditServiceTests
     private sealed class StubNotificationService : INotificationService
     {
         public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task NotifyApplicantReviewResultAsync(Guid userId, string brandName, bool approved, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -478,6 +478,7 @@ public class CreditServiceTests
         public Task NotifyCreditsExpiringAsync(CreditsExpiringNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -495,6 +496,24 @@ public class CreditServiceTests
 
         public Task<ResolvedWelcomePolicy> ResolveForBusinessAsync(Guid businessId, CancellationToken cancellationToken = default)
             => Task.FromResult(Welcome);
+
+        public Task<WelcomeGrantPolicy> AssignTemplateToBusinessAsync(Guid businessId, Guid? templateId, Guid? actingUserId = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WelcomeGrantPolicyTemplate>> GetTemplatesAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicyTemplate?> GetTemplateAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicyTemplate?> GetDefaultTemplateAsync(CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicyTemplate> CreateTemplateAsync(WelcomeGrantPolicyTemplate template, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<WelcomeGrantPolicyTemplate> UpdateTemplateAsync(Guid id, WelcomeGrantPolicyTemplate changes, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task DeactivateTemplateAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task SetDefaultTemplateAsync(Guid id, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
 
         public Task<IReadOnlyList<WelcomeGrantPolicy>> GetPoliciesAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();

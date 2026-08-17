@@ -126,7 +126,8 @@ See [docs/notification-matrix.md](notification-matrix.md) for the full matrix wi
 |---|---|---|---|
 | 1 | New business registration | `AdminNewRegistration` | All Admin users |
 | 2 | Registration submitted | `ApplicantRegistrationSubmitted` | Applicant |
-| 3 | Registration approved/rejected | `ApplicantReviewResult` | Brand representative |
+| 3 | Registration approved | `ActiveBusiness` | Business contact |
+| 3b | Registration rejected | `RegistrationRejected` | Applicant |
 | 4 | Voucher received | `VoucherReceived` | Member |
 | 5 | Adjustment pending | `AdjustmentPending` | FinancialControllers |
 | 6 | Adjustment reviewed | `AdjustmentReviewed` | Requester |

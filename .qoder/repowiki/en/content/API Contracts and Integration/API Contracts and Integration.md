@@ -40,18 +40,17 @@
 - [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
 - [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
 - [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
+- [BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
 - [notification-matrix.md](file://docs/notification-matrix.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive Customer Management API with search, CRUD operations, blacklist management, and CSV import capabilities
-- Integrated Email Logging system for audit trail of all outbound email notifications with success/failure tracking
-- Enhanced Business Management API with improved entity operations and validation
-- Updated authentication and authorization patterns for customer management endpoints
-- **Updated**: Password Reset Authentication Endpoints: Enhanced POST /api/v1/auth/forgot-password and POST /api/v1/auth/reset-password with complete token-based workflow, secure token generation, and 30-minute expiry
-- **Enhanced**: Email Notification System: Added PasswordReset, StaffAccountCreated, and VoucherTransferInitiated notification types with complete template support and audit trail integration
-- **Updated**: Authentication API section with enhanced password reset functionality and security considerations including token validation and user enumeration prevention
+- Added comprehensive BrandCreatedNotification type with complete business creation workflow automation
+- Enhanced integration endpoints with new Members parameter structure for improved member data handling
+- Updated member event history functionality with enhanced event tracking capabilities
+- Integrated email notification system with new BrandCreated template and automated business activation workflows
+- Enhanced distribution endpoint to support structured member data with phone-to-email mapping
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -80,9 +79,9 @@ This document provides comprehensive API contracts and integration guidance for 
 - **New**: Cross-Tenant Settlement API: Financial settlement tracking between sponsoring and redeeming brands
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
-- **New**: Business Management API: Administrative operations for business entities
+- **New**: Business Management API: Administrative operations for business entities with automated email notifications
 - **New**: Customer Management API: Comprehensive customer record management with blacklist functionality and bulk import
-- **New**: Email Notification System: Complete audit trail for all outbound email communications with retry logic and error tracking
+- **Enhanced**: Email Notification System: Complete audit trail for all outbound email communications with retry logic, error tracking, template rendering, and comprehensive business lifecycle notifications including BrandCreated, StaffAccountCreated, VoucherTransferInitiated, and PasswordReset
 - **Enhanced**: Password Reset Authentication: Secure password reset workflow with token-based verification, email notifications, and enhanced security measures
 
 It covers HTTP methods, URL patterns, request/response schemas, authentication, security, common use cases, client implementation guidelines, error handling strategies, rate limiting considerations, versioning, transaction security model, rollback mechanisms, performance optimization tips, and debugging approaches.
@@ -93,7 +92,7 @@ The repository organizes API-related knowledge across several documentation file
 - Architecture describes the 3-layer SaaS design and security posture
 - Data Models outline core entities and relationships
 - Index and scan report provide project metadata and current state
-- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, enhanced credit management, customer management, and email logging
+- New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, enhanced credit management, customer management, and email logging with automated business lifecycle notifications
 
 ```mermaid
 graph TB
@@ -137,12 +136,14 @@ BB["EmailLog Entity"]
 CC["PasswordReset Template"]
 DD["StaffAccountCreated Template"]
 EE["VoucherTransferInitiated Template"]
+FF["BrandCreated Template"]
+GG["BrandCreatedNotification"]
 end
 subgraph "Planning Artifacts"
-FF["_bmad-output/planning-artifacts/epics.md"]
+HH["_bmad-output/planning-artifacts/epics.md"]
 end
 subgraph "Business Rules"
-GG["Key Functionalities.txt"]
+II["Key Functionalities.txt"]
 end
 A --> B
 A --> C
@@ -150,8 +151,8 @@ A --> D
 A --> E
 C --> B
 D --> B
-FF --> B
-GG --> B
+HH --> B
+II --> B
 F --> B
 G --> B
 H --> B
@@ -178,6 +179,8 @@ BB --> B
 CC --> B
 DD --> B
 EE --> B
+FF --> B
+GG --> B
 ```
 
 **Diagram sources**
@@ -204,6 +207,7 @@ EE --> B
 - [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
 - [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
 - [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
+- [BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
 
 **Section sources**
 - [index.md](file://docs/index.md)
@@ -212,21 +216,21 @@ EE --> B
 ## Core Components
 - POS Integration API: Exposes endpoints for verifying voucher validity, locking a voucher to prevent double-spending, committing the redemption upon successful transaction, and rolling back a lock on failure or cancellation
 - Member App API: Provides endpoints for listing a member's vouchers, initiating transfers, and managing transfer inbox/outbox
-- Brand Management API: Handles user authentication, outlet management, and administrative functions
+- Brand Management API: Handles user authentication, outlet management, and administrative functions with automated business lifecycle notifications
 - Voucher Planning API: Manages voucher plan creation, approval workflows, and version control
-- Distribution API: Supports batch promotion distribution with CSV upload capabilities
+- Distribution API: Supports batch promotion distribution with CSV upload capabilities and enhanced member data handling
 - Reporting API: Provides comprehensive distribution summaries and CSV exports
 - Store API: Offers gift voucher catalog and purchase functionality
 - **Enhanced**: Credit Ledger API: Comprehensive prepaid billing system with balance management, batch operations, consumption tracking, policy resolution, and admin top-up functionality
 - **New**: Credit Adjustment API: Maker-checker workflow for credit corrections with approval matrix and threshold controls
 - **New**: Credit Policy API: Administrative management of pricing policies and brand groups with scope-based resolution
-- **New**: Loyalty App Integration API: External partner integration for segment distribution, member wallet queries, event history, and campaign performance
+- **New**: Loyalty App Integration API: External partner integration for segment distribution with enhanced member data structure, member wallet queries, event history, and campaign performance
 - **New**: Settlement API: Cross-tenant financial settlement tracking and netting reports
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
 - **New**: Media Management API: Image upload and CDN integration for rich voucher displays
-- **New**: Business Management API: Administrative operations for business entities
+- **New**: Business Management API: Administrative operations for business entities with automated email notifications
 - **New**: Customer Management API: Comprehensive customer record management with search, CRUD operations, blacklist functionality, and CSV import capabilities
-- **Enhanced**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, template rendering, and additional notification types (PasswordReset, StaffAccountCreated, VoucherTransferInitiated)
+- **Enhanced**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, template rendering, and comprehensive business lifecycle notifications including BrandCreated, StaffAccountCreated, VoucherTransferInitiated, and PasswordReset
 - **Enhanced**: Password Reset Authentication: Secure password reset workflow with token generation, email delivery, verification, and enhanced security measures
 
 Authentication:
@@ -260,7 +264,7 @@ Security highlights:
 - **Enhanced**: Financial controls with maker-checker workflow for credit adjustments
 - **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
 - **New**: Customer data protection with role-based access controls
-- **Enhanced**: Email notification audit trail with comprehensive logging and retry mechanisms
+- **Enhanced**: Email notification audit trail with comprehensive logging and retry mechanisms including automated business lifecycle notifications
 - **Enhanced**: Password reset security with time-limited tokens (30 minutes), secure token storage, and user enumeration prevention
 
 ```mermaid
@@ -279,6 +283,7 @@ PA["Policy-Based Authorization"]
 CL["Customer Data Protection"]
 EL["Email Audit Trail"]
 PR["Password Reset Security"]
+BN["Business Lifecycle Notifications"]
 end
 BLL --> MT
 BLL --> DS
@@ -291,6 +296,7 @@ BLL --> PA
 BLL --> CL
 BLL --> EL
 BLL --> PR
+BLL --> BN
 ```
 
 **Diagram sources**
@@ -460,6 +466,39 @@ Access Control:
 
 **Section sources**
 - [UsersController.cs](file://src/NonCash.API/Controllers/UsersController.cs)
+
+### **Enhanced**: Business Management API with Automated Workflows
+
+#### Business Entity API with Email Automation
+Endpoints:
+- Get All Businesses: GET /api/v1/businesses (Admin)
+- Get Business: GET /api/v1/businesses/{id} (Admin)
+- Create Business: POST /api/v1/businesses (Admin)
+- Update Business: PUT /api/v1/businesses/{id} (Admin)
+
+**Enhanced** Business Creation Workflow:
+1. Admin creates business entity with tax code, name, address, and contact information
+2. System validates tax code uniqueness and required fields
+3. Business entity is created and saved to database
+4. **Automated Email Notification**: If contact email is provided, system automatically sends BrandCreated notification
+5. Email contains business details including business name, brand name, and tax code
+6. Email delivery is logged in email_logs table for audit trail
+7. Email failures are caught and logged but don't block business creation
+
+**Enhanced** Email Notification Features:
+- **BrandCreatedNotification**: New notification type for business creation events
+- **BrandCreated.html Template**: Professional HTML email template with business details
+- **Automatic Delivery**: Email sent immediately after business creation if contact email exists
+- **Error Handling**: Email failures are caught and logged without blocking business operations
+- **Audit Trail**: All email attempts logged with success/failure status
+
+**Updated** Enhanced with comprehensive business creation workflow automation and email notification system
+
+**Section sources**
+- [BusinessesController.cs:52-96](file://src/NonCash.API/Controllers/BusinessesController.cs#L52-L96)
+- [EmailNotificationService.cs:234-251](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L234-L251)
+- [BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
+- [INotificationService.cs:60-65](file://src/NonCash.Core/Interfaces/INotificationService.cs#L60-L65)
 
 ### Voucher Planning API
 
@@ -760,7 +799,7 @@ Policy Resolution:
 - [CreditDtos.cs](file://src/NonCash.API/DTOs/CreditDtos.cs)
 - [ICreditPolicyService.cs](file://src/NonCash.Core/Interfaces/ICreditPolicyService.cs)
 
-### **New**: Loyalty App Integration API (Epic 6)
+### **Enhanced**: Loyalty App Integration API (Epic 6)
 
 #### Partner Management API
 Endpoints:
@@ -772,11 +811,11 @@ Endpoints:
 - Generate API Key: POST /api/v1/integration-partners/{id}/generate-key (Admin)
 - Set Brands: PUT /api/v1/integration-partners/{id}/brands (Admin)
 
-#### Segment Distribution API
+#### **Enhanced**: Segment Distribution API with Members Parameter Structure
 Endpoints:
 - Distribute to Segment: POST /integration/distribute (Partner API Key)
 
-Request:
+**Enhanced** Request Structure:
 ```json
 {
   "planId": "GUID",
@@ -785,9 +824,30 @@ Request:
   "externalMemberIds": {
     "0909222222": "EXT-BOB-001",
     "0909333333": "EXT-CAROL-001"
-  }
+  },
+  "members": [
+    {
+      "phone": "0909222222",
+      "email": "alice@example.com",
+      "externalMemberId": "EXT-BOB-001",
+      "fullName": "Alice Nguyen"
+    },
+    {
+      "phone": "0909333333", 
+      "email": "bob@example.com",
+      "externalMemberId": "EXT-CAROL-001",
+      "fullName": "Bob Tran"
+    }
+  ]
 }
 ```
+
+**Enhanced** Features:
+- **Members Parameter**: New structured member data with phone, email, external ID, and full name
+- **Phone-to-Email Mapping**: Automatic mapping from members array for email notifications
+- **Backward Compatibility**: Legacy ExternalMemberIds dictionary still supported
+- **Enhanced Email Notifications**: Email sent to recipients when email provided in members array
+- **Webhook Events**: Distributed webhook events for each member with email sent status
 
 Response:
 ```json
@@ -798,10 +858,17 @@ Response:
 }
 ```
 
-#### Member Wallet & Event History API
+#### **Enhanced**: Member Wallet & Event History API
 Endpoints:
 - Get Member Vouchers: GET /integration/member/{phone}/vouchers (Partner API Key)
-- Get Member Events: GET /integration/member/{phone}/events?limit=50 (Partner API Key)
+- **Enhanced**: Get Member Events: GET /integration/member/{phone}/events?limit=50 (Partner API Key)
+
+**Enhanced** Event History Features:
+- **Comprehensive Event Tracking**: Aggregates distributions, usages, and transfers
+- **Event Types**: Distributed, Redeemed, Transferred (sent/received), Expired, Cancelled
+- **Rich Event Details**: Includes voucher IDs, serial numbers, brand names, and contextual details
+- **Chronological Ordering**: Events sorted by occurrence timestamp
+- **Partner Brand Scoping**: Only shows events for partner-authorized brands
 
 #### Campaign Performance API
 Endpoints:
@@ -811,9 +878,13 @@ Authentication:
 - Partner API Key via X-API-Key header
 - Brand scope validation based on partner associations
 
+**Updated** Enhanced with new Members parameter structure and comprehensive member event history functionality
+
 **Section sources**
-- [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
-- [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
+- [IntegrationController.cs:43-105](file://src/NonCash.API/Controllers/IntegrationController.cs#L43-L105)
+- [IntegrationController.cs:144-164](file://src/NonCash.API/Controllers/IntegrationController.cs#L144-L164)
+- [IntegrationController.cs:187-202](file://src/NonCash.API/Controllers/IntegrationController.cs#L187-L202)
+- [IPromotionService.cs:275-334](file://src/NonCash.Core/Interfaces/IPromotionService.cs#L275-L334)
 
 ### **New**: Cross-Tenant Settlement API (Epic 7)
 
@@ -904,24 +975,6 @@ Features:
 **Section sources**
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
 
-### **New**: Business Management API
-
-#### Business Entity API
-Endpoints:
-- Get All Businesses: GET /api/v1/businesses (Admin)
-- Get Business: GET /api/v1/businesses/{id} (Admin)
-- Create Business: POST /api/v1/businesses (Admin)
-- Update Business: PUT /api/v1/businesses/{id} (Admin)
-
-Business Entity Features:
-- Tax code validation and uniqueness
-- Contact information management
-- Active/inactive status
-- Brand association counting
-
-**Section sources**
-- [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
-
 ### **New**: Customer Management API
 
 #### Customer CRUD Operations
@@ -975,7 +1028,7 @@ Fields:
 - ToAddress: Recipient email address
 - Subject: Email subject line
 - TemplateName: Template used for email rendering
-- NotificationType: Category of notification (e.g., "NewRegistration", "VoucherDistribution", "AdjustmentPending", "PasswordReset")
+- NotificationType: Category of notification (e.g., "NewRegistration", "VoucherDistribution", "AdjustmentPending", "PasswordReset", "BrandCreated")
 - RelatedEntityId: Optional reference to related business entity
 - Success: Boolean indicating delivery success
 - ErrorMessage: Error details for failed deliveries
@@ -1001,6 +1054,7 @@ The EmailNotificationService handles all email communications with robust error 
 - **Enhanced**: StaffAccountCreated: Staff account creation notifications with role and brand information
 - **Enhanced**: VoucherTransferInitiated: Voucher transfer notifications with sender and recipient details
 - **Enhanced**: PasswordReset: Password reset request notifications with secure token delivery
+- **New**: BrandCreated: Business creation notifications with business details, brand name, and tax code
 
 **Enhanced** Features:
 - SMTP configuration with SSL/TLS support
@@ -1011,16 +1065,19 @@ The EmailNotificationService handles all email communications with robust error 
 - Transient error detection and handling
 - **Enhanced**: Additional notification types for staff management and voucher transfers
 - **Enhanced**: Enhanced template rendering with personalized content
+- **New**: Automated business lifecycle notifications with BrandCreated template
 
-**Updated** Complete email notification system with comprehensive audit trail, retry logic, template rendering, and enhanced notification capabilities
+**Updated** Complete email notification system with comprehensive audit trail, retry logic, template rendering, enhanced notification capabilities, and automated business creation workflows
 
 **Section sources**
 - [EmailLog.cs](file://src/NonCash.Core/Entities/EmailLog.cs)
 - [EmailNotificationService.cs:44-384](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L44-L384)
+- [EmailNotificationService.cs:234-251](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L234-L251)
 - [AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
 - [PasswordReset.html](file://src/NonCash.Infrastructure/EmailTemplates/PasswordReset.html)
 - [StaffAccountCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/StaffAccountCreated.html)
 - [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
+- [BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
 - [notification-matrix.md](file://docs/notification-matrix.md)
 
 ### Data Model Context for POS Redemption
@@ -1049,17 +1106,18 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 - POS Integration API depends on the Usage Service for verification, locking, committing, and rolling back voucher usage
 - Member App API depends on Distribution/Transfer Service for listing and transferring vouchers
 - Brand Management API depends on Auth Service for user authentication, authorization, and enhanced password reset functionality
+- **Enhanced**: Business Management API depends on EmailNotificationService for automated business creation notifications
 - Voucher Planning API depends on VoucherPlanService for plan management and approval workflows
 - Distribution API depends on VoucherGenerationService and PromotionService for batch operations
 - Reporting API depends on DistributionReportService for analytics and insights
 - **Enhanced**: Credit API depends on CreditService for prepaid billing management, ICreditPolicyService for policy resolution, and ICreditAdjustmentService for adjustment workflows
-- **New**: Integration API depends on PromotionService, VoucherEventPublisher, and IntegrationPartnerService
+- **Enhanced**: Integration API depends on PromotionService, VoucherEventPublisher, and IntegrationPartnerService with enhanced member data handling
 - **New**: Settlement API depends on SettlementService for cross-tenant financial tracking
 - **New**: Payment API depends on PaymentService, PurchaseService, and ZaloPay integration
 - **New**: Image Upload API depends on ImageStorageService for CDN integration
 - **New**: Business API depends on BusinessRepository and BrandRepository
 - **New**: Customer API depends on CustomerService and ICustomerImportService for bulk operations
-- **Enhanced**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository with enhanced notification types
+- **Enhanced**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository with enhanced notification types including BrandCreated
 - **Enhanced**: Password Reset functionality depends on AuthService, INotificationService, and EmailNotificationService for secure token management and email delivery
 - All services rely on the Data Access Layer for persistence and transactional integrity
 - Security controls (multi-tenancy, dynamic codes, API keys, JWT) are enforced at the Business Logic Layer
@@ -1069,6 +1127,7 @@ graph LR
 POS["POS Integration API"] --> USVC["Usage Service"]
 MEM["Member App API"] --> TSVC["Transfer/Distribution Service"]
 AUTH["Auth API"] --> ASVC["Auth Service"]
+BUSINESS["Enhanced Business API"] --> ENSVC["EmailNotificationService"]
 PLANS["Voucher Plans API"] --> PSVC["VoucherPlanService"]
 APPROVALS["Approvals API"] --> ASVC2["ApprovalService"]
 GEN["Voucher Generation API"] --> GENSVC["VoucherGenerationService"]
@@ -1080,17 +1139,18 @@ REG["Registration Review API"] --> RSVC2["RegistrationService"]
 CREDITS["Enhanced Credit API"] --> CSVC["CreditService"]
 CREDITS --> CPSVC["CreditPolicyService"]
 CREDITS --> CASVC["CreditAdjustmentService"]
-INTEGRATION["Integration API"] --> PSVC2["PromotionService"]
+INTEGRATION["Enhanced Integration API"] --> PSVC2["PromotionService"]
 SETTLEMENT["Settlement API"] --> SSVC["SettlementService"]
 PAYMENTS["Payment API"] --> PSVC2["PaymentService"]
 UPLOAD["Image Upload API"] --> ISVC["ImageStorageService"]
 BUSINESS["Business API"] --> BR["BusinessRepository"]
 CUSTOMERS["Customer API"] --> CSVC2["CustomerService"]
-EMAIL["Enhanced Email System"] --> ENSVC["EmailNotificationService"]
+EMAIL["Enhanced Email System"] --> ENSVC2["EmailNotificationService"]
 IPARTNERS["Integration Partners API"] --> IPSVC["IntegrationPartnerService"]
 USVC --> DAL["Data Access Layer"]
 TSVC --> DAL
 ASVC --> DAL
+ENSVC --> DAL
 PSVC --> DAL
 GENSVC --> DAL
 PROMOSVC --> DAL
@@ -1105,7 +1165,7 @@ SSVC --> DAL
 ISVC --> DAL
 BR --> DAL
 CSVC2 --> DAL
-ENSVC --> DAL
+ENSVC2 --> DAL
 IPSVC --> DAL
 DAL --> DB["PostgreSQL"]
 ```
@@ -1130,11 +1190,13 @@ DAL --> DB["PostgreSQL"]
 - **Enhanced**: Batch operations: Leverage paginated batch queries for credit management with efficient filtering
 - **Enhanced**: Policy resolution: Cache resolved policies per brand to minimize database lookups
 - **Enhanced**: Adjustment workflows: Implement efficient approval matrix evaluation with threshold calculations
+- **Enhanced**: Email notifications: Implement asynchronous email sending with retry logic to avoid blocking operations and enhanced notification types
+- **Enhanced**: Business creation workflow: Email notifications run asynchronously to avoid blocking business creation operations
+- **Enhanced**: Member event history: Optimize query performance with database indexes for phone number lookups and event aggregation
 - **New**: CDN integration: Leverage CDN for image delivery to reduce server load
 - **New**: Webhook handling: Implement idempotent webhook processing for payment confirmations
 - **New**: Settlement computation: Optimize netting calculations with database indexes for date ranges and brand pairs
 - **New**: Customer search: Utilize database indexes for phone number, name, and email searches
-- **Enhanced**: Email delivery: Implement asynchronous email sending with retry logic to avoid blocking operations and enhanced notification types
 - **New**: Bulk imports: Process CSV imports in batches with transactional integrity and progress reporting
 - **Enhanced**: Password reset: Implement efficient token generation and validation with database indexing for security tokens and enhanced security measures
 
@@ -1169,9 +1231,11 @@ Common issues and strategies:
   - Validate policy scope assignments (Global, BrandGroup, Brand)
   - Ensure brand group memberships are correctly configured
   - Check effective date ranges for policy applicability
-- **New**: Integration partner issues:
+- **Enhanced**: Integration partner issues:
   - Verify partner API key is active and associated with requested brand
   - Check partner callback URL configuration for webhook delivery
+  - **Enhanced**: Validate Members parameter structure for distribution requests
+  - **Enhanced**: Check phone-to-email mapping for email notifications
 - **New**: Settlement processing issues:
   - Ensure settlement entries exist before attempting to mark as settled
   - Validate date ranges for netting reports
@@ -1189,13 +1253,19 @@ Common issues and strategies:
   - Check SMTP configuration and connectivity
   - Review email logs for delivery failures and retry attempts
   - Validate email template rendering and recipient addresses
-  - **Enhanced**: Check additional notification types (StaffAccountCreated, VoucherTransferInitiated, PasswordReset) for proper template rendering
+  - **Enhanced**: Check additional notification types (StaffAccountCreated, VoucherTransferInitiated, PasswordReset, BrandCreated) for proper template rendering
+  - **Enhanced**: Verify business creation email notifications are sent when contact email is provided
 - **Enhanced**: Password reset issues:
   - Verify token generation and storage in user accounts with secure random generation
   - Check email delivery for password reset notifications with PasswordReset template
   - Validate token expiry handling (30-minute timeout) and user enumeration prevention
   - Ensure password validation meets security requirements (minimum 8 characters)
   - **Enhanced**: Check token validation for user status and expiry before password updates
+- **Enhanced**: Business creation workflow issues:
+  - Verify contact email is properly set on business entities
+  - Check email_logs table for BrandCreated notification delivery status
+  - Ensure SMTP configuration is correct for business creation emails
+  - Validate BrandCreated template rendering with business details
 - Debugging:
   - Capture request IDs and timestamps; correlate with backend logs
   - Validate outletID against the sales range defined in the associated VoucherPlanHeader
@@ -1204,13 +1274,14 @@ Common issues and strategies:
   - Review email log entries for notification delivery status
   - Monitor customer search query performance with appropriate indexing
   - **Enhanced**: Check password reset token validity, expiry times, and security token generation
+  - **Enhanced**: Monitor business creation workflow execution and email notification delivery
 
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 
 ## Conclusion
-NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, an enhanced email notification system with comprehensive audit trails and additional notification types, and secure password reset functionality with enhanced security measures. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
+NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, an enhanced email notification system with comprehensive audit trails and additional notification types including automated business creation workflows, and secure password reset functionality with enhanced security measures. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
 
 ## Appendices
 
@@ -1245,6 +1316,11 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **Enhanced**: POST /api/v1/auth/reset-password: { token, newPassword } → { message } - Validates token and updates password
 - GET /api/v1/users: Header: Authorization: Bearer <JWT> → List of users
 - POST /api/v1/users: Header: Authorization: Bearer <JWT> → Created user
+
+**Enhanced Business Management API**:
+- GET /api/v1/businesses: Header: Authorization: Bearer <JWT> (Admin) → List<BusinessResponse>
+- POST /api/v1/businesses: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse (with automated email notification)
+- PUT /api/v1/businesses/{id}: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse
 
 **Voucher Planning API**:
 - POST /api/v1/plans: Header: Authorization: Bearer <JWT> → Created plan
@@ -1304,10 +1380,10 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - PUT /api/v1/credit-policies/groups/{id}: Header: Authorization: Bearer <JWT> (Admin) → BrandGroupDto
 - PUT /api/v1/credit-policies/groups/{id}/members: Header: Authorization: Bearer <JWT> (Admin) → NoContent
 
-**Loyalty App Integration API**:
-- POST /integration/distribute: X-API-Key → { distributedCount, skippedCount, errors }
+**Enhanced Loyalty App Integration API**:
+- POST /integration/distribute: X-API-Key → { distributedCount, skippedCount, errors } (with enhanced Members parameter)
 - GET /integration/member/{phone}/vouchers: X-API-Key → List<IntegrationWalletItem>
-- GET /integration/member/{phone}/events: X-API-Key → List<IntegrationEventItem>
+- **Enhanced**: GET /integration/member/{phone}/events: X-API-Key → List<IntegrationEventItem> (with comprehensive event history)
 - GET /integration/campaigns/{planId}/performance: X-API-Key → Campaign performance metrics
 
 **Integration Partners API**:
@@ -1330,11 +1406,6 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 
 **Image Upload API**:
 - POST /api/v1/upload/image: Header: Authorization: Bearer <JWT> → UploadResponse
-
-**Business Management API**:
-- GET /api/v1/businesses: Header: Authorization: Bearer <JWT> (Admin) → List<BusinessResponse>
-- POST /api/v1/businesses: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse
-- PUT /api/v1/businesses/{id}: Header: Authorization: Bearer <JWT> (Admin) → BusinessResponse
 
 **Customer Management API**:
 - GET /api/v1/customers: Header: Authorization: Bearer <JWT> → PagedResult<CustomerResponse>
@@ -1376,9 +1447,10 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Webhook Security: Signature validation for payment provider callbacks
 - **New**: File Upload Security: Format validation and size limits for image uploads
 - **New**: Customer Data Protection: Role-based access controls for customer management operations
-- **Enhanced**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking and enhanced notification types
+- **Enhanced**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking and enhanced notification types including automated business lifecycle notifications
 - **New**: Blacklist Enforcement: Automatic exclusion of blacklisted customers from distributions and purchases
 - **Enhanced**: Password Reset Security: Time-limited tokens (30 minutes), secure cryptographic token generation, user enumeration prevention, and comprehensive token validation
+- **Enhanced**: Business Creation Security: Automated email notifications with error handling that doesn't block business operations
 
 **Section sources**
 - [architecture.md](file://docs/architecture.md)
@@ -1392,6 +1464,7 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 
 ### Versioning
 - All endpoints are under v1 of the base path
@@ -1415,9 +1488,10 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Payment processing integrates with ZaloPay for B2C purchases
 - **New**: Image uploads support rich voucher display with CDN integration
 - **New**: Customer blacklist status prevents participation in promotions and purchases
-- **Enhanced**: Email notifications provide audit trail for all outbound communications with retry logic and enhanced notification types
+- **Enhanced**: Email notifications provide audit trail for all outbound communications with retry logic and enhanced notification types including automated business creation workflows
 - **New**: Customer import supports upsert logic for duplicate phone numbers with error reporting
 - **Enhanced**: Password reset workflow includes secure cryptographic token generation, email delivery, time-limited validation, and user enumeration prevention
+- **Enhanced**: Business creation workflow includes automated email notifications with error handling and audit trail
 
 **Section sources**
 - [Key Functionalities.txt](file://Key%20Functionalities.txt)
@@ -1432,3 +1506,4 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)

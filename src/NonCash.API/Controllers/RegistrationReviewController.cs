@@ -35,7 +35,8 @@ public class RegistrationReviewController : ControllerBase
     public async Task<ActionResult> Approve(Guid requestId, [FromBody] ReviewActionDto? dto, CancellationToken cancellationToken)
     {
         var reviewerUserId = GetUserId();
-        var result = await _registrationService.ReviewAsync(requestId, reviewerUserId, true, dto?.ReviewNotes, cancellationToken);
+        var result = await _registrationService.ReviewAsync(
+            requestId, reviewerUserId, true, dto?.ReviewNotes, dto?.WelcomeGrantPolicyTemplateId, cancellationToken);
 
         if (!result.Success)
             return BadRequest(new { error = result.ErrorMessage });
@@ -47,7 +48,8 @@ public class RegistrationReviewController : ControllerBase
     public async Task<ActionResult> Reject(Guid requestId, [FromBody] ReviewActionDto? dto, CancellationToken cancellationToken)
     {
         var reviewerUserId = GetUserId();
-        var result = await _registrationService.ReviewAsync(requestId, reviewerUserId, false, dto?.ReviewNotes, cancellationToken);
+        var result = await _registrationService.ReviewAsync(
+            requestId, reviewerUserId, false, dto?.ReviewNotes, null, cancellationToken);
 
         if (!result.Success)
             return BadRequest(new { error = result.ErrorMessage });

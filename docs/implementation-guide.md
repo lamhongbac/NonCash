@@ -200,8 +200,10 @@ The usage-based billing model (Epic 9) is configured in `src/NonCash.API/appsett
 }
 ```
 
-- `WelcomeCredits` — credits granted automatically to every newly activated Brand (free period). Set to `0` to disable the welcome grant.
+- `WelcomeCredits` — fallback credits granted automatically to every newly activated Brand when no default welcome-policy template exists. Set to `0` to disable the welcome grant.
 - `LowBalanceWarningPercent` — reserved for UI low-balance warnings. Email notification system is available (see Email Notification System section below) if future low-balance alerts are needed.
+
+> **Note:** Since the welcome-policy-template refactor, the preferred way to control welcome credits is via **Admin → Welcome Policy Templates**. Create reusable templates, mark one as default, and select a template during registration approval. `CreditConfig:WelcomeCredits` is now only a last-resort fallback.
 
 ### 6.5 Web Frontend API Base URL
 

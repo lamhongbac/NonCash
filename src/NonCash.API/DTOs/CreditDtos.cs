@@ -100,13 +100,35 @@ public record SaveCreditPolicyRequest(
     bool IsActive
 );
 
-// ----- Welcome-grant policies (Admin, Business-scoped) -----
+// ----- Welcome-grant policy templates (Admin, reusable) -----
+
+public record WelcomePolicyTemplateDto(
+    Guid Id,
+    string Name,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths,
+    bool IsActive,
+    bool IsDefault,
+    DateTime CreatedAt
+);
+
+public record SaveWelcomePolicyTemplateRequest(
+    string Name,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths,
+    bool IsActive,
+    bool IsDefault
+);
+
+// ----- Welcome-grant policies (Admin, Business-scoped assignments) -----
 
 public record WelcomePolicyDto(
     Guid Id,
     string Name,
     Guid BusinessId,
     string? BusinessName,
+    Guid? WelcomeGrantPolicyTemplateId,
+    string? TemplateName,
     int WelcomeCredits,
     int? WelcomeCreditExpiryMonths,
     DateTime EffectiveFrom,
@@ -118,6 +140,7 @@ public record WelcomePolicyDto(
 public record SaveWelcomePolicyRequest(
     string Name,
     Guid BusinessId,
+    Guid? WelcomeGrantPolicyTemplateId,
     int WelcomeCredits,
     int? WelcomeCreditExpiryMonths,
     DateTime EffectiveFrom,

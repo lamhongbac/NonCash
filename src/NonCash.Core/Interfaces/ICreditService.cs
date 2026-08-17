@@ -32,8 +32,9 @@ public interface ICreditService
     /// <summary>
     /// Grants the policy-defined welcome credits as a WelcomeGrant batch.
     /// No-op (returns null) when the policy grants 0 or the brand already has one.
+    /// Set <paramref name="sendNotification"/> to false when the caller sends its own email (e.g. business activation).
     /// </summary>
-    Task<CreditBatch?> GrantWelcomeAsync(Guid brandId, CancellationToken cancellationToken = default);
+    Task<CreditBatch?> GrantWelcomeAsync(Guid brandId, bool sendNotification = true, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a batch for an applied adjustment (Grant/Compensation/Correction/Clawback/Reinstatement).

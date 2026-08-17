@@ -12,7 +12,23 @@
 - [config.yaml](file://_bmad/core/config.yaml)
 - [bmm-config.yaml](file://_bmad/bmm/config.yaml)
 - [manifest.yaml](file://_bmad/_config/manifest.yaml)
+- [PromotionService.cs](file://src/NonCash.Core/Services/PromotionService.cs)
+- [IPromotionService.cs](file://src/NonCash.Core/Interfaces/IPromotionService.cs)
+- [IntegrationController.cs](file://src/NonCash.API/Controllers/IntegrationController.cs)
+- [Customer.cs](file://src/NonCash.Core/Entities/Customer.cs)
+- [CustomerRepository.cs](file://src/NonCash.Infrastructure/Repositories/CustomerRepository.cs)
+- [6-3-member-wallet-event-history-api.md](file://_bmad-output/implementation-artifacts/6-3-member-wallet-event-history-api.md)
+- [6-5-campaign-performance-api.md](file://_bmad-output/implementation-artifacts/6-5-campaign-performance-api.md)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced PromotionService with comprehensive member wallet functionality for Epic 6.3
+- Added event history tracking across distributions, usages, and transfers
+- Implemented upsert mechanism for customer email updates from integration payloads
+- Added campaign performance tracking with outlet-level analytics for Epic 6.5
+- Updated Integration API endpoints for wallet queries, event history, and campaign performance
+- Enhanced distribution service with improved member management and notification capabilities
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -20,14 +36,15 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Enhanced Promotion Service](#enhanced-promotion-service)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
+11. [Appendices](#appendices)
 
 ## Introduction
-This document details the core services implementation for the NonCash SaaS platform, focusing on the five microservices: Planning Service, Approval Service, Distribution Service, Usage Service, and Identity/Tenant Service. It explains responsibilities, implementation patterns, invocation relationships, and integration points across the 3-layer architecture. It also covers data exchange mechanisms, error handling strategies, and operational concerns such as scalability, fault tolerance, and monitoring. The content is grounded in the repository’s architecture, data models, API contracts, and functional specifications.
+This document details the core services implementation for the NonCash SaaS platform, focusing on the five microservices: Planning Service, Approval Service, Distribution Service, Usage Service, and Identity/Tenant Service. It explains responsibilities, implementation patterns, invocation relationships, and integration points across the 3-layer architecture. The content has been updated to reflect recent enhancements including comprehensive member wallet functionality, event history tracking, customer email upsert mechanisms, and campaign performance analytics with outlet-level insights.
 
 ## Project Structure
 The NonCash project follows a 3-layer SaaS architecture with a clear separation of concerns:
@@ -105,6 +122,7 @@ graph TB
 subgraph "External Integrations"
 POS["POS Systems"]
 MEMBER["Member App"]
+LOYALTY["Loyalty Apps"]
 end
 subgraph "Presentation"
 WEBUI["NonCash.Web<br/>Blazor"]
@@ -115,6 +133,7 @@ PLAN["Planning Service"]
 APPROVAL["Approval Service"]
 DIST["Distribution Service"]
 USAGE["Usage Service"]
+PROMO["Enhanced Promotion Service"]
 IDT["Identity/Tenant Service"]
 end
 subgraph "Data Access"
@@ -123,10 +142,12 @@ DB["PostgreSQL"]
 end
 POS --> REST
 MEMBER --> REST
+LOYALTY --> REST
 WEBUI --> PLAN
 WEBUI --> APPROVAL
 WEBUI --> DIST
 REST --> USAGE
+REST --> PROMO
 PLAN --> APPROVAL
 APPROVAL --> DIST
 DIST --> USAGE
@@ -134,10 +155,12 @@ PLAN --> IDT
 APPROVAL --> IDT
 DIST --> IDT
 USAGE --> IDT
+PROMO --> IDT
 PLAN --> REPO
 APPROVAL --> REPO
 DIST --> REPO
 USAGE --> REPO
+PROMO --> REPO
 IDT --> REPO
 REPO --> DB
 ```
@@ -359,6 +382,88 @@ UsageService --> IdentityTenantService : "validates API Key/JWT"
 - [architecture.md:20-26](file://docs/architecture.md#L20-L26)
 - [data-models.md:63-98](file://docs/data-models.md#L63-L98)
 
+## Enhanced Promotion Service
+
+**Updated** The Promotion Service has been significantly enhanced with comprehensive member wallet functionality, event history tracking, and campaign performance analytics.
+
+### Member Wallet Functionality (Epic 6.3)
+The enhanced PromotionService now provides comprehensive wallet management capabilities for loyalty app partners:
+
+- **Wallet Query API**: `GET /integration/member/{phone}/vouchers` returns all vouchers for a member across authorized brands with display fields including images, icons, and branding information.
+- **Event History Tracking**: `GET /integration/member/{phone}/events` provides unified event history aggregating distributions, redemptions, and transfers chronologically.
+- **Brand Scoping**: All wallet queries are scoped to partner-authorized brands, ensuring data isolation and security.
+
+### Customer Email Upsert Mechanism
+The distribution service now includes intelligent email management:
+
+- **Upsert Logic**: When processing integration payloads, existing customer emails are updated if not already present in the system.
+- **Phone Normalization**: Phone numbers are normalized before email mapping to ensure accurate matching.
+- **Fallback Handling**: If no email is provided in the payload, the system continues without email notifications.
+
+### Campaign Performance Analytics (Epic 6.5)
+New campaign performance tracking provides outlet-level analytics:
+
+- **Performance Metrics**: Redemption rates, total distributed/redeemed counts, and redemption value calculations.
+- **Outlet Breakdown**: Per-outlet analytics showing redemption counts and total redeemed values.
+- **Authorization Enforcement**: Partners can only query campaigns for brands they're authorized to access.
+
+```mermaid
+sequenceDiagram
+participant LoyaltyApp as "Loyalty App"
+participant IntegrationAPI as "Integration Controller"
+participant PromoService as "Promotion Service"
+participant CustomerRepo as "Customer Repository"
+participant PlanRepo as "Plan Repository"
+LoyaltyApp->>IntegrationAPI : GET /integration/member/{phone}/vouchers
+IntegrationAPI->>PromoService : GetMemberVouchersByPhoneAsync(phone, brandIds)
+PromoService->>CustomerRepo : GetByPhoneNumberAsync(normalized phone)
+CustomerRepo-->>PromoService : Customer entity
+PromoService->>PlanRepo : Load member's vouchers with plan details
+PlanRepo-->>PromoService : Voucher details with display fields
+PromoService-->>IntegrationAPI : Wallet items with branding
+IntegrationAPI-->>LoyaltyApp : JSON wallet response
+Note over LoyaltyApp,LoyaltyApp : Similar flow for events and campaign performance APIs
+```
+
+**Diagram sources**
+- [IntegrationController.cs:112-164](file://src/NonCash.API/Controllers/IntegrationController.cs#L112-L164)
+- [PromotionService.cs:236-273](file://src/NonCash.Core/Services/PromotionService.cs#L236-L273)
+- [IPromotionService.cs:15-24](file://src/NonCash.Core/Interfaces/IPromotionService.cs#L15-L24)
+
+### Enhanced Distribution Processing
+The distribution workflow has been improved with better member management:
+
+- **Email Resolution**: Intelligent email resolution from integration payloads using phone-to-email mapping.
+- **Member Account Creation**: Automatic member account creation for new customers with proper initialization.
+- **Notification Integration**: Email notifications sent to recipients when email addresses are available.
+
+```mermaid
+flowchart TD
+Start(["Integration Distribution Request"]) --> ParseMembers["Parse Members Array"]
+ParseMembers --> BuildMapping["Build Phone→Email Mapping"]
+BuildMapping --> Distribute["Call PromotionService.DistributeAsync"]
+Distribute --> CheckCustomers["Check/Create Customers"]
+CheckCustomers --> UpsertEmail{"Email Available & Not Set?"}
+UpsertEmail --> |Yes| UpdateEmail["Update Customer Email"]
+UpsertEmail --> |No| SkipEmail["Skip Email Update"]
+UpdateEmail --> EnsureMember["Ensure Member Account"]
+SkipEmail --> EnsureMember
+EnsureMember --> AllocateVouchers["Allocate Vouchers"]
+AllocateVouchers --> SendNotifications["Send Email Notifications"]
+SendNotifications --> ReturnResult["Return Distribution Result"]
+```
+
+**Diagram sources**
+- [PromotionService.cs:43-216](file://src/NonCash.Core/Services/PromotionService.cs#L43-L216)
+- [IntegrationController.cs:43-105](file://src/NonCash.API/Controllers/IntegrationController.cs#L43-L105)
+
+**Section sources**
+- [PromotionService.cs:6-413](file://src/NonCash.Core/Services/PromotionService.cs#L6-L413)
+- [IPromotionService.cs:1-79](file://src/NonCash.Core/Interfaces/IPromotionService.cs#L1-L79)
+- [IntegrationController.cs:1-234](file://src/NonCash.API/Controllers/IntegrationController.cs#L1-L234)
+- [6-3-member-wallet-event-history-api.md:1-33](file://_bmad-output/implementation-artifacts/6-3-member-wallet-event-history-api.md#L1-L33)
+- [6-5-campaign-performance-api.md:1-63](file://_bmad-output/implementation-artifacts/6-5-campaign-performance-api.md#L1-L63)
+
 ## Dependency Analysis
 The services exhibit low coupling and high cohesion, with clear dependency directions:
 
@@ -368,6 +473,7 @@ IDT["Identity/Tenant Service"] --> PLAN["Planning Service"]
 IDT --> APPROVAL["Approval Service"]
 IDT --> DIST["Distribution Service"]
 IDT --> USAGE["Usage Service"]
+IDT --> PROMO["Enhanced Promotion Service"]
 PLAN --> APPROVAL
 APPROVAL --> DIST
 DIST --> USAGE
@@ -375,6 +481,7 @@ PLAN --> REPO["Repositories"]
 APPROVAL --> REPO
 DIST --> REPO
 USAGE --> REPO
+PROMO --> REPO
 IDT --> REPO
 REPO --> DB["PostgreSQL"]
 ```
@@ -398,6 +505,10 @@ REPO --> DB["PostgreSQL"]
   - Track service latency, error rates, and throughput; instrument cross-service calls.
 - Resilience
   - Implement circuit breakers and retries for inter-service calls; use idempotent operations where possible.
+- **Enhanced Performance Features**
+  - Member wallet queries optimized with efficient database joins and filtering.
+  - Event history aggregation uses chronological sorting with configurable limits.
+  - Campaign performance metrics calculated with grouped outlet analytics.
 
 ## Troubleshooting Guide
 - Authorization failures
@@ -406,6 +517,11 @@ REPO --> DB["PostgreSQL"]
   - Confirm plan publish date, outlet permissions, and lock ownership; handle rollback on failures.
 - Distribution errors
   - Validate member existence and transfer eligibility; review batch import logs.
+- **Enhanced Troubleshooting**
+  - **Wallet Query Issues**: Check partner brand authorization and phone number normalization.
+  - **Event History Gaps**: Verify distribution, usage, and transfer records exist for the member.
+  - **Campaign Performance Discrepancies**: Ensure outlet IDs are properly set during redemption processes.
+  - **Email Upsert Failures**: Validate phone number format and email address syntax in integration payloads.
 - Audit and tracing
   - Enable structured logging and correlation IDs for end-to-end tracing across services.
 
@@ -414,13 +530,18 @@ REPO --> DB["PostgreSQL"]
 - [Key Functionalities.txt:135-156](file://Key Functionalities.txt#L135-L156)
 
 ## Conclusion
-The NonCash platform’s microservices are designed for scalability, security, and maintainability within a 3-layer SaaS architecture. Planning, Approval, Distribution, Usage, and Identity/Tenant Services each encapsulate distinct responsibilities, communicate via well-defined contracts, and integrate with PostgreSQL through a robust repository pattern. By adhering to the documented boundaries, data models, and API contracts, teams can implement resilient, observable, and extensible solutions.
+The NonCash platform's microservices are designed for scalability, security, and maintainability within a 3-layer SaaS architecture. The enhanced Promotion Service now provides comprehensive member wallet functionality, event history tracking, and campaign performance analytics with outlet-level insights. Planning, Approval, Distribution, Usage, and Identity/Tenant Services each encapsulate distinct responsibilities, communicate via well-defined contracts, and integrate with PostgreSQL through a robust repository pattern. By adhering to the documented boundaries, data models, and API contracts, teams can implement resilient, observable, and extensible solutions.
 
 ## Appendices
 - Security and compliance
   - Multi-tenancy enforced via BrandID; dynamic voucher codes mitigate reuse; API Key and JWT used for external integrations.
 - Operational guidelines
   - Follow 3-layer architecture; keep services stateless; leverage shared models in NonCash.Shared; monitor and alert on SLIs/SLOs.
+- **Enhanced Features Documentation**
+  - Member wallet queries support brand-scoped voucher retrieval with display field optimization.
+  - Event history provides unified timeline of all member interactions across distributions, usages, and transfers.
+  - Campaign performance analytics enable ROI measurement with outlet-level redemption tracking.
+  - Customer email upsert mechanism ensures data consistency across integration touchpoints.
 
 **Section sources**
 - [description.txt:22-31](file://description.txt#L22-L31)

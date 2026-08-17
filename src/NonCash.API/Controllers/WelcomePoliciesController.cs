@@ -153,6 +153,7 @@ public class WelcomePoliciesController : ControllerBase
         {
             Name = request.Name,
             BusinessId = request.BusinessId,
+            WelcomeGrantPolicyTemplateId = request.WelcomeGrantPolicyTemplateId,
             WelcomeCredits = request.WelcomeCredits,
             WelcomeCreditExpiryMonths = request.WelcomeCreditExpiryMonths,
             EffectiveFrom = request.EffectiveFrom,
@@ -167,6 +168,8 @@ public class WelcomePoliciesController : ControllerBase
         p.Name,
         p.BusinessId,
         p.Business?.BusinessName,
+        p.WelcomeGrantPolicyTemplateId,
+        p.WelcomeGrantPolicyTemplate?.Name,
         p.WelcomeCredits,
         p.WelcomeCreditExpiryMonths,
         p.EffectiveFrom,

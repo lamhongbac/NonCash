@@ -17,23 +17,37 @@ This guide is for **System Administrators** who manage the NonCash platform, ten
 
 After login, the Admin dashboard provides navigation to:
 
-- **Business Management** — create and manage Brands.
-- **User Management** — create and manage staff accounts.
+- **Businesses** — create and manage Businesses (the parent company of Brands).
+- **Brands** — create and manage Brands (tenants) under a Business.
+- **Users** — create and manage staff accounts and roles.
 - **Registration Review** — approve or reject business self-registration requests.
-
-In addition, Admins can operate the following platform features through the Admin API (Swagger UI at `/swagger`):
-
+- **Credits** — view credit batches/balances, record top-ups, review the ledger.
+- **Credit Policies** — define pricing/expiry/low-balance policies (global, group, or brand scope).
+- **Credit Adjustments** — approve or reject credit adjustment requests.
+- **Welcome Policies** — configure welcome-credit grant rules for new Brands.
 - **Integration Partners** — onboard external Loyalty Apps and manage their API keys.
+
+Platform features that remain API-only (Swagger UI at `/swagger`):
+
 - **Settlements** — review and settle cross-tenant redemption balances.
-- **Credits** — top up Brand prepaid credits and review the credit ledger.
+- **POS / Redemption, Distribution, Plans** — operated by Brand roles; Admin has cross-brand read access.
 
 ---
 
-## 2. Brand Management
+## 2. Business & Brand Management
 
-A Brand is the root tenant entity in NonCash. All plans, outlets, vouchers, and brand-scoped users belong to exactly one Brand.
+A **Business** is the company record; a **Brand** is the tenant entity under it. All plans, outlets, vouchers, and brand-scoped users belong to exactly one Brand.
 
-### 2.1 Create a Brand
+### 2.1 Create a Business
+
+1. Go to **Businesses**.
+2. Click **Create Business**.
+3. Enter **Business Name** (required), **Tax Code** (required, unique), **Address** (required), and optional **Contact Email** / **Phone Number**.
+4. Click **Save**.
+
+If a **Contact Email** is provided, the contact receives a "Your business is now active on NonCash" email (recorded in the email audit log).
+
+### 2.2 Create a Brand
 
 1. Go to **Business Management > Brands**.
 2. Click **Create Brand**.
@@ -46,7 +60,7 @@ A Brand is the root tenant entity in NonCash. All plans, outlets, vouchers, and 
 
 The system initializes a unique `BrandID` (GUID). The new Brand appears in the active list.
 
-### 2.2 Update a Brand
+### 2.3 Update a Brand
 
 1. From the Brand list, click **Edit** on the row you want to update.
 2. Modify **Name** or **Contact Email** as needed.
@@ -54,7 +68,7 @@ The system initializes a unique `BrandID` (GUID). The new Brand appears in the a
 
 > **Note:** You cannot change the **Tax Code** if the Brand already has linked Outlets or Plans. This rule is enforced by the business layer.
 
-### 2.3 Search and Filter Brands
+### 2.4 Search and Filter Brands
 
 - Use the search box to filter by **Name**.
 - Use the status filter to show only `Active` or `Suspended` Brands.
@@ -157,7 +171,7 @@ The system atomically:
 
 ## 5. Integration Partner Management (Loyalty Apps)
 
-External Loyalty Apps (partners) integrate with NonCash through API-key authenticated endpoints under `/integration/*`. Admins manage these partners via the Admin API.
+External Loyalty Apps (partners) integrate with NonCash through API-key authenticated endpoints under `/integration/*`. Admins manage these partners from the **Integration Partners** page in the Admin console, or via the Admin API.
 
 ### 5.1 Create an Integration Partner
 
@@ -275,6 +289,22 @@ Redemption at POS **never fails because of credit balance** — customer-facing 
 
 Once the Brand tops up, these operations resume automatically. Negative balances should be recovered through the next top-up.
 
+### 7.6 Admin Console for Credits
+
+The **Credits** page shows credit batches and balances per Brand, and lets Admins record top-ups/adjustments and review the ledger without using the API.
+
+### 7.7 Credit Policies
+
+The **Credit Policies** page defines pricing and lifecycle rules (price per credit, expiry months, low-balance warning %, adjustment approval threshold) at global, brand-group, or brand scope. More specific scopes override broader ones.
+
+### 7.8 Credit Adjustments
+
+The **Credit Adjustments** page lists adjustment requests awaiting review. Approvers approve or reject them; approved adjustments post an `Adjustment` ledger entry.
+
+### 7.9 Welcome Policies
+
+The **Welcome Policies** page configures the welcome-credit grant (amount, expiry) applied to newly activated Brands, per business or by default.
+
 ---
 
 ## 8. Security and Multi-Tenancy
@@ -291,6 +321,7 @@ Once the Brand tops up, these operations resume automatically. Negative balances
 | Task | Path | Role |
 | --- | --- | --- |
 | Create a Brand | Business Management > Brands | Admin |
+| Create a Business | Businesses | Admin |
 | Create a staff user | User Management > Users | Admin |
 | Lock a user | User Management > Users > Edit | Admin |
 | Approve registration | Registration Review | Admin |
@@ -304,6 +335,11 @@ Once the Brand tops up, these operations resume automatically. Negative balances
 | Check a Brand's credit balance | API: `GET /api/v1/credits/balance?brandId={id}` | Admin |
 | Top up Brand credits | API: `POST /api/v1/credits/topup` | Admin |
 | Review credit ledger | API: `GET /api/v1/credits/ledger` | Admin |
+| Manage credits (UI) | Credits | Admin |
+| Manage credit policies | Credit Policies | Admin |
+| Approve credit adjustment | Credit Adjustments | Admin |
+| Manage welcome policies | Welcome Policies | Admin |
+| Manage integration partners (UI) | Integration Partners | Admin |
 
 ---
 
@@ -320,4 +356,5 @@ Once the Brand tops up, these operations resume automatically. Negative balances
 | Settle returns 404 | Entry not found or already settled | Check the entry ID and status in the settlement ledger. |
 | Top-up returns 400 | Type is `Consumption`, amount is 0, or negative amount on Grant/Purchase | Use `Purchase`/`Grant`/`Adjustment`; only `Adjustment` may be negative. |
 | Brand cannot generate/distribute vouchers | Credit balance ≤ 0 (`InsufficientCredits`) | Confirm the bank transfer and record a top-up for the Brand. |
+| Business/brand contact did not receive email | Contact Email empty, or record created before SMTP was configured | Set a Contact Email and recreate, or check the `email_logs` table for the send attempt/error. |
 

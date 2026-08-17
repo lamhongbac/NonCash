@@ -1,0 +1,44 @@
+one more thing, i need  you help to clarify the process (flow) "active new business" , let me summary as followings: 1/business do register ,2/manual agreement about welcome brand, credit price between business and platform (out the system),3/admin approve (send the default policy???), 4/ create a new policy (send a contract with new policy??)==>my opinion... platform must capable to approve with new policy... that will send the correct letter after that, what is your idea??
+
+Excellent question — this is a real process-design gap. Let me first verify exactly how the welcome policy is resolved today before giving you my opinion:
+The pieces exist — let me see the entity and the approval UI to find the gap:
+Your understanding of the flow is correct, and your opinion is right. Here's the clarified picture based on the actual code:
+
+## How the system works today
+
+**Good news: the platform already has per-business negotiated policies.** [WelcomeGrantPolicy](file:///d:/GIT%20PROJECT/NonCash/src/NonCash.Core/Entities/WelcomeGrantPolicy.cs) is business-scoped and versioned (`WelcomeCredits`, `WelcomeCreditExpiryMonths`, `EffectiveFrom/To`), managed in **Admin → Welcome Policies** (`/admin/welcome-policies`). At approval, [GrantWelcomeAsync](file:///d:/GIT%20PROJECT/NonCash/src/NonCash.Infrastructure/Services/CreditService.cs) resolves: *business-specific policy → fallback to platform default (`CreditConfig`)*. And the `ActiveBusiness` letter prints the **actually granted amount** from the batch — not a hardcoded default.
+
+So the current flow is:
+
+```
+1. Business registers                          (in system, Status=Submitted)
+2. Negotiate welcome credits / price           (out of system) 
+3. [OPTIONAL, easy to forget] Admin creates    (in system, /admin/welcome-policies)
+   business-specific WelcomeGrantPolicy
+4. Admin approves                              → grant fires IMMEDIATELY using
+                                                 whatever policy exists at that moment
+                                               → letter shows that amount
+```
+
+## The trap you correctly spotted
+
+Step 3 is **not enforced or prompted anywhere**. If the admin clicks Approve before creating the negotiated policy:
+
+1. The grant uses the **platform default** — wrong amount granted, wrong amount in the letter.
+2. Worse: the grant is **idempotent — one welcome batch per brand, ever**. Creating the negotiated policy *after* approval does nothing; the only remedy is a manual credit adjustment (which needs FinancialController approval and sends its own emails). Messy.
+
+So "approve first, set policy later" is not just a wrong letter — it's an unrecoverable wrong grant.
+
+## My idea: "Approve with policy" (your proposal, refined)
+
+Extend the **approval dialog** on the Registration Review page:
+
+- Show the currently-resolved policy: *"On approval, brand X will be granted **N** credits (source: platform default / business policy 'Y')"* — so the admin always sees what's about to happen **before** clicking Approve.
+- Add optional override fields: **Welcome credits** + **expiry months**. If filled, the approve API first creates a business-scoped `WelcomeGrantPolicy` version (audit-trailed with `CreatedBy`), *then* activates + grants — so the batch and the `ActiveBusiness` letter automatically carry the negotiated numbers.
+- If left blank → behaves exactly as today (existing policy or default). No breaking change.
+
+This keeps one atomic admin action = one correct grant = one correct letter, and the negotiated agreement gets recorded in the system as a proper policy version instead of living only in someone's email thread.
+
+**One scope note:** `WelcomeGrantPolicy` covers only *free welcome credits*. The negotiated **credit price** (what the business pays per credit when purchasing later) is a separate concept and isn't part of this policy or this letter — if you want per-business pricing captured at approval too, that's a follow-up feature on the purchase flow.
+
+Want me to implement the "approve with policy" enhancement (API + approval dialog + tests)?

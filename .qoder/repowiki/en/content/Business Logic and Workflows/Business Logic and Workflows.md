@@ -43,6 +43,7 @@
 - [src/NonCash.Infrastructure/Services/CreditPolicyService.cs](file://src/NonCash.Infrastructure/Services/CreditPolicyService.cs)
 - [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
 - [src/NonCash.Infrastructure/Services/EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
+- [src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
 - [src/NonCash.API/HostedServices/CreditExpirySweepService.cs](file://src/NonCash.API/HostedServices/CreditExpirySweepService.cs)
 - [src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs](file://src/NonCash.Shared/Helpers/VoucherDisplayHelper.cs)
 - [src/NonCash.Core/Configuration/CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
@@ -52,8 +53,10 @@
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive email logging system with audit trail for all outbound notifications
-- Enhanced business management capabilities with dedicated Business entity and CRUD operations
+- Enhanced business creation workflow with automatic email notifications to business contacts when new businesses are created and activated
+- Added robust error handling where notification failures don't block business creation process
+- Integrated comprehensive email logging system for complete audit trails of all outbound communications
+- Updated business management capabilities with dedicated Business entity and CRUD operations
 - Improved customer management with enhanced blacklist functionality and search capabilities
 - Updated notification service to integrate with email logging system for complete audit trails
 - Added new API endpoints for business management and improved customer operations
@@ -151,8 +154,8 @@ NonCash organizes business capabilities into microservices aligned with function
 - **Enhanced Credit Service**: Batch-based prepaid credit billing with FIFO consumption, pricing policies, and maker-checker workflows
 - Payment Service: Payment gateway integration and transaction management
 - Integration Service: Loyalty app partner management and member wallet APIs
-- **Email Notification Service**: Comprehensive email logging and audit trail system
-- **Business Management Service**: Multi-business support with brand relationships
+- **Email Notification Service**: Comprehensive email logging and audit trail system with retry mechanisms
+- **Business Management Service**: Multi-business support with brand relationships and automatic activation notifications
 
 These services operate under JWT and API Key security, enforce multi-tenancy via BrandID, and use dynamic voucher codes to prevent fraud.
 
@@ -246,7 +249,7 @@ Dist-->>Mem : "Vouchers Available in My Vouchers"
 
 **Diagram sources**
 - [_bmad-output/planning-artifacts/epics.md:199-257](file://_bmad-output/planning-artifacts/epics.md#L199-L257)
-- [docs/data-models.md:55-62](file://docs/data-models.md#L55-62)
+- [docs/data-models.md:55-62](file://docs/data-models.md#L55-L62)
 
 **Section sources**
 - [Key Functionalities.txt:87-134](file://Key%20Functionalities.txt#L87-L134)
@@ -608,6 +611,7 @@ The EmailNotificationService integrates with all notification flows to ensure co
 - **Credit Purchase Receipts**: Confirmation emails for credit purchases
 - **Low Balance Alerts**: Proactive warnings for low credit balances
 - **Credits Forfeited Notifications**: Alerts for expired credit batches
+- **Business Creation Notifications**: Automatic alerts when businesses are created and activated
 
 ### Retry Mechanism and Error Handling
 The system implements robust retry logic with exponential backoff:
@@ -661,11 +665,50 @@ Business "1" --> "many" Brand : owns
 - [src/NonCash.Core/Entities/Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
 - [src/NonCash.Core/Entities/Brand.cs:1-50](file://src/NonCash.Core/Entities/Brand.cs#L1-L50)
 
+### Enhanced Business Creation Workflow
+
+**Updated** Business creation now includes automatic email notifications to business contacts with robust error handling.
+
+When administrators create new businesses through the API, the system automatically sends confirmation emails to the business contact with comprehensive details about the newly activated business. The notification process is wrapped in try-catch blocks to ensure that email delivery failures never block the business creation process.
+
+#### Automatic Email Notification Flow
+The enhanced business creation workflow includes:
+- **Business Validation**: Validates business name, tax code, and address requirements
+- **Duplicate Prevention**: Checks for existing tax codes to prevent duplicates
+- **Business Creation**: Creates the business entity with active status
+- **Automatic Email Notification**: Sends "Your Business is Now Active" email to contact email
+- **Error Handling**: Wraps email sending in try-catch to prevent blocking business creation
+- **Response**: Returns business details including brand count
+
+```mermaid
+sequenceDiagram
+participant Admin as "Admin Interface"
+participant API as "BusinessesController"
+participant DB as "Database"
+participant Email as "EmailNotificationService"
+participant Log as "EmailLogRepository"
+Admin->>API : "POST /api/v1/businesses"
+API->>DB : "Validate tax code uniqueness"
+DB-->>API : "Available"
+API->>DB : "Create Business entity"
+DB-->>API : "Business created"
+API->>Email : "NotifyBrandCreatedAsync (try-catch)"
+Email->>Email : "Render BrandCreated template"
+Email->>Log : "Log email attempt"
+Log-->>Email : "Success/Failure"
+Email-->>API : "Notification completed"
+API-->>Admin : "Business created successfully"
+```
+
+**Diagram sources**
+- [src/NonCash.API/Controllers/BusinessesController.cs:52-96](file://src/NonCash.API/Controllers/BusinessesController.cs#L52-L96)
+- [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:234-251](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L234-L251)
+
 ### Business Management API
 Comprehensive REST API endpoints for business administration:
 - **GET /api/v1/businesses**: List all businesses with brand counts
 - **GET /api/v1/businesses/{id}**: Get specific business details
-- **POST /api/v1/businesses**: Create new business with validation
+- **POST /api/v1/businesses**: Create new business with validation and automatic email notification
 - **PUT /api/v1/businesses/{id}**: Update business information
 - **Tax Code Validation**: Ensures unique tax codes across system
 
@@ -677,7 +720,7 @@ Business-brand relationships are automatically tracked:
 
 **Section sources**
 - [src/NonCash.Core/Entities/Business.cs:1-18](file://src/NonCash.Core/Entities/Business.cs#L1-L18)
-- [src/NonCash.API/Controllers/BusinessesController.cs:1-123](file://src/NonCash.API/Controllers/BusinessesController.cs#L1-L123)
+- [src/NonCash.API/Controllers/BusinessesController.cs:1-140](file://src/NonCash.API/Controllers/BusinessesController.cs#L1-L140)
 - [src/NonCash.API/DTOs/BusinessDtos.cs:1-31](file://src/NonCash.API/DTOs/BusinessDtos.cs#L1-L31)
 - [src/NonCash.Infrastructure/Repositories/BusinessRepository.cs:1-26](file://src/NonCash.Infrastructure/Repositories/BusinessRepository.cs#L1-L26)
 
@@ -1051,6 +1094,7 @@ BUSINESS["Business Management Service"] --> DB
 - **Index email log tables on notification_type, sent_at, and success for efficient querying**
 - **Implement connection pooling for email SMTP connections to improve performance**
 - **Cache business-brand relationships to reduce database queries during brand lookups**
+- **Implement retry mechanisms with exponential backoff for email delivery failures**
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -1069,7 +1113,10 @@ Common issues and resolutions:
 - **Welcome policy migration issues**: Verify business-brand mappings and 'Migrated:' policy prefixes
 - **Welcome grant not applied**: Check business-scoped welcome policy resolution and CreditConfig fallback
 - **Email delivery failures**: Check EmailLog entries for error messages and retry counts
-- **Business management errors**: Verify tax code uniqueness and business status
+- **Business creation email not sent**: Verify business contact email is set and SMTP configuration is correct
+- **Business creation blocked by email failure**: Check try-catch error handling in BusinessesController
+- **Email log not persisting**: Verify EmailLogRepository configuration and database connectivity
+- **Business tax code conflicts**: Verify tax code uniqueness validation and duplicate prevention
 - **Customer search performance**: Check phone number normalization and index usage
 - **Email notification timeouts**: Verify SMTP configuration and network connectivity
 
@@ -1079,7 +1126,7 @@ Common issues and resolutions:
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ## Conclusion
-NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, loyalty app integrations, comprehensive email logging, and enhanced business management, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, operational automation, and complete audit trails for compliance and troubleshooting.
+NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, loyalty app integrations, comprehensive email logging, and enhanced business management with automatic activation notifications, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, operational automation, and complete audit trails for compliance and troubleshooting.
 
 ## Appendices
 
@@ -1118,12 +1165,18 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
   - Welcome policy resolution falls back to CreditConfig when no business-specific policy exists
 - **Edge: Email delivery failure handling**
   - System retries failed email sends up to 3 times with exponential backoff; failures are logged with detailed error information
+- **Edge: Business creation email failure**
+  - Email notification failures are caught and logged but do not block business creation process
 - **Edge: Business tax code conflicts**
   - System prevents creation of businesses with duplicate tax codes; returns conflict error with guidance
 - **Edge: Customer blacklist cascade effects**
   - Blacklisted customers are automatically excluded from batch promotions and self-purchase flows
 - **Edge: Email log storage limits**
   - Error messages are truncated to 2000 characters to prevent database bloat; consider log rotation strategies
+- **Edge: SMTP configuration issues**
+  - Email sending gracefully handles missing SMTP configuration by logging warnings and skipping delivery
+- **Edge: Business contact email validation**
+  - Email notifications are only sent when business contact email is properly configured
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
@@ -1135,5 +1188,5 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
 - [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs:74-99](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L74-L99)
 - [src/NonCash.Infrastructure/Services/WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)
 - [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:367-385](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L367-L385)
-- [src/NonCash.API/Controllers/BusinessesController.cs:50-79](file://src/NonCash.API/Controllers/BusinessesController.cs#L50-L79)
+- [src/NonCash.API/Controllers/BusinessesController.cs:52-96](file://src/NonCash.API/Controllers/BusinessesController.cs#L52-L96)
 - [src/NonCash.Core/Services/CustomerService.cs:61-78](file://src/NonCash.Core/Services/CustomerService.cs#L61-L78)

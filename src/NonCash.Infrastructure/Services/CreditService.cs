@@ -155,7 +155,7 @@ public class CreditService : ICreditService
         return batch;
     }
 
-    public async Task<CreditBatch?> GrantWelcomeAsync(Guid brandId, CancellationToken cancellationToken = default)
+    public async Task<CreditBatch?> GrantWelcomeAsync(Guid brandId, bool sendNotification = true, CancellationToken cancellationToken = default)
     {
         // Welcome is a per-business commercial term: resolve the brand's business, then
         // the business's welcome policy (→ CreditConfig fallback).
@@ -196,7 +196,10 @@ public class CreditService : ICreditService
         _context.CreditBatches.Add(batch);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await NotifyWelcomeCreditGrantedAsync(brandId, batch, cancellationToken);
+        if (sendNotification)
+        {
+            await NotifyWelcomeCreditGrantedAsync(brandId, batch, cancellationToken);
+        }
         return batch;
     }
 

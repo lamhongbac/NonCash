@@ -10,7 +10,7 @@ public interface IRegistrationService
     Task<RegistrationStatusInfo?> GetStatusAsync(Guid requestId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingRequestsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RegistrationRequestSummary>> GetAllRequestsAsync(CancellationToken cancellationToken = default);
-    Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, CancellationToken cancellationToken = default);
+    Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, Guid? welcomeGrantPolicyTemplateId = null, CancellationToken cancellationToken = default);
 }
 
 public record RegistrationRequestDto(
@@ -83,6 +83,7 @@ public class RegistrationService : IRegistrationService
     private readonly IAuthService _authService;
     private readonly INotificationService _notificationService;
     private readonly ICreditService? _creditService;
+    private readonly IWelcomePolicyService? _welcomePolicyService;
     private readonly CreditConfig _creditConfig;
 
     public RegistrationService(
@@ -93,6 +94,7 @@ public class RegistrationService : IRegistrationService
         IAuthService authService,
         INotificationService notificationService,
         ICreditService? creditService = null,
+        IWelcomePolicyService? welcomePolicyService = null,
         CreditConfig? creditConfig = null)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
@@ -102,6 +104,7 @@ public class RegistrationService : IRegistrationService
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _creditService = creditService;
+        _welcomePolicyService = welcomePolicyService;
         _creditConfig = creditConfig ?? new CreditConfig();
     }
 
@@ -219,7 +222,7 @@ public class RegistrationService : IRegistrationService
         return await BuildSummariesAsync(requests, cancellationToken);
     }
 
-    public async Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, CancellationToken cancellationToken = default)
+    public async Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, Guid? welcomeGrantPolicyTemplateId = null, CancellationToken cancellationToken = default)
     {
         var request = await _requestRepository.GetByIdAsync(requestId, cancellationToken);
         if (request == null)
@@ -238,6 +241,7 @@ public class RegistrationService : IRegistrationService
 
         // Update the associated Brand
         var brand = await _brandRepository.GetByIdAsync(request.BrandId, cancellationToken);
+        CreditBatch? welcomeBatch = null;
         if (brand != null)
         {
             brand.Status = approve ? BrandStatus.Active : BrandStatus.Suspended;
@@ -245,9 +249,10 @@ public class RegistrationService : IRegistrationService
             await _brandRepository.SaveChangesAsync(cancellationToken);
 
             // Epic 10: welcome credit grant when the brand is activated on approval (policy-driven).
+            // Notification is suppressed here; the business-activation email below carries the credit info.
             if (approve && _creditService != null)
             {
-                await _creditService.GrantWelcomeAsync(brand.Id, cancellationToken);
+                welcomeBatch = await _creditService.GrantWelcomeAsync(brand.Id, sendNotification: false, cancellationToken);
             }
         }
 
@@ -258,6 +263,14 @@ public class RegistrationService : IRegistrationService
             business.IsActive = approve;
             _businessRepository.Update(business);
             await _businessRepository.SaveChangesAsync(cancellationToken);
+
+            // On approval, assign the selected/default welcome policy template to the business
+            // before granting credits, so the grant uses the negotiated terms.
+            if (approve && _welcomePolicyService != null)
+            {
+                await _welcomePolicyService.AssignTemplateToBusinessAsync(
+                    business.Id, welcomeGrantPolicyTemplateId, reviewerUserId, cancellationToken);
+            }
         }
 
         // Update the associated UserAccount
@@ -269,9 +282,25 @@ public class RegistrationService : IRegistrationService
             await _userAccountRepository.SaveChangesAsync(cancellationToken);
         }
 
-        // Notify the applicant
-        await _notificationService.NotifyApplicantReviewResultAsync(
-            request.SubmittedByUserId, brand?.Name ?? "", approve, request.ReviewNotes, cancellationToken);
+        // Notify the applicant: exactly one email per outcome.
+        if (approve)
+        {
+            // Welcome the newly activated business (includes the welcome credit policy).
+            if (business != null)
+            {
+                await _notificationService.NotifyBusinessActivatedAsync(new BusinessActivatedNotification(
+                    business.ContactEmail ?? brand?.ContactEmail,
+                    business.BusinessName,
+                    brand?.Name ?? "",
+                    welcomeBatch?.OriginalAmount ?? 0,
+                    welcomeBatch?.ExpiresAt), cancellationToken);
+            }
+        }
+        else
+        {
+            await _notificationService.NotifyRegistrationRejectedAsync(
+                request.SubmittedByUserId, brand?.Name ?? "", request.ReviewNotes, cancellationToken);
+        }
 
         return new ReviewResult(true);
     }

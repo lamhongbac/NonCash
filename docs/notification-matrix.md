@@ -12,8 +12,8 @@ The email notification system uses SMTP delivery with HTML templates stored in `
 |---|----------|---------|-----------|----------|-----------------|
 | 1 | New business registration submitted | `RegistrationService.SubmitAsync` | All Admin users with email | `AdminNewRegistration` | `NewRegistration` |
 | 2 | Registration submitted (confirmation) | `RegistrationService.SubmitAsync` | Applicant (contact email) | `ApplicantRegistrationSubmitted` | `RegistrationConfirmation` |
-| 3 | Registration approved | `RegistrationReviewService.ApproveAsync` | Brand representative | `ApplicantReviewResult` | `RegistrationReview` |
-| 4 | Registration rejected | `RegistrationReviewService.RejectAsync` | Brand representative | `ApplicantReviewResult` | `RegistrationReview` |
+| 3 | Business activated (registration approved) | `RegistrationService.ReviewAsync` | Business `ContactEmail` (fallback: brand) | `ActiveBusiness` | `BusinessActivated` |
+| 4 | Registration rejected | `RegistrationService.ReviewAsync` | Applicant (user account email) | `RegistrationRejected` | `RegistrationRejected` |
 | 5 | Staff account created | `UserService.CreateAsync` | New staff user | `StaffAccountCreated` | `StaffAccountCreated` |
 
 ### Voucher Plan & Approval
@@ -41,6 +41,8 @@ The email notification system uses SMTP delivery with HTML templates stored in `
 | 14 | Credits forfeited (expired) | `CreditExpirySweepService` | Brand `ContactEmail` | `CreditsForfeited` | `CreditsForfeited` |
 | 15 | Adjustment pending approval | `CreditAdjustmentService` | FinancialControllers | `AdjustmentPending` | `AdjustmentPending` |
 | 16 | Adjustment approved/rejected | `CreditAdjustmentService` | Adjustment requester | `AdjustmentReviewed` | `AdjustmentReviewed` |
+
+> Note: on registration approval, the welcome-credit email is suppressed — the credit info is carried inside the `ActiveBusiness` email instead. The amount/expiry come from the selected welcome-policy template (or the platform default). `WelcomeCreditGranted` is still sent when an admin creates a new brand directly (`BrandService.CreateAsync`).
 
 ### Security
 

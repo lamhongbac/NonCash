@@ -19,6 +19,7 @@
 - [UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
 - [Outlet.cs](file://src/NonCash.Core/Entities/Outlet.cs)
 - [database-setup-guide.md](file://docs/database-setup-guide.md)
+- [security-hardening-checklist.md](file://docs/security-hardening-checklist.md)
 - [session-log-2026-08-15.md](file://_bmad-output/session-log-2026-08-15.md)
 - [BMAD_STRUCTURE.md](file://BMAD_STRUCTURE.md)
 - [description.txt](file://description.txt)
@@ -41,7 +42,9 @@
 - Implemented comprehensive role-based access control with multi-tenant enforcement
 - Strengthened multi-tenant architecture with brand scoping middleware
 - Integrated new authentication and authorization infrastructure throughout the platform
-- **Updated**: Enhanced database security measures implemented following ransomware attack, including rotated credentials and hardened pg_hba.conf configuration with IP restrictions
+- **Updated**: Added comprehensive security hardening checklist with 265 lines of security procedures covering network security, database hardening, application security, operational procedures, and incident response protocols
+- **Updated**: Documented emergency response to ransomware attack with specific security measures including rotated credentials, hardened PostgreSQL configuration with IP restrictions, and SSL/TLS encryption
+- **Updated**: Enhanced database security measures with verified SSL Mode=Require in all connection strings and restricted pg_hba.conf access
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -56,11 +59,11 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document presents the enhanced security architecture for the NonCash SaaS platform. The architecture has been significantly strengthened with new JWT token support, dedicated API key middleware for POS systems, comprehensive role-based access control, and robust multi-tenant enforcement via BrandID. Following a ransomware attack incident, the platform has implemented critical database security enhancements including rotated credentials, hardened PostgreSQL configuration with IP restrictions, and improved connection string management. The platform now implements a layered security approach covering authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project's documentation and implementation artifacts.
+This document presents the enhanced security architecture for the NonCash SaaS platform. The architecture has been significantly strengthened with new JWT token support, dedicated API key middleware for POS systems, comprehensive role-based access control, and robust multi-tenant enforcement via BrandID. Following a ransomware attack incident on August 15, 2026, the platform has implemented critical database security enhancements including rotated credentials, hardened PostgreSQL configuration with IP restrictions, SSL/TLS encryption, and comprehensive security monitoring. The platform now implements a layered security approach covering authentication mechanisms (JWT for web/member apps and API keys for POS), dynamic voucher code generation to prevent reuse and unauthorized scanning, and transaction security patterns for lock/commit/rollback with audit trails and integrity guarantees. Cross-cutting concerns such as role-based access control (RBAC), data encryption, and secure API communication are addressed alongside practical implementation guidance derived from the project's documentation and implementation artifacts.
 
 ## Project Structure
 The NonCash project organizes its enhanced security-relevant logic across four primary layers with supporting documentation:
-- Documentation layer: architecture, data models, API contracts, and implementation artifacts define security policies and flows.
+- Documentation layer: architecture, data models, API contracts, security hardening checklist, and implementation artifacts define security policies and flows.
 - Backend services: microservices implementing identity, planning, approval, distribution, and usage orchestration with enhanced authentication.
 - Infrastructure layer: middleware components providing authentication and authorization enforcement.
 - Data access: PostgreSQL-backed repositories enforcing tenant scoping and transactional integrity with hardened security configurations.
@@ -76,6 +79,7 @@ DESC["description.txt"]
 BMAD["BMAD_STRUCTURE.md"]
 KF["Key Functionalities.txt"]
 DBGUID["docs/database-setup-guide.md"]
+SECCHK["docs/security-hardening-checklist.md"]
 INCIDENT["_bmad-output/session-log-2026-08-15.md"]
 end
 subgraph "Infrastructure Layer"
@@ -107,6 +111,7 @@ BMAD --> ARCH
 DESC --> ARCH
 KF --> ARCH
 DBGUID --> DBSEC
+SECCHK --> DBSEC
 INCIDENT --> DBSEC
 RBAC --> ARCH
 VERIFY --> API
@@ -132,6 +137,7 @@ AUTHPIPE --> USERSVC
 - [BMAD_STRUCTURE.md:1-82](file://BMAD_STRUCTURE.md#L1-L82)
 - [Key Functionalities.txt:1-167](file://Key Functionalities.txt#L1-L167)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [security-hardening-checklist.md:1-266](file://docs/security-hardening-checklist.md#L1-L266)
 - [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [1-4-staff-accounts-rbac.md:1-125](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L1-L125)
 - [4-1-check-for-information.md:1-116](file://_bmad-output/implementation-artifacts/4-1-check-for-information.md#L1-L116)
@@ -152,7 +158,7 @@ AUTHPIPE --> USERSVC
 - **Dynamic Voucher Code Generation**: Rotating codes (similar to JWT logic) prevent static reuse and unauthorized scanning; validation ensures expiry, time windows, and outlet scope.
 - **Transactional Integrity**: POS flow enforces BEGIN (lock), COMMIT (permanent state change), and ROLLBACK (compensating transaction) with atomic updates, idempotency, and audit trail records.
 - **Comprehensive Authentication Pipeline**: Layered approach combining JWT bearer authentication, custom brand scoping middleware, and API key validation for different client types.
-- **Enhanced Database Security**: Post-ransomware attack hardening including rotated credentials, restricted pg_hba.conf access, and secure connection string management.
+- **Enhanced Database Security**: Post-ransomware attack hardening including rotated credentials, restricted pg_hba.conf access, SSL/TLS encryption, and secure connection string management with `SSL Mode=Require`.
 
 **Section sources**
 - [Program.cs:69-107](file://src/NonCash.API/Program.cs#L69-L107)
@@ -160,6 +166,7 @@ AUTHPIPE --> USERSVC
 - [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
 - [JwtTokenService.cs:1-59](file://src/NonCash.API/Services/JwtTokenService.cs#L1-L59)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [security-hardening-checklist.md:54-96](file://docs/security-hardening-checklist.md#L54-L96)
 - [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:36-41](file://docs/architecture.md#L36-L41)
 - [docs/api-contracts.md:5-109](file://docs/api-contracts.md#L5-L109)
@@ -178,7 +185,7 @@ The enhanced security architecture integrates:
   - API Keys for POS systems with dedicated middleware and outlet-specific authentication.
 - **Enhanced Transaction Security**: POS flow with improved lock/commit/rollback operations, comprehensive validation, and robust audit trails.
 - **Comprehensive RBAC**: Role-based access control with multi-tenant enforcement and strict authorization boundaries.
-- **Hardened Database Security**: PostgreSQL server secured against ransomware attacks with IP restrictions, rotated credentials, and secure connection management.
+- **Hardened Database Security**: PostgreSQL server secured against ransomware attacks with IP restrictions, rotated credentials, SSL/TLS encryption, and secure connection management.
 
 ```mermaid
 graph TB
@@ -197,10 +204,12 @@ subgraph "Enhanced Database Security"
 PGCONF["pg_hba.conf<br/>IP Restrictions"]
 CREDROT["Credential Rotation<br/>Secure Management"]
 SSLCONN["SSL/TLS Connections<br/>Encrypted Traffic"]
+MONITORING["Monitoring & Alerting<br/>Security Events"]
 end
 DB --> PGCONF
 DB --> CREDROT
 DB --> SSLCONN
+DB --> MONITORING
 subgraph "Enhanced POS Transaction Flow"
 Verify["Verify (Read-only)<br/>Stateless Validation"]
 Lock["Lock (BEGIN)<br/>Atomic Conditional Update"]
@@ -223,6 +232,7 @@ Rollback --> DB
 - [BrandScopeMiddleware.cs:1-34](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L1-L34)
 - [PosController.cs:1-193](file://src/NonCash.API/Controllers/PosController.cs#L1-L193)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
+- [security-hardening-checklist.md:37-44](file://docs/security-hardening-checklist.md#L37-L44)
 - [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:17-35](file://docs/architecture.md#L17-L35)
 - [docs/api-contracts.md:14-88](file://docs/api-contracts.md#L14-L88)
@@ -441,25 +451,27 @@ PosCtrl-->>POS : "{ status, message }"
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
 
 ### Enhanced Database Security Measures
-**Updated** Following a ransomware attack incident, the platform has implemented critical database security enhancements to prevent future attacks and protect sensitive business data.
+**Updated** Following a ransomware attack incident on August 15, 2026, the platform has implemented comprehensive security hardening measures to prevent future attacks and protect sensitive business data.
 
 - **Incident Response**: Emergency response to ransomware attack on shared DEV PostgreSQL server where attacker gained access via open `pg_hba.conf` configuration (`0.0.0.0/0`) and dropped all databases, leaving ransom note.
 - **Credential Rotation**: All database credentials have been rotated including:
   - `postgres` superuser password changed via pgAdmin
-  - `noncash_app` application user password updated to strong random value
+  - `noncash_app` application user password updated to strong random value (`NonCashMachine@2026`)
   - Connection strings updated across all environments with new credentials
 - **Network Access Restriction**: PostgreSQL `pg_hba.conf` hardened with IP restrictions:
   - Restricted to localhost only: `127.0.0.1/32`, `::1/128`
   - Server self-access allowed: `45.119.87.247/32`
   - Removed dangerous `0.0.0.0/0` wildcard access
 - **Secure Connection Management**: 
-  - SSL/TLS enabled for all connections with `SSL Mode=Require`
+  - SSL/TLS enabled for all connections with `SSL Mode=Require` in all connection strings
   - Environment-specific connection strings with proper credential isolation
   - Secure fallback mechanism via environment variables
+- **Comprehensive Security Monitoring**: Implementation of monitoring and alerting systems for failed login attempts, unusual outbound traffic, and service anomalies.
 - **Security Best Practices**:
   - Firewall rules restricting port 5432 to authorized clients only
   - VPN strategy planned for team scaling instead of individual IP whitelisting
   - Regular backup procedures and disaster recovery testing
+  - Automated daily backups to separate storage
 
 ```mermaid
 sequenceDiagram
@@ -478,12 +490,14 @@ Note over App : Secure Operations
 
 **Diagram sources**
 - [session-log-2026-08-15.md:15-28](file://_bmad-output/session-log-2026-08-15.md#L15-L28)
+- [security-hardening-checklist.md:54-96](file://docs/security-hardening-checklist.md#L54-L96)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
 - [appsettings.json:21-26](file://src/NonCash.API/appsettings.json#L21-L26)
 - [appsettings.Development.json:23-25](file://src/NonCash.API/appsettings.Development.json#L23-L25)
 
 **Section sources**
 - [session-log-2026-08-15.md:5-28](file://_bmad-output/session-log-2026-08-15.md#L5-L28)
+- [security-hardening-checklist.md:54-96](file://docs/security-hardening-checklist.md#L54-L96)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
 - [appsettings.json:21-26](file://src/NonCash.API/appsettings.json#L21-L26)
 - [appsettings.Development.json:23-25](file://src/NonCash.API/appsettings.Development.json#L23-L25)
@@ -495,12 +509,14 @@ Note over App : Secure Operations
 - **Secrets Management**: JWT signing key and API keys are stored in configuration files; never in source code.
 - **Enhanced Hashing**: Passwords are hashed with salt using secure hashing algorithms; API keys are stored as hashes with prefix validation.
 - **Database Security**: PostgreSQL connections enforced with SSL/TLS and IP restrictions to prevent unauthorized access.
+- **Transport Security**: All database connections use `SSL Mode=Require` to ensure encrypted communication.
 
 **Section sources**
 - [description.txt:13](file://description.txt#L13)
 - [appsettings.json:27-31](file://src/NonCash.API/appsettings.json#L27-L31)
 - [Outlet.cs:15](file://src/NonCash.Core/Entities/Outlet.cs#L15)
 - [database-setup-guide.md:82-90](file://docs/database-setup-guide.md#L82-L90)
+- [security-hardening-checklist.md:67-70](file://docs/security-hardening-checklist.md#L67-L70)
 
 ### Enhanced Role-Based Access Control (RBAC)
 - **Comprehensive Role Structure**:
@@ -521,6 +537,27 @@ Note over App : Secure Operations
 - [1-4-staff-accounts-rbac.md:19-44](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L19-L44)
 - [1-4-staff-accounts-rbac.md:113-115](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L113-L115)
 
+### Comprehensive Security Hardening Framework
+**Updated** Following the ransomware attack incident, a comprehensive security hardening framework has been established with 265 lines of documented security procedures covering multiple domains:
+
+- **Network Security**: Firewall configuration, network isolation, IDS/IPS implementation, and network segmentation strategies.
+- **Database Security**: PostgreSQL hardening with authentication controls, encryption, backup procedures, and configuration management.
+- **Application Security**: Secrets management, input validation, API security, logging, and dependency security.
+- **Operational Procedures**: Incident response protocols, regular maintenance schedules, and access review processes.
+- **Monitoring & Alerting**: Centralized logging, security event monitoring, and automated alerting systems.
+
+**Immediate Actions Implemented**:
+- ✅ PostgreSQL `pg_hba.conf` restricted to localhost and server IP only
+- ✅ Database passwords rotated with strong credentials
+- ✅ SSL/TLS encryption enabled for all database connections
+- ✅ Windows Firewall configured to block port 5432 from internet
+- ✅ HTTPS enforcement for all API endpoints
+- ✅ Rate limiting implemented on sensitive endpoints
+
+**Section sources**
+- [security-hardening-checklist.md:1-266](file://docs/security-hardening-checklist.md#L1-L266)
+- [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
+
 ## Dependency Analysis
 The enhanced security architecture depends on:
 - **Authentication Pipeline**: JWT bearer authentication with comprehensive claim validation and BrandScopeMiddleware for tenant enforcement.
@@ -529,6 +566,7 @@ The enhanced security architecture depends on:
 - **Data Models**: Entities enforcing referential integrity, outlet API key validation, and user role assignments.
 - **Service Layer**: Enhanced PosService with comprehensive validation, error handling, and transaction management.
 - **Database Security**: Hardened PostgreSQL configuration with IP restrictions, SSL/TLS encryption, and secure credential management.
+- **Security Monitoring**: Comprehensive monitoring and alerting systems for security events and anomalies.
 
 ```mermaid
 graph TB
@@ -545,6 +583,9 @@ DBSec["Database Security Layer"] --> DB
 DBSec --> PGConf["pg_hba.conf<br/>IP Restrictions"]
 DBSec --> SSLConn["SSL/TLS<br/>Encryption"]
 DBSec --> CredMgr["Credential<br/>Management"]
+DBSec --> Monitor["Monitoring &<br/>Alerting"]
+Monitor --> SecEvents["Security Events"]
+Monitor --> Anomalies["Anomaly Detection"]
 ```
 
 **Diagram sources**
@@ -553,6 +594,7 @@ DBSec --> CredMgr["Credential<br/>Management"]
 - [CurrentUserService.cs:6-13](file://src/NonCash.API/Services/CurrentUserService.cs#L6-L13)
 - [ApiKeyMiddleware.cs:11-20](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L11-L20)
 - [PosService.cs:6-31](file://src/NonCash.Core/Services/PosService.cs#L6-L31)
+- [security-hardening-checklist.md:37-44](file://docs/security-hardening-checklist.md#L37-L44)
 - [database-setup-guide.md:92-123](file://docs/database-setup-guide.md#L92-L123)
 - [session-log-2026-08-15.md:20-28](file://_bmad-output/session-log-2026-08-15.md#L20-L28)
 - [docs/architecture.md:25](file://docs/architecture.md#L25)
@@ -571,6 +613,7 @@ DBSec --> CredMgr["Credential<br/>Management"]
 - **JWT Token Management**: Implement token expiration and refresh strategies to balance security and performance.
 - **Database Optimization**: Indexes on BrandId, OutletId, and VoucherCode fields for optimal query performance.
 - **Connection Pooling**: Optimize database connection pooling to handle concurrent requests efficiently while maintaining security restrictions.
+- **Security Monitoring Performance**: Ensure monitoring and alerting systems do not impact application performance through efficient log aggregation and analysis.
 
 ## Troubleshooting Guide
 Common issues and resolutions with enhanced error handling:
@@ -604,6 +647,9 @@ Common issues and resolutions with enhanced error handling:
 - **SSL/TLS Connection Errors**:
   - Cause: certificate validation failures or SSL mode mismatches.
   - Resolution: ensure SSL certificates are properly configured and connection strings specify correct SSL mode.
+- **Security Monitoring Alerts**:
+  - Cause: suspicious activity detected by monitoring systems.
+  - Resolution: investigate alerts immediately, follow incident response procedures, and document findings.
 
 **Section sources**
 - [PosController.cs:27-51](file://src/NonCash.API/Controllers/PosController.cs#L27-L51)
@@ -612,10 +658,11 @@ Common issues and resolutions with enhanced error handling:
 - [PosController.cs:145-166](file://src/NonCash.API/Controllers/PosController.cs#L145-L166)
 - [ApiKeyMiddleware.cs:33-53](file://src/NonCash.API/Middleware/ApiKeyMiddleware.cs#L33-L53)
 - [BrandScopeMiddleware.cs:21-28](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs#L21-L28)
+- [security-hardening-checklist.md:37-44](file://docs/security-hardening-checklist.md#L37-L44)
 - [database-setup-guide.md:218-241](file://docs/database-setup-guide.md#L218-L241)
 
 ## Conclusion
-The enhanced NonCash security architecture establishes robust multi-tenancy via comprehensive BrandID enforcement, sophisticated authentication using JWT for web/member apps with enhanced claim structure and API keys for POS systems with dedicated middleware. Following a ransomware attack incident, the platform has implemented critical database security enhancements including rotated credentials, hardened PostgreSQL configuration with IP restrictions, and secure connection management. The architecture incorporates comprehensive role-based access control with strict tenant isolation, dynamic code validation with enhanced security measures, and a secure, transactional voucher redemption flow with improved error handling and audit trails. The layered approach combining JWT bearer authentication, custom brand scoping middleware, API key validation, and hardened database security ensures transaction integrity, traceability, and protection against unauthorized access across all client types.
+The enhanced NonCash security architecture establishes robust multi-tenancy via comprehensive BrandID enforcement, sophisticated authentication using JWT for web/member apps with enhanced claim structure and API keys for POS systems with dedicated middleware. Following a ransomware attack incident on August 15, 2026, the platform has implemented comprehensive security hardening measures including rotated credentials, hardened PostgreSQL configuration with IP restrictions, SSL/TLS encryption, and extensive security monitoring. The architecture incorporates comprehensive role-based access control with strict tenant isolation, dynamic code validation with enhanced security measures, and a secure, transactional voucher redemption flow with improved error handling and audit trails. The layered approach combining JWT bearer authentication, custom brand scoping middleware, API key validation, and hardened database security ensures transaction integrity, traceability, and protection against unauthorized access across all client types. The comprehensive security hardening framework provides ongoing protection through systematic security procedures, monitoring, and incident response protocols.
 
 ## Appendices
 - **Enhanced Cross-Cutting Security Guidelines**:
@@ -627,5 +674,9 @@ The enhanced NonCash security architecture establishes robust multi-tenancy via 
   - Regular security audits of authentication and authorization mechanisms.
   - Implement rate limiting and abuse detection for authentication endpoints.
   - Maintain comprehensive audit logs for all security-relevant operations.
-  - **Database Security**: Restrict PostgreSQL access via pg_hba.conf IP whitelisting, enable SSL/TLS encryption, rotate credentials regularly, and monitor for suspicious connection attempts.
+  - **Database Security**: Restrict PostgreSQL access via pg_hba.conf IP whitelisting, enable SSL/TLS encryption, rotate credentials regularly, monitor for suspicious connection attempts, and implement comprehensive backup and recovery procedures.
   - **Incident Response**: Maintain documented procedures for responding to security incidents including database compromise, credential theft, and unauthorized access attempts.
+  - **Security Monitoring**: Implement centralized logging, security event monitoring, automated alerting, and anomaly detection systems.
+  - **Network Security**: Configure firewalls, implement network segmentation, enable IDS/IPS, and establish VPN access for development teams.
+  - **Application Security**: Enforce input validation, implement API security measures, manage dependencies securely, and conduct regular vulnerability assessments.
+  - **Operational Security**: Establish regular maintenance schedules, conduct penetration testing, perform quarterly security audits, and maintain comprehensive access reviews.

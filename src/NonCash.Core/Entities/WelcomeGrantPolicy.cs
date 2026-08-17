@@ -1,19 +1,20 @@
 namespace NonCash.Core.Entities;
 
 /// <summary>
-/// Versioned, time-bound welcome-grant policy attached to a Business (Epic 10 refactor).
-/// Welcome is a per-business commercial/contract term: every new brand a business
-/// launches receives <see cref="WelcomeCredits"/> on activation, resolved from the
-/// business's most recent active policy and falling back to <c>CreditConfig</c> defaults
-/// when no policy is set. Stored per-business (not per-brand) so a negotiated deal
-/// applies uniformly to each brand the business onboards.
+/// Per-business assignment/instance of a <see cref="WelcomeGrantPolicyTemplate"/>.
+/// Every new brand a business launches receives <see cref="WelcomeCredits"/> on activation,
+/// resolved from the business's most recent active assignment. If no assignment exists,
+/// the platform's default template is used.
 /// </summary>
 public class WelcomeGrantPolicy : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Business whose new brands this policy grants welcome credits to.</summary>
+    /// <summary>Business whose new brands this assignment grants welcome credits to.</summary>
     public Guid BusinessId { get; set; }
+
+    /// <summary>Source template. Null for legacy/override policies created before templates existed.</summary>
+    public Guid? WelcomeGrantPolicyTemplateId { get; set; }
 
     /// <summary>Free credits granted to each new brand under this business. 0 = none.</summary>
     public int WelcomeCredits { get; set; }
@@ -31,6 +32,10 @@ public class WelcomeGrantPolicy : BaseEntity
     /// <summary>Admin who created the policy version.</summary>
     public Guid? CreatedBy { get; set; }
 
+    /// <summary>Admin who last updated the policy version.</summary>
+    public Guid? UpdatedBy { get; set; }
+
     // Navigation
     public Business? Business { get; set; }
+    public WelcomeGrantPolicyTemplate? WelcomeGrantPolicyTemplate { get; set; }
 }
