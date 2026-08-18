@@ -27,7 +27,7 @@
 - Better directory structure organization for deployment artifacts
 - Updated GitHub Actions workflow with enhanced operational procedures
 - Added comprehensive production deployment guide with security hardening measures
-- **Updated**: Enhanced IIS deployment workflow with improved state management, retry logic for file operations, simplified .NET setup, and better error handling
+- **Updated**: Enhanced IIS deployment workflow with robust Robocopy-Mirror function replacing simple Rename-Item approach, improved file lock handling with configurable retry parameters (/R:10 /W:5), targeted IIS service management for NonCash-specific sites and application pools (NonCash.API, NonCash.Web, NonCashAPI, NonCashWeb), extended wait periods (15 seconds) for worker process termination, and enhanced backup strategy using robocopy mirror functionality for better rollback capabilities
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -88,7 +88,7 @@ F --> F2["setup-iis.ps1"]
 - [_bmad/bmm/config.yaml:1-17](file://_bmad/bmm/config.yaml#L1-L17)
 - [_bmad/core/config.yaml:1-10](file://_bmad/core/config.yaml#L1-L10)
 - [_bmad-output/implementation-artifacts/sprint-status.yaml:1-81](file://_bmad-output/implementation-artifacts/sprint-status.yaml#L1-L81)
-- [.github/workflows/deploy-iis.yml:1-175](file://.github/workflows/deploy-iis.yml#L1-L175)
+- [.github/workflows/deploy-iis.yml:1-178](file://.github/workflows/deploy-iis.yml#L1-L178)
 - [tools/deploy/publish.ps1:1-56](file://tools/deploy/publish.ps1#L1-L56)
 - [tools/deploy/setup-iis.ps1:1-68](file://tools/deploy/setup-iis.ps1#L1-L68)
 
@@ -166,27 +166,27 @@ I --> DAL
 - On-Premises
   - Deploy self-managed Kubernetes (kubeadm, RKE, or Rancher RKE2) with private registry, on-premises PostgreSQL, and hardware load balancers.
   - Ensure redundant control planes, etcd, and worker nodes for HA.
-  - **Enhanced**: Support for Windows Server with IIS deployment using automated scripts and GitHub Actions.
+  - **Enhanced**: Support for Windows Server with IIS deployment using automated scripts and GitHub Actions with robust file handling and rollback capabilities.
 
 ### Containerization and Orchestration
 - Build images per microservice with multi-stage builds to minimize attack surface.
 - Use Helm charts or Kustomize for declarative deployments.
 - Enforce pod anti-affinity, topology spread constraints, and resource requests/limits.
 - Persist stateful workloads (PostgreSQL) with PersistentVolumes and backups.
-- **Enhanced**: Dual deployment support for both containerized environments and traditional IIS hosting.
+- **Enhanced**: Dual deployment support for both containerized environments and traditional IIS hosting with enhanced deployment reliability.
 
 ### CI/CD Pipeline and Infrastructure as Code
 - IaC: Terraform (AzureRM/AWS provider) or ARM/Terraform for AWS to provision clusters, registries, databases, and networking.
 - CI/CD: GitHub Actions/Azure Pipelines/Jenkins to build/test/publish images, apply manifests via ArgoCD/Flux, and gate releases.
 - GitOps: Track deployments in a separate repo; use pull requests for changes; enforce policy checks.
-- **Enhanced**: Comprehensive GitHub Actions workflow with automated backup/restore, health checks, and rollback capabilities.
+- **Enhanced**: Comprehensive GitHub Actions workflow with automated backup/restore, health checks, rollback capabilities, and robust file operation handling.
 
 ### High Availability, Load Balancing, and Auto-Scaling
 - LB: Ingress controllers (NGINX/KIC) or cloud-native ALB/Front Door.
 - HPA: Scale microservices based on CPU/memory or custom metrics.
 - Cluster autoscaler: Add/remove nodes based on pod resource requests.
 - Anti-affinity and topology constraints to distribute pods across zones/nodes.
-- **Enhanced**: IIS app pool recycling and health monitoring for traditional deployments.
+- **Enhanced**: IIS app pool recycling and health monitoring for traditional deployments with enhanced error handling and retry logic.
 
 ### Database Migration and Zero-Downtime Deployments
 - Use rolling updates with readiness probes to avoid dropping connections.
@@ -196,19 +196,19 @@ I --> DAL
   - For breaking changes, deploy alongside old logic and switch traffic gradually.
 - PostgreSQL: Leverage logical replication or read replicas for read scaling; use citus or Citus Data for horizontal scaling if needed.
 - MongoDB: Use replica sets for HA; sharding for scale.
-- **Enhanced**: Automated EF Core migration execution with connection string secrets management.
+- **Enhanced**: Automated EF Core migration execution with connection string secrets management and enhanced rollback capabilities.
 
 ### Rollback Procedures
 - Maintain immutable images tagged by semantic versions; rollback by redeploying previous tag.
 - For database changes, keep reversible migrations and snapshot backups.
 - Use blue/green or canary deployments to limit blast radius; roll back on health probe failures.
-- **Enhanced**: Automatic previous version preservation with `_prev` folder naming convention and one-click rollback capability.
+- **Enhanced**: Automatic previous version preservation with `_prev` folder naming convention using Robocopy-Mirror functionality, one-click rollback capability, and improved file lock handling.
 
 ### Monitoring, Logging, and Alerting
 - Observability stack: Prometheus/Grafana or cloud-native alternatives; Loki for logs; Tempo for traces.
 - Centralized structured logging with correlation IDs; include tenant and outlet context.
 - Alerting on latency p95, error rates, saturation, and critical events.
-- **Enhanced**: Health check endpoints and smoke testing integrated into deployment pipeline.
+- **Enhanced**: Health check endpoints and smoke testing integrated into deployment pipeline with enhanced error reporting.
 
 **Section sources**
 - [docs/architecture.md:5-26](file://docs/architecture.md#L5-L26)
@@ -224,29 +224,30 @@ The NonCash platform features a sophisticated CI/CD pipeline built with GitHub A
 
 The `.github/workflows/deploy-iis.yml` workflow implements a complete deployment pipeline with the following enhanced capabilities:
 
-#### Automated Backup and Restore
-- **Pre-deployment backup**: Automatically backs up production `appsettings.json` files before deployment
-- **Configuration preservation**: Maintains sensitive production configurations across deployments
-- **Automatic restoration**: Restores backed-up configuration files after deployment completes
-- **Backup location**: Creates backup files at `{APP_PATH}_appsettings.json` format
+#### Robocopy-Mirror Function for Enhanced File Operations
+- **Robust File Copying**: Implements a custom `Robocopy-Mirror` function that uses Robocopy with mirror mode (`/MIR`) for reliable file synchronization
+- **Configurable Retry Logic**: Configured with `/R:10 /W:5` parameters to retry failed operations 10 times with 5-second intervals between retries
+- **Error Handling**: Proper exit code validation and exception throwing for failed operations
+- **Directory Management**: Automatic creation of destination directories if they don't exist
 
 #### Intelligent Deployment Process
-- **Staging area**: Uses temporary staging directory (`C:\Projects\_stage`) for safe deployment
-- **Atomic swaps**: Implements atomic file system operations to prevent partial deployments
-- **Previous version preservation**: Automatically creates `_prev` folders for rollback capability
-- **App pool management**: Gracefully stops and restarts IIS application pools during deployment
+- **Staging Area**: Uses temporary staging directory (`C:\Projects\_stage`) for safe deployment
+- **Atomic Swaps**: Implements atomic file system operations to prevent partial deployments
+- **Previous Version Preservation**: Automatically creates `_prev` folders using Robocopy-Mirror for rollback capability
+- **App Pool Management**: Gracefully stops and restarts IIS application pools during deployment
 
 #### Enhanced State Management and Error Handling
-- **Improved state tracking**: Better monitoring of IIS site and app pool states before operations
-- **Retry logic for file operations**: Robust retry mechanism with 3 attempts for critical file operations
+- **Improved State Tracking**: Better monitoring of IIS site and app pool states before operations
+- **Extended Wait Periods**: 15-second wait period for worker process termination to ensure file locks are released
 - **Simplified .NET setup**: Skips dotnet SDK installation to avoid permission errors on server
 - **Comprehensive error handling**: Detailed exception handling with informative error messages
 - **Graceful degradation**: Continues deployment even if health checks fail (with warnings)
 
-#### Environment Configuration
-- **Self-hosted runner**: Runs directly on target Windows Server for direct IIS access
-- **Secret management**: Uses GitHub Secrets for database connection strings
-- **Environment variables**: Configures deployment paths and health check endpoints
+#### Targeted IIS Service Management
+- **Site-Specific Management**: Targets only NonCash-specific sites (`NonCash.API`, `NonCash.Web`)
+- **App Pool Management**: Manages only NonCash-specific app pools (`NonCashAPI`, `NonCashWeb`)
+- **State Validation**: Checks current state before attempting to stop/start operations
+- **Error Resilience**: Silently continues if sites/app pools don't exist
 
 ```mermaid
 sequenceDiagram
@@ -259,22 +260,24 @@ Dev->>GH : Push to main/deploy/*
 GH->>Runner : Trigger workflow
 Runner->>Runner : dotnet restore/build/test
 Runner->>Runner : Publish API & Web apps
-Runner->>IIS : Stop app pools with state validation
+Runner->>IIS : Stop NonCash sites with state validation
+Runner->>IIS : Wait 15 seconds for worker processes
 Runner->>IIS : Backup appsettings.json
-Runner->>IIS : Swap deployment folders with retry logic
+Runner->>IIS : Robocopy-Mirror to _prev folders
+Runner->>IIS : Robocopy-Mirror from staging to target
 Runner->>IIS : Restore appsettings.json
 Runner->>DB : Apply EF migrations
-Runner->>IIS : Start app pools with state validation
+Runner->>IIS : Start NonCash app pools with state validation
 Runner->>IIS : Health check /health
 IIS-->>Runner : Health status
 Runner-->>Dev : Deployment result
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
+- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:1-175](file://.github/workflows/deploy-iis.yml#L1-L175)
+- [.github/workflows/deploy-iis.yml:1-178](file://.github/workflows/deploy-iis.yml#L1-L178)
 
 ## Production Deployment Procedures
 
@@ -311,7 +314,7 @@ git checkout -b deploy/2026-08-18
 git push origin deploy/2026-08-18
 ```
 
-The workflow automatically handles the entire deployment process including backup, deployment, migration, and health checks.
+The workflow automatically handles the entire deployment process including backup, deployment, migration, and health checks with enhanced Robocopy-Mirror functionality.
 
 #### Method 2: Manual Scripted Deployment
 For initial setup or manual deployments:
@@ -364,10 +367,17 @@ The deployment pipeline implements comprehensive backup and restore mechanisms t
 3. **Error Handling**: Continues deployment even if restore fails (with warnings)
 4. **Cleanup**: Removes temporary backup files after successful restore
 
+#### Enhanced Application Backup Strategy
+- **Robocopy-Mirror Functionality**: Uses Robocopy with mirror mode for comprehensive file synchronization
+- **Retry Logic**: Configured with `/R:10 /W:5` for resilient file operations
+- **Previous Version Storage**: Maintains complete previous deployment in `_prev` folders
+- **Atomic Operations**: Ensures consistent state during backup and restore operations
+
 #### Configuration File Locations
 - **API Configuration**: `C:\Projects\NonCashAPI\appsettings.json`
 - **Web Configuration**: `C:\Projects\NonCashWeb\appsettings.json`
 - **Backup Files**: `C:\Projects\NonCashAPI_appsettings.json`, `C:\Projects\NonCashWeb_appsettings.json`
+- **Previous Versions**: `C:\Projects\NonCashAPI_prev`, `C:\Projects\NonCashWeb_prev`
 
 ### Database Backup Strategy
 
@@ -389,7 +399,7 @@ pg_dump -U postgres -a noncash > data_backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:74-136](file://.github/workflows/deploy-iis.yml#L74-L136)
+- [.github/workflows/deploy-iis.yml:76-139](file://.github/workflows/deploy-iis.yml#L76-L139)
 - [docs/deployment-guide.md:108-148](file://docs/deployment-guide.md#L108-L148)
 
 ## Rollback Capabilities
@@ -398,9 +408,10 @@ pg_dump -U postgres -a noncash > data_backup_$(date +%Y%m%d_%H%M%S).sql
 
 The deployment system implements robust rollback capabilities through automatic version preservation:
 
-#### Automatic Version Preservation
-- **Previous Version Storage**: Each deployment preserves the previous version in `_prev` folders
-- **Atomic Swaps**: Uses file system rename operations for instant rollback capability
+#### Enhanced Version Preservation with Robocopy-Mirror
+- **Previous Version Storage**: Each deployment preserves the previous version in `_prev` folders using Robocopy-Mirror
+- **Reliable File Operations**: Robocopy with retry logic ensures complete file synchronization even with locked files
+- **Atomic Swaps**: Uses Robocopy mirror operations for instant rollback capability
 - **Directory Structure**: 
   - Current: `C:\Projects\NonCashAPI`, `C:\Projects\NonCashWeb`
   - Previous: `C:\Projects\NonCashAPI_prev`, `C:\Projects\NonCashWeb_prev`
@@ -472,7 +483,7 @@ end
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:13-43](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L13-L43)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:87-123](file://.github/workflows/deploy-iis.yml#L87-L123)
+- [.github/workflows/deploy-iis.yml:89-124](file://.github/workflows/deploy-iis.yml#L89-L124)
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:1-112](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L1-L112)
 - [docs/deployment-guide.md:199-203](file://docs/deployment-guide.md#L199-L203)
 
@@ -522,7 +533,7 @@ CI --> I
 **Diagram sources**
 - [docs/architecture.md:9-26](file://docs/architecture.md#L9-L26)
 - [BMAD_STRUCTURE.md:39-56](file://BMAD_STRUCTURE.md#L39-L56)
-- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
+- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)
 
 **Section sources**
 - [docs/architecture.md:1-26](file://docs/architecture.md#L1-L26)
@@ -533,7 +544,7 @@ CI --> I
 - Cache hot data (e.g., brand/outlet metadata) with short TTLs; invalidate on changes.
 - Use circuit breakers and bulkheads for resilience; implement idempotency keys for POS endpoints.
 - Right-size containers and enable vertical pod autoscaling for bursty loads.
-- **Enhanced**: Implement connection pooling for database connections and optimize IIS app pool settings for concurrent request handling.
+- **Enhanced**: Implement connection pooling for database connections and optimize IIS app pool settings for concurrent request handling with enhanced file operation performance using Robocopy.
 
 ## Troubleshooting Guide
 Common operational issues and resolutions:
@@ -551,8 +562,10 @@ Common operational issues and resolutions:
   - Verify IIS app pool status and application event logs
   - Validate database connectivity and migration status
   - Review backup/restore operations for configuration issues
-  - **New**: File operation failures - Check for file locks and retry logic effectiveness
+  - **New**: File operation failures - Check Robocopy exit codes and retry logic effectiveness
   - **New**: Permission errors - Verify runner service account has proper IIS and file system permissions
+  - **New**: Worker process termination - Ensure 15-second wait period is sufficient for file lock release
+  - **New**: Site/App Pool management - Verify targeted NonCash-specific sites and pools exist before operations
 
 **Section sources**
 - [_bmad-output/implementation-artifacts/4-3-commit-and-log.md:62-99](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L62-L99)
@@ -560,7 +573,7 @@ Common operational issues and resolutions:
 - [docs/deployment-guide.md:190-228](file://docs/deployment-guide.md#L190-L228)
 
 ## Conclusion
-The NonCash platform is architected for SaaS delivery with clear microservices boundaries and transactional rigor in the POS workflow. The enhanced deployment strategy emphasizes containerization, managed Kubernetes, GitOps, and robust observability, with significant improvements to CI/CD automation, backup/restore mechanisms, and rollback capabilities. Adhering to zero-downtime deployment practices, careful database migrations, and strong rollback procedures will ensure reliable production operations across Azure, AWS, or on-premises environments. The enhanced GitHub Actions workflow provides comprehensive deployment automation with built-in safety mechanisms and operational procedures for production deployments.
+The NonCash platform is architected for SaaS delivery with clear microservices boundaries and transactional rigor in the POS workflow. The enhanced deployment strategy emphasizes containerization, managed Kubernetes, GitOps, and robust observability, with significant improvements to CI/CD automation, backup/restore mechanisms, and rollback capabilities. The introduction of Robocopy-Mirror functionality provides enterprise-grade file operation reliability with configurable retry logic, while targeted IIS service management ensures precise control over NonCash-specific deployments. Adhering to zero-downtime deployment practices, careful database migrations, and strong rollback procedures will ensure reliable production operations across Azure, AWS, or on-premises environments. The enhanced GitHub Actions workflow provides comprehensive deployment automation with built-in safety mechanisms and operational procedures for production deployments.
 
 ## Appendices
 
@@ -578,7 +591,7 @@ The NonCash platform is architected for SaaS delivery with clear microservices b
 ### Appendix B: Database and Security Notes
 - Database: PostgreSQL or MongoDB (PostgreSQL preferred).
 - Security: API Key Authentication and JWT Token Management.
-- **Enhanced**: Production configuration management with secure backup/restore procedures.
+- **Enhanced**: Production configuration management with secure backup/restore procedures and Robocopy-based file operations.
 
 **Section sources**
 - [BMAD_STRUCTURE.md:59-78](file://BMAD_STRUCTURE.md#L59-L78)
@@ -612,19 +625,21 @@ flowchart TD
 A[Code Push] --> B[GitHub Actions Trigger]
 B --> C[Build & Test]
 C --> D[Publish Applications]
-D --> E[Stop IIS App Pools with State Validation]
-E --> F[Backup Config Files]
-F --> G[Swap Deployment Folders with Retry Logic]
-G --> H[Restore Config Files]
-H --> I[Apply Database Migrations]
-I --> J[Start IIS App Pools with State Validation]
-J --> K[Health Check]
-K --> L{Health OK?}
-L --> |Yes| M[Deployment Complete]
-L --> |No| N[Rollback to Previous Version]
-N --> O[Alert Team]
-O --> P[Investigate Issues]
+D --> E[Stop NonCash IIS Sites with State Validation]
+E --> F[Wait 15 Seconds for Worker Processes]
+F --> G[Backup Config Files]
+G --> H[Robocopy-Mirror to _prev Folders]
+H --> I[Robocopy-Mirror from Staging to Target]
+I --> J[Restore Config Files]
+J --> K[Apply Database Migrations]
+K --> L[Start NonCash IIS App Pools with State Validation]
+L --> M[Health Check]
+M --> N{Health OK?}
+N --> |Yes| O[Deployment Complete]
+N --> |No| P[Rollback to Previous Version]
+P --> Q[Alert Team]
+Q --> R[Investigate Issues]
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
+- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)

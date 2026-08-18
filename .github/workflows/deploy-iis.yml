@@ -57,18 +57,10 @@ jobs:
         shell: powershell
         run: |
           Import-Module WebAdministration
-          foreach ($s in @('NonCash.API','NonCash.Web')) {
-            $site = Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue
-            if ($site -and (Get-WebsiteState -Name $s).Value -ne 'Stopped') {
-              Stop-Website -Name $s
-            }
-          }
-          foreach ($p in @('NonCashAPI','NonCashWeb')) {
-            $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
-            if ($pool -and (Get-WebAppPoolState -Name $p).Value -ne 'Stopped') {
-              Stop-WebAppPool $p
-            }
-          }
+          Stop-Website -Name nonCashAPI -ErrorAction SilentlyContinue
+          Stop-WebAppPool nonCashAPI -ErrorAction SilentlyContinue
+          Stop-Website -Name NonCashPlatform -ErrorAction SilentlyContinue
+          Stop-WebAppPool NonCashPlatform -ErrorAction SilentlyContinue
           # Wait for worker processes to fully terminate and release file locks.
           Start-Sleep -Seconds 15
           Write-Host "NonCash sites/app pools stopped."
@@ -151,18 +143,10 @@ jobs:
         shell: powershell
         run: |
           Import-Module WebAdministration
-          foreach ($p in @('NonCashAPI','NonCashWeb')) {
-            $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
-            if ($pool -and (Get-WebAppPoolState -Name $p).Value -ne 'Started') {
-              Start-WebAppPool $p
-            }
-          }
-          foreach ($s in @('NonCash.API','NonCash.Web')) {
-            $site = Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue
-            if ($site -and (Get-WebsiteState -Name $s).Value -ne 'Started') {
-              Start-Website -Name $s
-            }
-          }
+          Start-WebAppPool nonCashAPI -ErrorAction SilentlyContinue
+          Start-Website -Name nonCashAPI -ErrorAction SilentlyContinue
+          Start-WebAppPool NonCashPlatform -ErrorAction SilentlyContinue
+          Start-Website -Name NonCashPlatform -ErrorAction SilentlyContinue
 
       - name: Smoke test API health
         shell: powershell
