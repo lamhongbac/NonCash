@@ -1,15 +1,32 @@
 name: Deploy to IIS
 
 # Runs on a self-hosted Windows runner installed ON the server (no WinRM/MSDeploy needed).
-# Adjust env paths/ports below to match your server layout.
+# The runner executes on the target Windows Server where IIS and PostgreSQL are installed.
+#
+# Required GitHub secret:
+#   NONCASH_DB_CONNECTION  e.g. Host=localhost;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require
+#
+# One-time server setup before this works:
+#   1. Install the self-hosted runner: Settings -> Actions -> Runners -> New self-hosted runner (Windows).
+#   2. Add a runner label "noncash-server" (or keep "self-hosted, windows").
+#   3. Run .\config.cmd and .\run.cmd as a service.
+#   4. Ensure the runner service account can access IIS (WebAdministration) and the DB.
+#
+# Production appsettings.json:
+#   This workflow backs up and restores the server's production appsettings.json files
+#   (C:\Projects\NonCashAPI\appsettings.json and C:\Projects\NonCashWeb\appsettings.json)
+#   so that dotnet publish does not overwrite production secrets. Configure those files
+#   once on the server; the workflow preserves them across deploys.
 on:
   push:
-    branches: [ main, deploy/* ]
+    branches: [ main, master, deploy/* ]
   workflow_dispatch:
 
 env:
-  DEPLOY_ROOT: C:\inetpub\noncash
-  DB_CONNECTION: Host=localhost;Database=noncash;Username=noncash_app;Password=CHANGE_ME;SSL Mode=Prefer
+  API_TARGET: C:\Projects\NonCashAPI
+  WEB_TARGET: C:\Projects\NonCashWeb
+  STAGE_ROOT: C:\Projects\_stage
+  API_HEALTH_PATH: http://localhost:8668/health
 
 jobs:
   build-test-publish-deploy:
@@ -33,10 +50,10 @@ jobs:
         run: dotnet test NonCash.sln -c Release --no-build --verbosity minimal
 
       - name: Publish API
-        run: dotnet publish src\NonCash.API\NonCash.API.csproj -c Release -o "$env:DEPLOY_ROOT\_stage\api" --no-build
+        run: dotnet publish src\NonCash.API\NonCash.API.csproj -c Release -o "$env:STAGE_ROOT\api" --no-build
 
       - name: Publish Web
-        run: dotnet publish src\NonCash.Web\NonCash.Web.csproj -c Release -o "$env:DEPLOY_ROOT\_stage\web" --no-build
+        run: dotnet publish src\NonCash.Web\NonCash.Web.csproj -c Release -o "$env:STAGE_ROOT\web" --no-build
 
       - name: Stop app pools
         shell: powershell
@@ -46,28 +63,68 @@ jobs:
             if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Stop-WebAppPool $p }
           }
 
+      - name: Backup production appsettings.json files
+        shell: powershell
+        run: |
+          $targets = @($env:API_TARGET, $env:WEB_TARGET)
+          foreach ($t in $targets) {
+            $cfg = Join-Path $t 'appsettings.json'
+            $bak = "$t`_appsettings.json"
+            if (Test-Path $cfg) {
+              Copy-Item $cfg $bak -Force
+              Write-Host "Backed up $cfg"
+            }
+          }
+
       - name: Deploy to IIS folders (with rollback copy)
         shell: powershell
         run: |
-          $root = $env:DEPLOY_ROOT
-          foreach ($app in @('api','web')) {
-            $stage  = Join-Path $root "_stage\$app"
-            $target = Join-Path $root $app
-            $prev   = Join-Path $root "$app`_prev"
-            if (Test-Path $target) {
-              if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
-              Rename-Item $target $prev
-            }
-            New-Item -ItemType Directory -Path $root -Force | Out-Null
-            Copy-Item $stage $target -Recurse -Force
-          }
-          Remove-Item (Join-Path $root '_stage') -Recurse -Force -ErrorAction SilentlyContinue
+          $stageApi  = Join-Path $env:STAGE_ROOT 'api'
+          $stageWeb  = Join-Path $env:STAGE_ROOT 'web'
+          $apiTarget = $env:API_TARGET
+          $webTarget = $env:WEB_TARGET
 
-      - name: Install dotnet-ef
-        run: dotnet tool install --global dotnet-ef
+          # API
+          $prev = "$apiTarget`_prev"
+          if (Test-Path $apiTarget) {
+            if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
+            Rename-Item $apiTarget $prev
+          }
+          New-Item -ItemType Directory -Path $apiTarget -Force | Out-Null
+          Copy-Item $stageApi $apiTarget -Recurse -Force
+
+          # Web
+          $prev = "$webTarget`_prev"
+          if (Test-Path $webTarget) {
+            if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
+            Rename-Item $webTarget $prev
+          }
+          New-Item -ItemType Directory -Path $webTarget -Force | Out-Null
+          Copy-Item $stageWeb $webTarget -Recurse -Force
+
+          Remove-Item $env:STAGE_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Restore production appsettings.json files
+        shell: powershell
+        run: |
+          $targets = @($env:API_TARGET, $env:WEB_TARGET)
+          foreach ($t in $targets) {
+            $cfg = Join-Path $t 'appsettings.json'
+            $bak = "$t`_appsettings.json"
+            if (Test-Path $bak) {
+              Copy-Item $bak $cfg -Force
+              Write-Host "Restored $cfg"
+            }
+          }
 
       - name: Apply database migrations
-        run: dotnet ef database update --project src\NonCash.Infrastructure --startup-project src\NonCash.API --connection "$env:DB_CONNECTION"
+        shell: powershell
+        run: |
+          dotnet tool install --global dotnet-ef 2>$null
+          dotnet ef database update `
+            --project src\NonCash.Infrastructure `
+            --startup-project src\NonCash.API `
+            --connection "${{ secrets.NONCASH_DB_CONNECTION }}"
 
       - name: Start app pools
         shell: powershell
@@ -80,8 +137,9 @@ jobs:
         run: |
           Start-Sleep -Seconds 5
           try {
-            $r = Invoke-WebRequest -Uri 'http://localhost:8001/health' -UseBasicParsing -TimeoutSec 20
+            $uri = $env:API_HEALTH_PATH
+            $r = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 20
             Write-Host "API health: $($r.StatusCode)"
           } catch {
-            Write-Warning "Health check failed (endpoint may differ); check app logs."
+            Write-Warning "Health check failed for $uri; check app logs."
           }

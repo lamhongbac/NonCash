@@ -80,18 +80,93 @@ This is "manual" but repeatable. Once it works, move to path B.
 
 ## 4. Deploy path B — CI/CD (recommended)
 
-Use **GitHub Actions with a self-hosted Windows runner on the server**:
+Use **GitHub Actions with a self-hosted Windows runner installed directly on the server**:
 
-1. On the server: Settings → Actions → Runners → add a self-hosted runner (windows-x64); install as a service.
-2. Store secrets in the repo (Settings → Secrets): not strictly needed if the runner is on the server and config lives in IIS env vars; but keep `JWT_KEY`, `DB_PASSWORD`, `SMTP_PASSWORD` as secrets if you inject them.
-3. Push to `main` (or `deploy/*`) → `.github/workflows/deploy-iis.yml` runs:
-   - checkout → `dotnet build` → `dotnet test` → `dotnet publish` (API + Web)
-   - copy publish output to the IIS site folders
-   - apply EF migrations
-   - recycle app pools
-   - smoke-test the health endpoints
+### 4.1 One-time runner setup (on the server)
 
-The workflow is provided at `.github/workflows/deploy-iis.yml`. Because the runner is on the server, there is **no need for WinRM/MSDeploy or open inbound ports** — the runner only dials out to GitHub.
+1. In the GitHub repo: **Settings → Actions → Runners → New self-hosted runner → Windows**.
+2. Download and run the `config.cmd` commands shown by GitHub (as Administrator).
+3. Register the runner with labels `self-hosted, windows` (default) or add a custom label like `noncash-server`.
+4. Install as a Windows service so it starts automatically:
+   ```powershell
+   .\svc.cmd install
+   .\svc.cmd start
+   ```
+5. The runner service account must be able to:
+   - Read/write `C:\inetpub\noncash`.
+   - Manage IIS app pools (membership in local `Administrators` or `IIS_IUSRS` plus PowerShell WebAdministration module).
+   - Connect to the local PostgreSQL database.
+
+### 4.2 GitHub secrets
+
+Add these in the repo: **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+|---|---|
+| `NONCASH_DB_CONNECTION` | `Host=localhost;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require` |
+
+### 4.3 Protect production config from being overwritten
+
+Each `dotnet publish` replaces `appsettings.json` with the repo defaults (which have empty SMTP config). To avoid re-applying production settings after every deploy, configure production values directly in the deployed `appsettings.json` files on the server. The CI/CD workflow automatically **backs up and restores** these files, so you only need to set them once.
+
+Create/edit this file once on the server: `C:\Projects\NonCashAPI\appsettings.json`
+
+```json
+{
+  "Environment": { "Name": "production" },
+  "ConnectionStrings": {
+    "ProductionConnection": "Host=localhost;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require"
+  },
+  "Jwt": { "Key": "your-strong-32-byte-or-longer-key" },
+  "Smtp": {
+    "Host": "smtp.gmail.com",
+    "Port": 587,
+    "EnableSsl": true,
+    "Username": "nguyentri.thuc@ms-apptech.com",
+    "Password": "rsdokagwihiveqwc",
+    "FromAddress": "nguyentri.thuc@ms-apptech.com",
+    "FromDisplayName": "NonCash"
+  },
+  "Notifications": { "EmailEnabled": true }
+}
+```
+
+Create/edit this file once on the server: `C:\Projects\NonCashWeb\appsettings.json`
+
+```json
+{
+  "Environment": { "Name": "production" },
+  "ApiBaseUrls": {
+    "production": "http://45.119.87.247:8668/"
+  }
+}
+```
+
+> **Never commit these production values to Git.** The repo `appsettings.json` files should keep their default/placeholder values.
+>
+> The workflow keeps backup copies at `C:\Projects\NonCashAPI_appsettings.json` and `C:\Projects\NonCashWeb_appsettings.json` and restores them after each deploy.
+
+### 4.4 Trigger a deploy
+
+Push to `main` or a branch matching `deploy/*`:
+
+```bash
+git checkout -b deploy/2026-08-18
+# merge your feature branch or commit your changes
+git push origin deploy/2026-08-18
+```
+
+The workflow (`.github/workflows/deploy-iis.yml`) will:
+
+1. Build + test.
+2. Publish API to `C:\Projects\_stage\api` and Web to `C:\Projects\_stage\web`.
+3. Stop `NonCashAPI` and `NonCashWeb` app pools.
+4. Swap `C:\Projects\NonCashAPI` → `C:\Projects\NonCashAPI_prev` and `C:\Projects\NonCashWeb` → `C:\Projects\NonCashWeb_prev`, then copy the staged folders into place.
+5. Apply EF migrations using `NONCASH_DB_CONNECTION`.
+6. Start the app pools.
+7. Smoke-test `http://localhost:8668/health`.
+
+Because the runner is on the server, there is **no need for WinRM/MSDeploy or open inbound ports** — the runner only dials out to GitHub.
 
 ---
 
