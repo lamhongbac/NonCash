@@ -57,10 +57,10 @@ jobs:
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Stop-Website -Name nonCashAPI -ErrorAction SilentlyContinue
-          Stop-WebAppPool nonCashAPI -ErrorAction SilentlyContinue
-          Stop-Website -Name NonCashPlatform -ErrorAction SilentlyContinue
-          Stop-WebAppPool NonCashPlatform -ErrorAction SilentlyContinue
+          if ((Get-WebsiteState -Name nonCashAPI).Value -ne 'Stopped') { Stop-Website -Name nonCashAPI }
+          if ((Get-WebAppPoolState -Name nonCashAPI).Value -ne 'Stopped') { Stop-WebAppPool nonCashAPI }
+          if ((Get-WebsiteState -Name NonCashPlatform).Value -ne 'Stopped') { Stop-Website -Name NonCashPlatform }
+          if ((Get-WebAppPoolState -Name NonCashPlatform).Value -ne 'Stopped') { Stop-WebAppPool NonCashPlatform }
           # Wait for worker processes to fully terminate and release file locks.
           Start-Sleep -Seconds 15
           Write-Host "NonCash sites/app pools stopped."
@@ -145,10 +145,10 @@ jobs:
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Start-WebAppPool nonCashAPI -ErrorAction SilentlyContinue
-          Start-Website -Name nonCashAPI -ErrorAction SilentlyContinue
-          Start-WebAppPool NonCashPlatform -ErrorAction SilentlyContinue
-          Start-Website -Name NonCashPlatform -ErrorAction SilentlyContinue
+          if ((Get-WebAppPoolState -Name nonCashAPI).Value -ne 'Started') { Start-WebAppPool nonCashAPI }
+          if ((Get-WebsiteState -Name nonCashAPI).Value -ne 'Started') { Start-Website -Name nonCashAPI }
+          if ((Get-WebAppPoolState -Name NonCashPlatform).Value -ne 'Started') { Start-WebAppPool NonCashPlatform }
+          if ((Get-WebsiteState -Name NonCashPlatform).Value -ne 'Started') { Start-Website -Name NonCashPlatform }
 
       - name: Smoke test API health
         shell: powershell
