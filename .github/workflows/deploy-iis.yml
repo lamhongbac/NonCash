@@ -69,6 +69,12 @@ jobs:
               Stop-WebAppPool $p
             }
           }
+          Start-Sleep -Seconds 10
+
+          # Force-stop any lingering IIS worker processes to release file locks.
+          Get-Process w3wp -ErrorAction SilentlyContinue | Stop-Process -Force
+          # Also stop any orphaned dotnet.exe hosts that may be locking app DLLs.
+          Get-Process dotnet -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 5
 
       - name: Backup production appsettings.json files
