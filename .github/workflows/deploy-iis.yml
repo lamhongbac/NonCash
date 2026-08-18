@@ -53,29 +53,13 @@ jobs:
       - name: Publish Web
         run: dotnet publish src\NonCash.Web\NonCash.Web.csproj -c Release -o "$env:STAGE_ROOT\web" --no-build
 
-      - name: Stop IIS sites and app pools
+      - name: Stop IIS services to release file locks
         shell: powershell
         run: |
-          Import-Module WebAdministration
-          foreach ($s in @('NonCash.API','NonCash.Web')) {
-            $site = Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue
-            if ($site -and (Get-WebsiteState -Name $s).Value -ne 'Stopped') {
-              Stop-Website -Name $s
-            }
-          }
-          foreach ($p in @('NonCashAPI','NonCashWeb')) {
-            $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
-            if ($pool -and (Get-WebAppPoolState -Name $p).Value -ne 'Stopped') {
-              Stop-WebAppPool $p
-            }
-          }
-          Start-Sleep -Seconds 10
-
-          # Force-stop any lingering IIS worker processes to release file locks.
-          Get-Process w3wp -ErrorAction SilentlyContinue | Stop-Process -Force
-          # Also stop any orphaned dotnet.exe hosts that may be locking app DLLs.
-          Get-Process dotnet -ErrorAction SilentlyContinue | Stop-Process -Force
+          # Stopping W3SVC terminates all IIS worker processes and releases all file locks.
+          Stop-Service W3SVC -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 5
+          Write-Host "W3SVC state: $((Get-Service W3SVC).Status)"
 
       - name: Backup production appsettings.json files
         shell: powershell
@@ -151,9 +135,12 @@ jobs:
             --startup-project src\NonCash.API `
             --connection "${{ secrets.NONCASH_DB_CONNECTION }}"
 
-      - name: Start IIS app pools and sites
+      - name: Start IIS services
         shell: powershell
         run: |
+          Start-Service W3SVC -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+          # Ensure app pools and sites are started
           Import-Module WebAdministration
           foreach ($p in @('NonCashAPI','NonCashWeb')) {
             $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
