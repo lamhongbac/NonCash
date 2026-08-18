@@ -72,6 +72,16 @@ public record BusinessActivatedNotification(
     int CreditsGranted,
     DateTime? ExpiresAt);
 
+/// <summary>Payload sent to the business contact when the contract is sent for signature.</summary>
+public record ContractSentNotification(
+    string? BusinessEmail,
+    string BusinessName,
+    string BrandName,
+    string PolicyTemplateName,
+    int WelcomeCredits,
+    int? WelcomeCreditExpiryMonths,
+    string ContractHtml);
+
 /// <summary>Payload sent to a brand after a credit purchase batch is created.</summary>
 public record CreditPurchasedNotification(
     string? BrandEmail,
@@ -140,6 +150,7 @@ public interface INotificationService
     Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyContractSentAsync(ContractSentNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default);
     Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default);

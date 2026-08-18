@@ -22,12 +22,10 @@
 
 ## Update Summary
 **Changes Made**
-- Enhanced CI/CD pipeline with comprehensive backup/restore mechanisms for production configuration files
-- Improved rollback capabilities with automatic previous version preservation
-- Better directory structure organization for deployment artifacts
-- Updated GitHub Actions workflow with enhanced operational procedures
-- Added comprehensive production deployment guide with security hardening measures
-- **Updated**: Enhanced IIS deployment workflow with robust Robocopy-Mirror function replacing simple Rename-Item approach, improved file lock handling with configurable retry parameters (/R:10 /W:5), targeted IIS service management for NonCash-specific sites and application pools (NonCash.API, NonCash.Web, NonCashAPI, NonCashWeb), extended wait periods (15 seconds) for worker process termination, and enhanced backup strategy using robocopy mirror functionality for better rollback capabilities
+- Enhanced CI/CD pipeline with simplified IIS site and application pool management logic, replacing foreach loops with direct conditional checks for 'nonCashAPI' and 'NonCashPlatform' sites/pools
+- Updated PATH environment variable refresh step during database migration phase to ensure dotnet-ef tool availability
+- Improved error handling and state validation for IIS service management operations
+- Enhanced deployment reliability with targeted site and app pool management
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -88,7 +86,7 @@ F --> F2["setup-iis.ps1"]
 - [_bmad/bmm/config.yaml:1-17](file://_bmad/bmm/config.yaml#L1-L17)
 - [_bmad/core/config.yaml:1-10](file://_bmad/core/config.yaml#L1-L10)
 - [_bmad-output/implementation-artifacts/sprint-status.yaml:1-81](file://_bmad-output/implementation-artifacts/sprint-status.yaml#L1-L81)
-- [.github/workflows/deploy-iis.yml:1-178](file://.github/workflows/deploy-iis.yml#L1-L178)
+- [.github/workflows/deploy-iis.yml:1-164](file://.github/workflows/deploy-iis.yml#L1-L164)
 - [tools/deploy/publish.ps1:1-56](file://tools/deploy/publish.ps1#L1-L56)
 - [tools/deploy/setup-iis.ps1:1-68](file://tools/deploy/setup-iis.ps1#L1-L68)
 
@@ -224,6 +222,17 @@ The NonCash platform features a sophisticated CI/CD pipeline built with GitHub A
 
 The `.github/workflows/deploy-iis.yml` workflow implements a complete deployment pipeline with the following enhanced capabilities:
 
+#### Simplified IIS Site and Application Pool Management
+- **Direct Conditional Checks**: Replaced foreach loops with direct conditional checks for 'nonCashAPI' and 'NonCashPlatform' sites and application pools
+- **State Validation**: Each operation checks current state before attempting stop/start operations
+- **Error Resilience**: Silently continues if sites/app pools don't exist, preventing deployment failures
+- **Targeted Management**: Focuses only on NonCash-specific IIS resources for precise control
+
+#### Enhanced PATH Environment Variable Handling
+- **PATH Refresh Step**: Added PATH environment variable refresh during database migration phase to ensure dotnet-ef tool availability
+- **Tool Installation**: Automatically installs dotnet-ef global tool with proper PATH configuration
+- **Migration Reliability**: Ensures database migrations execute reliably with proper tool access
+
 #### Robocopy-Mirror Function for Enhanced File Operations
 - **Robust File Copying**: Implements a custom `Robocopy-Mirror` function that uses Robocopy with mirror mode (`/MIR`) for reliable file synchronization
 - **Configurable Retry Logic**: Configured with `/R:10 /W:5` parameters to retry failed operations 10 times with 5-second intervals between retries
@@ -243,12 +252,6 @@ The `.github/workflows/deploy-iis.yml` workflow implements a complete deployment
 - **Comprehensive error handling**: Detailed exception handling with informative error messages
 - **Graceful degradation**: Continues deployment even if health checks fail (with warnings)
 
-#### Targeted IIS Service Management
-- **Site-Specific Management**: Targets only NonCash-specific sites (`NonCash.API`, `NonCash.Web`)
-- **App Pool Management**: Manages only NonCash-specific app pools (`NonCashAPI`, `NonCashWeb`)
-- **State Validation**: Checks current state before attempting to stop/start operations
-- **Error Resilience**: Silently continues if sites/app pools don't exist
-
 ```mermaid
 sequenceDiagram
 participant Dev as Developer
@@ -260,24 +263,31 @@ Dev->>GH : Push to main/deploy/*
 GH->>Runner : Trigger workflow
 Runner->>Runner : dotnet restore/build/test
 Runner->>Runner : Publish API & Web apps
-Runner->>IIS : Stop NonCash sites with state validation
+Runner->>IIS : Check nonCashAPI site state
+Runner->>IIS : Stop nonCashAPI if running
+Runner->>IIS : Check NonCashPlatform site state
+Runner->>IIS : Stop NonCashPlatform if running
 Runner->>IIS : Wait 15 seconds for worker processes
 Runner->>IIS : Backup appsettings.json
 Runner->>IIS : Robocopy-Mirror to _prev folders
 Runner->>IIS : Robocopy-Mirror from staging to target
 Runner->>IIS : Restore appsettings.json
+Runner->>Runner : Install dotnet-ef and refresh PATH
 Runner->>DB : Apply EF migrations
-Runner->>IIS : Start NonCash app pools with state validation
+Runner->>IIS : Start NonCashAPI app pool if not started
+Runner->>IIS : Start NonCashAPI site if not started
+Runner->>IIS : Start NonCashPlatform app pool if not started
+Runner->>IIS : Start NonCashPlatform site if not started
 Runner->>IIS : Health check /health
 IIS-->>Runner : Health status
 Runner-->>Dev : Deployment result
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)
+- [.github/workflows/deploy-iis.yml:31-164](file://.github/workflows/deploy-iis.yml#L31-L164)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:1-178](file://.github/workflows/deploy-iis.yml#L1-L178)
+- [.github/workflows/deploy-iis.yml:1-164](file://.github/workflows/deploy-iis.yml#L1-L164)
 
 ## Production Deployment Procedures
 
@@ -314,7 +324,7 @@ git checkout -b deploy/2026-08-18
 git push origin deploy/2026-08-18
 ```
 
-The workflow automatically handles the entire deployment process including backup, deployment, migration, and health checks with enhanced Robocopy-Mirror functionality.
+The workflow automatically handles the entire deployment process including backup, deployment, migration, and health checks with enhanced Robocopy-Mirror functionality and simplified IIS management.
 
 #### Method 2: Manual Scripted Deployment
 For initial setup or manual deployments:
@@ -399,7 +409,7 @@ pg_dump -U postgres -a noncash > data_backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:76-139](file://.github/workflows/deploy-iis.yml#L76-L139)
+- [.github/workflows/deploy-iis.yml:68-131](file://.github/workflows/deploy-iis.yml#L68-L131)
 - [docs/deployment-guide.md:108-148](file://docs/deployment-guide.md#L108-L148)
 
 ## Rollback Capabilities
@@ -483,7 +493,7 @@ end
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:13-43](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L13-L43)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:89-124](file://.github/workflows/deploy-iis.yml#L89-L124)
+- [.github/workflows/deploy-iis.yml:81-131](file://.github/workflows/deploy-iis.yml#L81-L131)
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:1-112](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L1-L112)
 - [docs/deployment-guide.md:199-203](file://docs/deployment-guide.md#L199-L203)
 
@@ -533,7 +543,7 @@ CI --> I
 **Diagram sources**
 - [docs/architecture.md:9-26](file://docs/architecture.md#L9-L26)
 - [BMAD_STRUCTURE.md:39-56](file://BMAD_STRUCTURE.md#L39-L56)
-- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)
+- [.github/workflows/deploy-iis.yml:31-164](file://.github/workflows/deploy-iis.yml#L31-L164)
 
 **Section sources**
 - [docs/architecture.md:1-26](file://docs/architecture.md#L1-L26)
@@ -544,7 +554,7 @@ CI --> I
 - Cache hot data (e.g., brand/outlet metadata) with short TTLs; invalidate on changes.
 - Use circuit breakers and bulkheads for resilience; implement idempotency keys for POS endpoints.
 - Right-size containers and enable vertical pod autoscaling for bursty loads.
-- **Enhanced**: Implement connection pooling for database connections and optimize IIS app pool settings for concurrent request handling with enhanced file operation performance using Robocopy.
+- **Enhanced**: Implement connection pooling for database connections and optimize IIS app pool settings for concurrent request handling with enhanced file operation performance using Robocopy and simplified IIS management operations.
 
 ## Troubleshooting Guide
 Common operational issues and resolutions:
@@ -566,6 +576,8 @@ Common operational issues and resolutions:
   - **New**: Permission errors - Verify runner service account has proper IIS and file system permissions
   - **New**: Worker process termination - Ensure 15-second wait period is sufficient for file lock release
   - **New**: Site/App Pool management - Verify targeted NonCash-specific sites and pools exist before operations
+  - **New**: PATH environment issues - Ensure PATH refresh step executes properly for dotnet-ef tool availability
+  - **New**: IIS service management - Check state validation logic for nonCashAPI and NonCashPlatform sites
 
 **Section sources**
 - [_bmad-output/implementation-artifacts/4-3-commit-and-log.md:62-99](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L62-L99)
@@ -573,7 +585,7 @@ Common operational issues and resolutions:
 - [docs/deployment-guide.md:190-228](file://docs/deployment-guide.md#L190-L228)
 
 ## Conclusion
-The NonCash platform is architected for SaaS delivery with clear microservices boundaries and transactional rigor in the POS workflow. The enhanced deployment strategy emphasizes containerization, managed Kubernetes, GitOps, and robust observability, with significant improvements to CI/CD automation, backup/restore mechanisms, and rollback capabilities. The introduction of Robocopy-Mirror functionality provides enterprise-grade file operation reliability with configurable retry logic, while targeted IIS service management ensures precise control over NonCash-specific deployments. Adhering to zero-downtime deployment practices, careful database migrations, and strong rollback procedures will ensure reliable production operations across Azure, AWS, or on-premises environments. The enhanced GitHub Actions workflow provides comprehensive deployment automation with built-in safety mechanisms and operational procedures for production deployments.
+The NonCash platform is architected for SaaS delivery with clear microservices boundaries and transactional rigor in the POS workflow. The enhanced deployment strategy emphasizes containerization, managed Kubernetes, GitOps, and robust observability, with significant improvements to CI/CD automation, backup/restore mechanisms, and rollback capabilities. The introduction of simplified IIS site and application pool management with direct conditional checks for 'nonCashAPI' and 'NonCashPlatform' resources provides more reliable service control, while the PATH environment variable refresh step ensures consistent dotnet-ef tool availability during database migrations. The enhanced GitHub Actions workflow provides comprehensive deployment automation with built-in safety mechanisms and operational procedures for production deployments. Adhering to zero-downtime deployment practices, careful database migrations, and strong rollback procedures will ensure reliable production operations across Azure, AWS, or on-premises environments.
 
 ## Appendices
 
@@ -625,21 +637,28 @@ flowchart TD
 A[Code Push] --> B[GitHub Actions Trigger]
 B --> C[Build & Test]
 C --> D[Publish Applications]
-D --> E[Stop NonCash IIS Sites with State Validation]
-E --> F[Wait 15 Seconds for Worker Processes]
-F --> G[Backup Config Files]
-G --> H[Robocopy-Mirror to _prev Folders]
-H --> I[Robocopy-Mirror from Staging to Target]
-I --> J[Restore Config Files]
-J --> K[Apply Database Migrations]
-K --> L[Start NonCash IIS App Pools with State Validation]
-L --> M[Health Check]
-M --> N{Health OK?}
-N --> |Yes| O[Deployment Complete]
-N --> |No| P[Rollback to Previous Version]
-P --> Q[Alert Team]
-Q --> R[Investigate Issues]
+D --> E[Check nonCashAPI Site State]
+E --> F[Stop nonCashAPI if Running]
+F --> G[Check NonCashPlatform Site State]
+G --> H[Stop NonCashPlatform if Running]
+H --> I[Wait 15 Seconds for Worker Processes]
+I --> J[Backup Config Files]
+J --> K[Robocopy-Mirror to _prev Folders]
+K --> L[Robocopy-Mirror from Staging to Target]
+L --> M[Restore Config Files]
+M --> N[Install dotnet-ef and Refresh PATH]
+N --> O[Apply Database Migrations]
+O --> P[Start NonCashAPI App Pool if Not Started]
+P --> Q[Start NonCashAPI Site if Not Started]
+Q --> R[Start NonCashPlatform App Pool if Not Started]
+R --> S[Start NonCashPlatform Site if Not Started]
+S --> T[Health Check]
+T --> U{Health OK?}
+U --> |Yes| V[Deployment Complete]
+U --> |No| W[Rollback to Previous Version]
+W --> X[Alert Team]
+X --> Y[Investigate Issues]
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-178](file://.github/workflows/deploy-iis.yml#L31-L178)
+- [.github/workflows/deploy-iis.yml:31-164](file://.github/workflows/deploy-iis.yml#L31-L164)

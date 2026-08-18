@@ -479,6 +479,7 @@ public class CreditServiceTests
         public Task NotifyWelcomeCreditGrantedAsync(WelcomeCreditGrantedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyBrandCreatedAsync(BrandCreatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyBusinessActivatedAsync(BusinessActivatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyContractSentAsync(ContractSentNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyLowCreditBalanceAsync(LowCreditBalanceNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyCreditsForfeitedAsync(CreditsForfeitedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

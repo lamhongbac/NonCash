@@ -1,6 +1,6 @@
 namespace NonCash.API.DTOs;
 
-public record BusinessRegistrationRequest(
+public record SubmitBusinessRegistrationRequest(
     string CompanyName,
     string TaxCode,
     string ContactEmail,
@@ -34,6 +34,11 @@ public record AdminRegistrationRequestDto(
     string RepresentativeName,
     string Username,
     string Status,
+    string ContractStatus,
+    DateTime? ContractSentAt,
+    string? ContractFileUrl,
+    Guid? WelcomePolicyTemplateId,
+    string? WelcomePolicyTemplateName,
     DateTime SubmittedAt,
     DateTime? ReviewedAt,
     string? ReviewNotes,
@@ -41,6 +46,13 @@ public record AdminRegistrationRequestDto(
 );
 
 public record ReviewActionDto(
-    string? ReviewNotes,
-    Guid? WelcomeGrantPolicyTemplateId = null
+    string? ReviewNotes
+);
+
+public record SendContractDto(
+    Guid WelcomePolicyTemplateId
+);
+
+public record UploadSignedContractDto(
+    string ContractFileUrl
 );

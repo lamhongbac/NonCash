@@ -11,12 +11,13 @@ namespace NonCash.IntegrationTests.Controllers;
 public class PublicRegistrationControllerTests
 {
     private readonly IRegistrationService _registrationService;
+    private readonly FakeBusinessRegistrationRequestRepository _requestRepository;
 
     public PublicRegistrationControllerTests()
     {
         var brandRepository = new FakeBrandRepository();
         var userAccountRepository = new FakeUserAccountRepository();
-        var requestRepository = new FakeBrandRegistrationRequestRepository();
+        _requestRepository = new FakeBusinessRegistrationRequestRepository();
         var notificationService = new ConsoleNotificationService();
         var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService);
 
@@ -24,7 +25,7 @@ public class PublicRegistrationControllerTests
             new FakeBusinessRepository(),
             brandRepository,
             userAccountRepository,
-            requestRepository,
+            _requestRepository,
             authService,
             notificationService);
     }
@@ -104,6 +105,11 @@ public class PublicRegistrationControllerTests
         var submitResult = await _registrationService.SubmitAsync(request);
         var reviewerId = Guid.NewGuid();
 
+        // Simulate contract signed (set directly on the stored request for this unit-level test).
+        var storedRequest = await _requestRepository.GetByIdAsync(submitResult.RequestId!.Value);
+        storedRequest!.ContractStatus = ContractStatus.Signed;
+        storedRequest.WelcomePolicyTemplateId = Guid.NewGuid();
+
         // Act
         var reviewResult = await _registrationService.ReviewAsync(submitResult.RequestId!.Value, reviewerId, true, null);
 
@@ -178,23 +184,31 @@ public class PublicRegistrationControllerTests
         public Task<IEnumerable<UserAccount>> ListByBrandAsync(Guid brandId, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<UserAccount>>(_users.Where(u => u.BrandId == brandId));
     }
 
-    private class FakeBrandRegistrationRequestRepository : IBrandRegistrationRequestRepository
+    private class FakeBusinessRegistrationRequestRepository : IBusinessRegistrationRequestRepository
     {
-        private readonly List<BrandRegistrationRequest> _requests = new();
+        private readonly List<BusinessRegistrationRequest> _requests = new();
 
-        public Task<BrandRegistrationRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(_requests.FirstOrDefault(r => r.Id == id));
-        public Task<IEnumerable<BrandRegistrationRequest>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<BrandRegistrationRequest>>(_requests);
-        public Task<IEnumerable<BrandRegistrationRequest>> FindAsync(Expression<Func<BrandRegistrationRequest, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<BrandRegistrationRequest>>(_requests.AsQueryable().Where(predicate));
-        public Task<int> CountAsync(Expression<Func<BrandRegistrationRequest, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(_requests.AsQueryable().Count(predicate));
-        public Task<BrandRegistrationRequest?> GetByBrandIdAsync(Guid brandId, CancellationToken cancellationToken = default) => Task.FromResult(_requests.FirstOrDefault(r => r.BrandId == brandId));
-        public Task<BrandRegistrationRequest> AddAsync(BrandRegistrationRequest entity, CancellationToken cancellationToken = default)
+        public Task<BusinessRegistrationRequest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(_requests.FirstOrDefault(r => r.Id == id));
+        public Task<IEnumerable<BusinessRegistrationRequest>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<BusinessRegistrationRequest>>(_requests);
+        public Task<IEnumerable<BusinessRegistrationRequest>> FindAsync(Expression<Func<BusinessRegistrationRequest, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<BusinessRegistrationRequest>>(_requests.AsQueryable().Where(predicate));
+        public Task<int> CountAsync(Expression<Func<BusinessRegistrationRequest, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(_requests.AsQueryable().Count(predicate));
+        public Task<BusinessRegistrationRequest?> GetByBrandIdAsync(Guid brandId, CancellationToken cancellationToken = default) => Task.FromResult(_requests.FirstOrDefault(r => r.BrandId == brandId));
+        public Task<BusinessRegistrationRequest> AddAsync(BusinessRegistrationRequest entity, CancellationToken cancellationToken = default)
         {
             entity.Id = Guid.NewGuid();
             _requests.Add(entity);
             return Task.FromResult(entity);
         }
-        public void Update(BrandRegistrationRequest entity) { }
-        public void Delete(BrandRegistrationRequest entity) { }
+        public void Update(BusinessRegistrationRequest entity)
+        {
+            var existing = _requests.FirstOrDefault(r => r.Id == entity.Id);
+            if (existing != null)
+            {
+                _requests.Remove(existing);
+                _requests.Add(entity);
+            }
+        }
+        public void Delete(BusinessRegistrationRequest entity) { }
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 

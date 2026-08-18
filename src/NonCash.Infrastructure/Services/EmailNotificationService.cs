@@ -271,6 +271,32 @@ public class EmailNotificationService : INotificationService
         await SendAsync(notification.BusinessEmail, subject, body, cancellationToken, "ActiveBusiness", "BusinessActivated");
     }
 
+    public async Task NotifyContractSentAsync(ContractSentNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.BusinessEmail))
+        {
+            _logger.LogInformation("Contract-sent notification skipped for {BusinessName}: no contact email.", notification.BusinessName);
+            return;
+        }
+
+        var expiryHtml = notification.WelcomeCreditExpiryMonths.HasValue
+            ? $"<p><strong>Credit expiry:</strong> {notification.WelcomeCreditExpiryMonths.Value} month(s) after activation</p>"
+            : string.Empty;
+
+        var subject = $"NonCash contract for '{notification.BusinessName}'";
+        var body = await _templateRenderer.RenderAsync("ContractSent", new Dictionary<string, string?>
+        {
+            ["BusinessName"] = notification.BusinessName,
+            ["BrandName"] = notification.BrandName,
+            ["PolicyTemplateName"] = notification.PolicyTemplateName,
+            ["WelcomeCredits"] = notification.WelcomeCredits.ToString("N0"),
+            ["ExpiryHtml"] = expiryHtml,
+            ["ContractHtml"] = notification.ContractHtml
+        }, cancellationToken);
+
+        await SendAsync(notification.BusinessEmail, subject, body, cancellationToken, "ContractSent", "ContractSent");
+    }
+
     public async Task NotifyCreditPurchasedAsync(CreditPurchasedNotification notification, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(notification.BrandEmail))

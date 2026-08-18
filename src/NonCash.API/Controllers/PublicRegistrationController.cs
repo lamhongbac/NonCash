@@ -19,7 +19,7 @@ public class PublicRegistrationController : ControllerBase
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<BusinessRegistrationResponse>> Register(
-        BusinessRegistrationRequest request, CancellationToken cancellationToken)
+        SubmitBusinessRegistrationRequest request, CancellationToken cancellationToken)
     {
         var dto = new RegistrationRequestDto(
             request.CompanyName,

@@ -24,7 +24,8 @@ After login, the Admin dashboard provides navigation to:
 - **Credits** — view credit batches/balances, record top-ups, review the ledger.
 - **Credit Policies** — define pricing/expiry/low-balance policies (global, group, or brand scope).
 - **Credit Adjustments** — approve or reject credit adjustment requests.
-- **Welcome Policies** — configure welcome-credit grant rules for new Brands.
+- **Welcome Policy Templates** — create reusable welcome-credit grant terms and mark one as the platform default.
+- **Welcome Policies** — view the welcome-credit policy assigned to each Business after approval.
 - **Integration Partners** — onboard external Loyalty Apps and manage their API keys.
 
 Platform features that remain API-only (Swagger UI at `/swagger`):
@@ -45,7 +46,7 @@ A **Business** is the company record; a **Brand** is the tenant entity under it.
 3. Enter **Business Name** (required), **Tax Code** (required, unique), **Address** (required), and optional **Contact Email** / **Phone Number**.
 4. Click **Save**.
 
-If a **Contact Email** is provided, the contact receives a "Your business is now active on NonCash" email (recorded in the email audit log).
+If a **Contact Email** is provided, the contact receives a **Brand Created** email confirming the business was created and activated. This template is separate from the one used when a self-registered business is approved.
 
 ### 2.2 Create a Brand
 
@@ -116,26 +117,62 @@ Existing sessions are invalidated on the next token validation.
 
 ## 4. Business Registration Approval
 
-Businesses can register themselves through the public self-registration flow. Admins review these requests before activating the account.
+Businesses can register themselves through the public self-registration flow. Before activation, the platform and the business must agree to a contract. Admins manage this workflow from the **Registration Review** page.
 
-### 4.1 View Pending Registrations
+### 4.1 Registration Statuses
+
+A self-registered business moves through these stages:
+
+| Stage | Meaning | Admin Action |
+|---|---|---|
+| `Submitted` | Business registered; contract not yet sent. | Send contract |
+| `Contract Sent` | Contract emailed to the business; awaiting signature. | Print contract, upload signed copy |
+| `Contract Signed` | Signed hardcopy received. | Approve or reject |
+| `Approved` | Business activated. | — |
+| `Rejected` | Registration declined. | — |
+
+### 4.2 View Pending Registrations
 
 1. Go to **Registration Review**.
-2. The list shows all `BrandRegistrationRequest` records with status `Submitted`, ordered oldest first.
+2. Use the filter buttons:
+   - **Pending Contract** — requests waiting for a contract to be sent.
+   - **Pending Review** — requests with signed contracts ready for approval/rejection.
+   - **All Requests** — every request.
 3. Each row displays:
-   - Company Name
-   - Tax Code
-   - Contact Email
+   - Company Name / Brand Name
+   - Tax Code / Contact Email
    - Submitted Date
+   - Selected Welcome Policy (if any)
+   - Contract Status
 
-### 4.2 Review Registration Details
+### 4.3 Send the Contract
 
-1. Click a row to open the detail drawer.
-2. Review submitted information and any auto-verification flags (for example, Tax Code format validity).
+1. From **Pending Contract**, click **Send Contract** on the request.
+2. Select a **Welcome Policy Template** that reflects the agreed commercial terms.
+   - The platform default template is pre-selected.
+   - You can choose another active template if the business negotiated custom terms.
+3. Click **Send Contract**.
 
-### 4.3 Approve a Registration
+The system:
 
-1. Click **Approve**.
+- Maps the selected policy template to the request.
+- Generates a platform agreement (HTML) from the policy terms and business details.
+- Emails the contract to the business contact using the **Contract Sent** template.
+- Sets the request contract status to `Sent`.
+
+> **Tip:** Click **Print** on a request with a sent contract to open the agreement in a new browser tab for printing or saving as PDF.
+
+### 4.4 Upload Signed Contract
+
+1. From **Pending Contract**, click **Upload Signed Contract** on a request whose contract status is `Sent`.
+2. Enter the file URL or path where the signed hardcopy is stored.
+3. Click **Upload**.
+
+The system sets the contract status to `Signed`. The request now appears under **Pending Review** and can be approved or rejected.
+
+### 4.5 Approve a Registration
+
+1. From **Pending Review**, click **Approve**.
 2. Optionally add review notes.
 3. Confirm.
 
@@ -144,12 +181,16 @@ The system atomically:
 - Sets the request status to `Approved`.
 - Activates the linked Brand (`Status = Active`).
 - Activates the linked UserAccount (`Status = Active`).
+- Assigns the selected **Welcome Policy Template** to the new Business.
+- Grants the welcome credits defined by the template.
 - Records `ReviewedAt`, `ReviewedByUserId`, and `ReviewNotes`.
-- Sends an **email notification** to the business representative with login instructions (delivered via SMTP; recorded in the email audit log).
+- Sends a **Business Activated** email to the business representative with login instructions and the welcome-credit details (delivered via SMTP; recorded in the email audit log).
 
-### 4.4 Reject a Registration
+> **Note:** The **Business Activated** template is used only for approved self-registrations. Businesses created directly by an Admin receive the **Brand Created** email instead.
 
-1. Click **Reject**.
+### 4.6 Reject a Registration
+
+1. From **Pending Review**, click **Reject**.
 2. Enter **Review Notes** (minimum 10 characters).
 3. Confirm.
 
@@ -159,13 +200,14 @@ The system atomically:
 - Sets the linked Brand status to `Rejected`.
 - Sets the linked UserAccount status to `Rejected` (or deletes it based on configuration).
 - Records `ReviewedAt` and `ReviewedByUserId`.
-- Sends a **rejection email** to the business representative with the reason (delivered via SMTP; recorded in the email audit log).
+- Sends a **Registration Rejected** email to the business representative with the reason and next steps (delivered via SMTP; recorded in the email audit log).
 
-### 4.5 Approval Rules
+### 4.7 Approval Rules
 
-- Only users with the `Admin` role can approve or reject registrations.
+- Only users with the `Admin` role can send contracts, upload signed contracts, approve, or reject registrations.
 - A request can only be approved or rejected once. Repeated attempts return a 409 Conflict.
-- If any part of the transaction fails, the request remains `Submitted`.
+- Approval is blocked until the contract status is `Signed`.
+- If any part of the transaction fails, the request remains in its current status.
 
 ---
 
@@ -303,7 +345,36 @@ The **Credit Adjustments** page lists adjustment requests awaiting review. Appro
 
 ### 7.9 Welcome Policies
 
-The **Welcome Policies** page configures the welcome-credit grant (amount, expiry) applied to newly activated Brands, per business or by default.
+The **Welcome Policies** page shows the welcome-credit policy assigned to each Business after registration approval. The actual terms come from a **Welcome Policy Template**; this page is read-only and reflects which template was applied and when.
+
+### 7.10 Welcome Policy Templates
+
+**Welcome Policy Templates** are reusable onboarding terms created ahead of time. Admins select one when approving a business registration. One template must be marked as the platform **Default**; it is used automatically when no specific template is chosen.
+
+#### 7.10.1 Create a Template
+
+1. Go to **Welcome Policy Templates**.
+2. Click **New Template**.
+3. Enter:
+   - **Name** — a descriptive name (for example, "Standard 500 Credits", "Enterprise 12-Month").
+   - **Welcome Credits** — number of free credits granted on activation.
+   - **Expiry (Months)** — optional credit expiry in months; leave empty for no expiry.
+   - **Active** — inactive templates do not appear in the approval dropdown.
+4. Click **Save**.
+
+#### 7.10.2 Set the Default Template
+
+1. In the template list, click the **Check Circle** icon on the template you want as default.
+2. The system removes the default flag from the previous template and applies it to the selected one.
+3. New registrations approved without an explicit selection will use this template.
+
+> **Important:** There must always be exactly one active default template. If you deactivate the current default, set a new default before approving registrations.
+
+#### 7.10.3 Edit or Deactivate a Template
+
+- Click **Edit** to change name, credits, expiry, or active status.
+- Click **Block** to deactivate a template. Deactivated templates are not available for new approvals.
+- Changes to a template do **not** affect Businesses already approved under that template; they only affect future approvals.
 
 ---
 
@@ -338,6 +409,7 @@ The **Welcome Policies** page configures the welcome-credit grant (amount, expir
 | Manage credits (UI) | Credits | Admin |
 | Manage credit policies | Credit Policies | Admin |
 | Approve credit adjustment | Credit Adjustments | Admin |
+| Manage welcome policy templates | Welcome Policy Templates | Admin |
 | Manage welcome policies | Welcome Policies | Admin |
 | Manage integration partners (UI) | Integration Partners | Admin |
 
@@ -357,4 +429,9 @@ The **Welcome Policies** page configures the welcome-credit grant (amount, expir
 | Top-up returns 400 | Type is `Consumption`, amount is 0, or negative amount on Grant/Purchase | Use `Purchase`/`Grant`/`Adjustment`; only `Adjustment` may be negative. |
 | Brand cannot generate/distribute vouchers | Credit balance ≤ 0 (`InsufficientCredits`) | Confirm the bank transfer and record a top-up for the Brand. |
 | Business/brand contact did not receive email | Contact Email empty, or record created before SMTP was configured | Set a Contact Email and recreate, or check the `email_logs` table for the send attempt/error. |
+| Approval fails with "default template not found" | No active default Welcome Policy Template exists | Go to **Welcome Policy Templates**, activate a template, and click **Set as default**. |
+| Approval fails with "template not found or inactive" | The selected template was deactivated before approval | Select an active template or use the default. |
+| Approve button is disabled / approval fails | Contract status is not `Signed` | Send the contract, wait for the business to sign, then upload the signed copy. |
+| Send contract fails | Selected Welcome Policy Template is inactive or missing | Choose an active template or set a default template. |
+| Upload signed contract fails | Contract was never sent | Send the contract first before uploading the signed copy. |
 

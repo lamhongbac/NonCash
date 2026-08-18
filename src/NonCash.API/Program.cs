@@ -58,7 +58,7 @@ builder.Services.AddScoped<IOutletRepository, OutletRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 builder.Services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
-builder.Services.AddScoped<IBrandRegistrationRequestRepository, BrandRegistrationRequestRepository>();
+builder.Services.AddScoped<IBusinessRegistrationRequestRepository, BusinessRegistrationRequestRepository>();
 builder.Services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
 builder.Services.AddScoped<IVoucherTransferRepository, VoucherTransferRepository>();
 builder.Services.AddScoped<IVoucherLockRepository, VoucherLockRepository>();
@@ -100,6 +100,7 @@ builder.Services.AddSingleton(creditConfig);
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ICreditPolicyService, CreditPolicyService>();
 builder.Services.AddScoped<IWelcomePolicyService, WelcomePolicyService>();
+builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<ICreditAdjustmentService, CreditAdjustmentService>();
 
 // Integration partners (Epic 6)

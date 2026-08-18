@@ -8,7 +8,14 @@ public enum RegistrationStatus
     Rejected
 }
 
-public class BrandRegistrationRequest : BaseEntity
+public enum ContractStatus
+{
+    None,
+    Sent,
+    Signed
+}
+
+public class BusinessRegistrationRequest : BaseEntity
 {
     public Guid BrandId { get; set; }
     public Guid SubmittedByUserId { get; set; }
@@ -18,7 +25,14 @@ public class BrandRegistrationRequest : BaseEntity
     public DateTime? ReviewedAt { get; set; }
     public Guid? ReviewedByUserId { get; set; }
 
+    // Contract workflow (Option A): policy is selected and contract is sent before approval.
+    public Guid? WelcomePolicyTemplateId { get; set; }
+    public ContractStatus ContractStatus { get; set; } = ContractStatus.None;
+    public DateTime? ContractSentAt { get; set; }
+    public string? ContractFileUrl { get; set; }
+
     public Brand? Brand { get; set; }
     public UserAccount? SubmittedBy { get; set; }
     public UserAccount? ReviewedBy { get; set; }
+    public WelcomeGrantPolicyTemplate? WelcomePolicyTemplate { get; set; }
 }

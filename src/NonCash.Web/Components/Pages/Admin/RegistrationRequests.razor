@@ -8,10 +8,11 @@
 <PageTitle>Registration Requests</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true">Business Registration Requests</MudText>
-<MudText Typo="Typo.body1" Class="mb-4">Review and approve or reject business registration applications.</MudText>
+<MudText Typo="Typo.body1" Class="mb-4">Send contracts, collect signed hardcopies, and approve or reject business registrations.</MudText>
 
 <MudStack Row="true" Spacing="2" Class="mb-4">
-    <MudButton Variant="@(_filter == "pending" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending"))">Pending Only</MudButton>
+    <MudButton Variant="@(_filter == "pending-contract" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending-contract"))">Pending Contract</MudButton>
+    <MudButton Variant="@(_filter == "pending-review" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending-review"))">Pending Review</MudButton>
     <MudButton Variant="@(_filter == "all" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("all"))">All Requests</MudButton>
 </MudStack>
 
@@ -36,19 +37,45 @@ else
                         <MudText Typo="Typo.body2">Tax Code: @req.TaxCode | Email: @req.ContactEmail</MudText>
                         <MudText Typo="Typo.body2">Representative: @req.RepresentativeName (@req.Username)</MudText>
                         <MudText Typo="Typo.body2">Submitted: @req.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
+                        @if (!string.IsNullOrEmpty(req.WelcomePolicyTemplateName))
+                        {
+                            <MudText Typo="Typo.body2">Policy: @req.WelcomePolicyTemplateName</MudText>
+                        }
                     </div>
                     <div>
                         @if (req.Status == "Submitted")
                         {
-                            <MudAlert Severity="Severity.Warning" Class="mb-2">Pending Review</MudAlert>
-                            <MudStack Row="true" Spacing="2">
-                                <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
-                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
+                            @if (req.ContractStatus == "None")
+                            {
+                                <MudAlert Severity="Severity.Warning" Class="mb-2">Contract Not Sent</MudAlert>
+                                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenSendContractDialog(req))">
+                                    <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" Class="mr-1" /> Send Contract
                                 </MudButton>
-                                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => OpenRejectDialog(req))">
-                                    <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Class="mr-1" /> Reject
-                                </MudButton>
-                            </MudStack>
+                            }
+                            else if (req.ContractStatus == "Sent")
+                            {
+                                <MudAlert Severity="Severity.Info" Class="mb-2">Contract Sent @(!string.IsNullOrEmpty(req.ContractSentAt) ? $"at {req.ContractSentAt}" : "")</MudAlert>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" Href="@($"api/v1/admin/registration-requests/{req.RequestId}/contract")" Target="_blank">
+                                        <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" Class="mr-1" /> Print
+                                    </MudButton>
+                                    <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenUploadContractDialog(req))">
+                                        <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" Class="mr-1" /> Upload Signed
+                                    </MudButton>
+                                </MudStack>
+                            }
+                            else if (req.ContractStatus == "Signed")
+                            {
+                                <MudAlert Severity="Severity.Success" Class="mb-2">Contract Signed</MudAlert>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
+                                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
+                                    </MudButton>
+                                    <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => OpenRejectDialog(req))">
+                                        <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Class="mr-1" /> Reject
+                                    </MudButton>
+                                </MudStack>
+                            }
                         }
                         else if (req.Status == "Approved")
                         {
@@ -69,14 +96,14 @@ else
     }
 }
 
-<MudDialog @bind-Visible="_showApproveDialog" Options="_dialogOptions" TitleClass="mud-theme-primary py-2 px-4">
+<MudDialog @bind-Visible="_showSendContractDialog" Options="_dialogOptions" TitleClass="mud-theme-primary py-2 px-4">
     <TitleContent>
-        <MudText Typo="Typo.h6">Approve Registration — @_selectedRequest?.BusinessName</MudText>
+        <MudText Typo="Typo.h6">Send Contract — @_selectedRequest?.BusinessName</MudText>
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="2">
             <MudAlert Severity="Severity.Info" Dense="true">
-                Select the welcome-grant policy to apply. If none is chosen, the platform default is used.
+                Select the welcome-grant policy to attach to the contract. The business must sign and return the hardcopy before you can approve.
             </MudAlert>
 
             <MudSelect T="Guid?" @bind-Value="_selectedTemplateId" Label="Welcome policy template" Variant="Variant.Outlined"
@@ -91,7 +118,41 @@ else
             <MudText Typo="Typo.body2" Color="Color.Surface">
                 Resolved: <strong>@_resolvedCredits credits</strong>, expires in <strong>@(_resolvedExpiryMonths?.ToString() ?? "never") months</strong>.
             </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ConfirmSendContract" Disabled="_submitting">Send Contract</MudButton>
+    </DialogActions>
+</MudDialog>
 
+<MudDialog @bind-Visible="_showUploadContractDialog" Options="_dialogOptions" TitleClass="mud-theme-primary py-2 px-4">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Upload Signed Contract — @_selectedRequest?.BusinessName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Enter the URL/path where the signed contract file is stored. After uploading, the request can be approved or rejected.
+            </MudAlert>
+            <MudTextField @bind-Value="_contractFileUrl" Label="Contract file URL" Variant="Variant.Outlined" Required="true" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ConfirmUploadSignedContract" Disabled="_submitting">Upload</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_showApproveDialog" Options="_dialogOptions" TitleClass="mud-theme-primary py-2 px-4">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Approve Registration — @_selectedRequest?.BusinessName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                The signed contract has been received. Approval will activate the business, grant welcome credits, and send the activation email.
+            </MudAlert>
             <MudTextField @bind-Value="_reviewNotes" Label="Review notes (optional)" Variant="Variant.Outlined" Lines="3" />
         </MudStack>
     </DialogContent>
@@ -124,13 +185,16 @@ else
     private List<WelcomePolicyTemplateItem> _templates = new();
     private bool _loading = true;
     private bool _submitting = false;
-    private string _filter = "pending";
+    private string _filter = "pending-contract";
 
+    private bool _showSendContractDialog = false;
+    private bool _showUploadContractDialog = false;
     private bool _showApproveDialog = false;
     private bool _showRejectDialog = false;
     private RegistrationRequestItem? _selectedRequest;
     private Guid? _selectedTemplateId;
     private string _reviewNotes = "";
+    private string _contractFileUrl = "";
 
     private int _resolvedCredits => _selectedTemplateId.HasValue
         ? (_templates.FirstOrDefault(t => t.Id == _selectedTemplateId.Value)?.WelcomeCredits ?? _defaultTemplate?.WelcomeCredits ?? 0)
@@ -169,10 +233,13 @@ else
         try
         {
             var token = await AuthState.GetTokenAsync();
-            var request = new HttpRequestMessage(HttpMethod.Get,
-                _filter == "pending"
-                    ? "api/v1/admin/registration-requests/pending"
-                    : "api/v1/admin/registration-requests");
+            var endpoint = _filter switch
+            {
+                "pending-contract" => "api/v1/admin/registration-requests/pending-contract",
+                "pending-review" => "api/v1/admin/registration-requests/pending-review",
+                _ => "api/v1/admin/registration-requests"
+            };
+            var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -219,10 +286,24 @@ else
         }
     }
 
+    private void OpenSendContractDialog(RegistrationRequestItem item)
+    {
+        _selectedRequest = item;
+        _selectedTemplateId = _defaultTemplate?.Id;
+        _reviewNotes = "";
+        _showSendContractDialog = true;
+    }
+
+    private void OpenUploadContractDialog(RegistrationRequestItem item)
+    {
+        _selectedRequest = item;
+        _contractFileUrl = item.ContractFileUrl ?? "";
+        _showUploadContractDialog = true;
+    }
+
     private void OpenApproveDialog(RegistrationRequestItem item)
     {
         _selectedRequest = item;
-        _selectedTemplateId = null;
         _reviewNotes = "";
         _showApproveDialog = true;
     }
@@ -236,17 +317,110 @@ else
 
     private void CloseDialog()
     {
+        _showSendContractDialog = false;
+        _showUploadContractDialog = false;
         _showApproveDialog = false;
         _showRejectDialog = false;
         _selectedRequest = null;
         _selectedTemplateId = null;
         _reviewNotes = "";
+        _contractFileUrl = "";
+    }
+
+    private async Task ConfirmSendContract()
+    {
+        if (_selectedRequest == null) return;
+        if (!_selectedTemplateId.HasValue)
+        {
+            Snackbar.Add("Please select a welcome policy template.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        var token = await AuthState.GetTokenAsync();
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post,
+                $"api/v1/admin/registration-requests/{_selectedRequest.RequestId}/send-contract");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            request.Content = JsonContent.Create(new { WelcomePolicyTemplateId = _selectedTemplateId.Value });
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Contract sent successfully.", Severity.Success);
+                CloseDialog();
+                await LoadRequests();
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                Snackbar.Add(error?.error ?? "Failed to send contract.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private async Task ConfirmUploadSignedContract()
+    {
+        if (_selectedRequest == null) return;
+        if (string.IsNullOrWhiteSpace(_contractFileUrl))
+        {
+            Snackbar.Add("Please enter the contract file URL.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        var token = await AuthState.GetTokenAsync();
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post,
+                $"api/v1/admin/registration-requests/{_selectedRequest.RequestId}/upload-signed-contract");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            request.Content = JsonContent.Create(new { ContractFileUrl = _contractFileUrl });
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Signed contract uploaded successfully.", Severity.Success);
+                CloseDialog();
+                await LoadRequests();
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                Snackbar.Add(error?.error ?? "Failed to upload signed contract.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
     }
 
     private async Task ConfirmApprove()
     {
         if (_selectedRequest == null) return;
-        await SubmitReview(_selectedRequest.RequestId, true, _reviewNotes, _selectedTemplateId);
+        await SubmitReview(_selectedRequest.RequestId, true, _reviewNotes);
         CloseDialog();
     }
 
@@ -258,11 +432,11 @@ else
             Snackbar.Add("Please provide a rejection reason.", Severity.Warning);
             return;
         }
-        await SubmitReview(_selectedRequest.RequestId, false, _reviewNotes, null);
+        await SubmitReview(_selectedRequest.RequestId, false, _reviewNotes);
         CloseDialog();
     }
 
-    private async Task SubmitReview(Guid requestId, bool approve, string notes, Guid? templateId)
+    private async Task SubmitReview(Guid requestId, bool approve, string notes)
     {
         _submitting = true;
         var token = await AuthState.GetTokenAsync();
@@ -275,7 +449,7 @@ else
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            request.Content = JsonContent.Create(new { ReviewNotes = notes, WelcomeGrantPolicyTemplateId = templateId });
+            request.Content = JsonContent.Create(new { ReviewNotes = notes });
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
             var response = await Http.SendAsync(request);
@@ -319,6 +493,11 @@ else
         public string RepresentativeName { get; set; } = "";
         public string Username { get; set; } = "";
         public string Status { get; set; } = "";
+        public string ContractStatus { get; set; } = "";
+        public string? ContractSentAt { get; set; }
+        public string? ContractFileUrl { get; set; }
+        public Guid? WelcomePolicyTemplateId { get; set; }
+        public string? WelcomePolicyTemplateName { get; set; }
         public DateTime SubmittedAt { get; set; }
         public DateTime? ReviewedAt { get; set; }
         public string? ReviewNotes { get; set; }

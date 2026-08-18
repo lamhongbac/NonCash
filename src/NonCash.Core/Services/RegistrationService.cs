@@ -8,9 +8,12 @@ public interface IRegistrationService
 {
     Task<RegistrationResult> SubmitAsync(RegistrationRequestDto request, CancellationToken cancellationToken = default);
     Task<RegistrationStatusInfo?> GetStatusAsync(Guid requestId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingRequestsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingReviewRequestsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingContractRequestsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<RegistrationRequestSummary>> GetAllRequestsAsync(CancellationToken cancellationToken = default);
-    Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, Guid? welcomeGrantPolicyTemplateId = null, CancellationToken cancellationToken = default);
+    Task<ReviewResult> SendContractAsync(Guid requestId, Guid welcomePolicyTemplateId, Guid senderUserId, CancellationToken cancellationToken = default);
+    Task<ReviewResult> UploadSignedContractAsync(Guid requestId, string contractFileUrl, Guid adminUserId, CancellationToken cancellationToken = default);
+    Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, CancellationToken cancellationToken = default);
 }
 
 public record RegistrationRequestDto(
@@ -59,6 +62,8 @@ public record RegistrationStatusInfo(
 
 public record RegistrationRequestSummary(
     Guid RequestId,
+    Guid BrandId,
+    Guid SubmittedByUserId,
     string BusinessName,
     string BrandName,
     string TaxCode,
@@ -66,6 +71,11 @@ public record RegistrationRequestSummary(
     string RepresentativeName,
     string Username,
     RegistrationStatus Status,
+    ContractStatus ContractStatus,
+    DateTime? ContractSentAt,
+    string? ContractFileUrl,
+    Guid? WelcomePolicyTemplateId,
+    string? WelcomePolicyTemplateName,
     DateTime SubmittedAt,
     DateTime? ReviewedAt,
     string? ReviewNotes,
@@ -79,22 +89,24 @@ public class RegistrationService : IRegistrationService
     private readonly IBusinessRepository _businessRepository;
     private readonly IBrandRepository _brandRepository;
     private readonly IUserAccountRepository _userAccountRepository;
-    private readonly IBrandRegistrationRequestRepository _requestRepository;
+    private readonly IBusinessRegistrationRequestRepository _requestRepository;
     private readonly IAuthService _authService;
     private readonly INotificationService _notificationService;
     private readonly ICreditService? _creditService;
     private readonly IWelcomePolicyService? _welcomePolicyService;
+    private readonly IContractService? _contractService;
     private readonly CreditConfig _creditConfig;
 
     public RegistrationService(
         IBusinessRepository businessRepository,
         IBrandRepository brandRepository,
         IUserAccountRepository userAccountRepository,
-        IBrandRegistrationRequestRepository requestRepository,
+        IBusinessRegistrationRequestRepository requestRepository,
         IAuthService authService,
         INotificationService notificationService,
         ICreditService? creditService = null,
         IWelcomePolicyService? welcomePolicyService = null,
+        IContractService? contractService = null,
         CreditConfig? creditConfig = null)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
@@ -105,6 +117,7 @@ public class RegistrationService : IRegistrationService
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _creditService = creditService;
         _welcomePolicyService = welcomePolicyService;
+        _contractService = contractService;
         _creditConfig = creditConfig ?? new CreditConfig();
     }
 
@@ -173,12 +186,13 @@ public class RegistrationService : IRegistrationService
         await _userAccountRepository.SaveChangesAsync(cancellationToken);
 
         // Create registration request
-        var registrationRequest = new BrandRegistrationRequest
+        var registrationRequest = new BusinessRegistrationRequest
         {
             BrandId = brand.Id,
             SubmittedByUserId = user.Id,
             SubmittedAt = DateTime.UtcNow,
-            Status = RegistrationStatus.Submitted
+            Status = RegistrationStatus.Submitted,
+            ContractStatus = ContractStatus.None
         };
         await _requestRepository.AddAsync(registrationRequest, cancellationToken);
         await _requestRepository.SaveChangesAsync(cancellationToken);
@@ -210,9 +224,19 @@ public class RegistrationService : IRegistrationService
         );
     }
 
-    public async Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingRequestsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingReviewRequestsAsync(CancellationToken cancellationToken = default)
     {
-        var requests = await _requestRepository.FindAsync(r => r.Status == RegistrationStatus.Submitted, cancellationToken);
+        var requests = await _requestRepository.FindAsync(
+            r => r.Status == RegistrationStatus.Submitted && r.ContractStatus == ContractStatus.Signed,
+            cancellationToken);
+        return await BuildSummariesAsync(requests, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingContractRequestsAsync(CancellationToken cancellationToken = default)
+    {
+        var requests = await _requestRepository.FindAsync(
+            r => r.Status == RegistrationStatus.Submitted && r.ContractStatus != ContractStatus.Signed,
+            cancellationToken);
         return await BuildSummariesAsync(requests, cancellationToken);
     }
 
@@ -222,7 +246,11 @@ public class RegistrationService : IRegistrationService
         return await BuildSummariesAsync(requests, cancellationToken);
     }
 
-    public async Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, Guid? welcomeGrantPolicyTemplateId = null, CancellationToken cancellationToken = default)
+    public async Task<ReviewResult> SendContractAsync(
+        Guid requestId,
+        Guid welcomePolicyTemplateId,
+        Guid senderUserId,
+        CancellationToken cancellationToken = default)
     {
         var request = await _requestRepository.GetByIdAsync(requestId, cancellationToken);
         if (request == null)
@@ -230,6 +258,100 @@ public class RegistrationService : IRegistrationService
 
         if (request.Status != RegistrationStatus.Submitted)
             return new ReviewResult(false, "This request has already been reviewed.");
+
+        if (_welcomePolicyService == null)
+            return new ReviewResult(false, "Welcome policy service is not available.");
+
+        if (_contractService == null)
+            return new ReviewResult(false, "Contract service is not available.");
+
+        var template = await _welcomePolicyService.GetTemplateAsync(welcomePolicyTemplateId, cancellationToken);
+        if (template == null || !template.IsActive)
+            return new ReviewResult(false, "Welcome policy template not found or inactive.");
+
+        request.WelcomePolicyTemplateId = welcomePolicyTemplateId;
+        request.ContractStatus = ContractStatus.Sent;
+        request.ContractSentAt = DateTime.UtcNow;
+        request.UpdatedAt = DateTime.UtcNow;
+        _requestRepository.Update(request);
+        await _requestRepository.SaveChangesAsync(cancellationToken);
+
+        var brand = await _brandRepository.GetByIdAsync(request.BrandId, cancellationToken);
+        var business = brand != null
+            ? await _businessRepository.GetByIdAsync(brand.BusinessId, cancellationToken)
+            : null;
+
+        var representative = await _userAccountRepository.GetByIdAsync(request.SubmittedByUserId, cancellationToken);
+
+        var contractHtml = await _contractService.GenerateContractHtmlAsync(
+            business?.BusinessName ?? brand?.Name ?? "",
+            brand?.Name ?? "",
+            business?.TaxCode ?? brand?.TaxCode ?? "",
+            representative?.FullName,
+            template.Name,
+            template.WelcomeCredits,
+            template.WelcomeCreditExpiryMonths,
+            cancellationToken);
+
+        // Notify applicant that contract has been sent.
+        await _notificationService.NotifyContractSentAsync(
+            new ContractSentNotification(
+                business?.ContactEmail ?? brand?.ContactEmail,
+                business?.BusinessName ?? brand?.Name ?? "",
+                brand?.Name ?? "",
+                template.Name,
+                template.WelcomeCredits,
+                template.WelcomeCreditExpiryMonths,
+                contractHtml),
+            cancellationToken);
+
+        return new ReviewResult(true);
+    }
+
+    public async Task<ReviewResult> UploadSignedContractAsync(
+        Guid requestId,
+        string contractFileUrl,
+        Guid adminUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(contractFileUrl))
+            return new ReviewResult(false, "Contract file URL is required.");
+
+        var request = await _requestRepository.GetByIdAsync(requestId, cancellationToken);
+        if (request == null)
+            return new ReviewResult(false, "Registration request not found.");
+
+        if (request.Status != RegistrationStatus.Submitted)
+            return new ReviewResult(false, "This request has already been reviewed.");
+
+        if (request.ContractStatus != ContractStatus.Sent)
+            return new ReviewResult(false, "Contract must be sent before uploading the signed copy.");
+
+        request.ContractFileUrl = contractFileUrl;
+        request.ContractStatus = ContractStatus.Signed;
+        request.UpdatedAt = DateTime.UtcNow;
+        _requestRepository.Update(request);
+        await _requestRepository.SaveChangesAsync(cancellationToken);
+
+        return new ReviewResult(true);
+    }
+
+    public async Task<ReviewResult> ReviewAsync(
+        Guid requestId,
+        Guid reviewerUserId,
+        bool approve,
+        string? reviewNotes,
+        CancellationToken cancellationToken = default)
+    {
+        var request = await _requestRepository.GetByIdAsync(requestId, cancellationToken);
+        if (request == null)
+            return new ReviewResult(false, "Registration request not found.");
+
+        if (request.Status != RegistrationStatus.Submitted)
+            return new ReviewResult(false, "This request has already been reviewed.");
+
+        if (approve && request.ContractStatus != ContractStatus.Signed)
+            return new ReviewResult(false, "Signed contract must be uploaded before approval.");
 
         // Update the registration request
         request.Status = approve ? RegistrationStatus.Approved : RegistrationStatus.Rejected;
@@ -269,7 +391,7 @@ public class RegistrationService : IRegistrationService
             if (approve && _welcomePolicyService != null)
             {
                 await _welcomePolicyService.AssignTemplateToBusinessAsync(
-                    business.Id, welcomeGrantPolicyTemplateId, reviewerUserId, cancellationToken);
+                    business.Id, request.WelcomePolicyTemplateId, reviewerUserId, cancellationToken);
             }
         }
 
@@ -306,7 +428,7 @@ public class RegistrationService : IRegistrationService
     }
 
     private async Task<IReadOnlyList<RegistrationRequestSummary>> BuildSummariesAsync(
-        IEnumerable<BrandRegistrationRequest> requests, CancellationToken cancellationToken)
+        IEnumerable<BusinessRegistrationRequest> requests, CancellationToken cancellationToken)
     {
         var summaries = new List<RegistrationRequestSummary>();
         foreach (var r in requests)
@@ -323,6 +445,8 @@ public class RegistrationService : IRegistrationService
 
             summaries.Add(new RegistrationRequestSummary(
                 r.Id,
+                r.BrandId,
+                r.SubmittedByUserId,
                 business?.BusinessName ?? "",
                 brand?.Name ?? "",
                 business?.TaxCode ?? brand?.TaxCode ?? "",
@@ -330,6 +454,11 @@ public class RegistrationService : IRegistrationService
                 user?.FullName ?? "",
                 user?.Username ?? "",
                 r.Status,
+                r.ContractStatus,
+                r.ContractSentAt,
+                r.ContractFileUrl,
+                r.WelcomePolicyTemplateId,
+                r.WelcomePolicyTemplate?.Name,
                 r.SubmittedAt,
                 r.ReviewedAt,
                 r.ReviewNotes,
