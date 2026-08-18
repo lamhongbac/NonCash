@@ -58,10 +58,16 @@ jobs:
         run: |
           Import-Module WebAdministration
           foreach ($s in @('NonCash.API','NonCash.Web')) {
-            if (Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue) { Stop-Website -Name $s }
+            $site = Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue
+            if ($site -and (Get-WebsiteState -Name $s).Value -ne 'Stopped') {
+              Stop-Website -Name $s
+            }
           }
           foreach ($p in @('NonCashAPI','NonCashWeb')) {
-            if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Stop-WebAppPool $p }
+            $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
+            if ($pool -and (Get-WebAppPoolState -Name $p).Value -ne 'Stopped') {
+              Stop-WebAppPool $p
+            }
           }
           Start-Sleep -Seconds 5
 
@@ -143,10 +149,16 @@ jobs:
         run: |
           Import-Module WebAdministration
           foreach ($p in @('NonCashAPI','NonCashWeb')) {
-            if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Start-WebAppPool $p }
+            $pool = Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue
+            if ($pool -and (Get-WebAppPoolState -Name $p).Value -ne 'Started') {
+              Start-WebAppPool $p
+            }
           }
           foreach ($s in @('NonCash.API','NonCash.Web')) {
-            if (Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue) { Start-Website -Name $s }
+            $site = Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue
+            if ($site -and (Get-WebsiteState -Name $s).Value -ne 'Started') {
+              Start-Website -Name $s
+            }
           }
 
       - name: Smoke test API health
