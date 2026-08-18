@@ -92,33 +92,34 @@ jobs:
           $apiTarget = $env:API_TARGET
           $webTarget = $env:WEB_TARGET
 
-          function Swap-WithRetry($target, $prev) {
-            $attempt = 0
-            while ($attempt -lt 3) {
-              try {
-                if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
-                Rename-Item $target $prev -ErrorAction Stop
-                return
-              } catch {
-                $attempt++
-                Write-Warning "Rename failed (attempt $attempt): $_"
-                Start-Sleep -Seconds 5
-              }
+          # Use robocopy with retries so locked files don't break the deploy.
+          # /MIR = mirror (makes target identical to source)
+          # /R:10 /W:5 = retry 10 times, wait 5 seconds between retries
+          function Robocopy-Mirror($source, $destination) {
+            if (-not (Test-Path $destination)) {
+              New-Item -ItemType Directory -Path $destination -Force | Out-Null
             }
-            throw "Could not rename $target after 3 attempts. File is locked by another process."
+            $robocopy = Start-Process -FilePath robocopy -ArgumentList "`"$source`" `"$destination`" /MIR /R:10 /W:5 /NP /NFL /NDL" -Wait -PassThru -NoNewWindow
+            if ($robocopy.ExitCode -ge 8) {
+              throw "robocopy failed with exit code $($robocopy.ExitCode)"
+            }
           }
 
           # API
-          $prev = "$apiTarget`_prev"
-          if (Test-Path $apiTarget) { Swap-WithRetry $apiTarget $prev }
-          New-Item -ItemType Directory -Path $apiTarget -Force | Out-Null
-          Copy-Item $stageApi $apiTarget -Recurse -Force
+          $apiPrev = "$apiTarget`_prev"
+          if (Test-Path $apiPrev) { Remove-Item $apiPrev -Recurse -Force -ErrorAction SilentlyContinue }
+          if (Test-Path $apiTarget) {
+            Robocopy-Mirror $apiTarget $apiPrev
+          }
+          Robocopy-Mirror $stageApi $apiTarget
 
           # Web
-          $prev = "$webTarget`_prev"
-          if (Test-Path $webTarget) { Swap-WithRetry $webTarget $prev }
-          New-Item -ItemType Directory -Path $webTarget -Force | Out-Null
-          Copy-Item $stageWeb $webTarget -Recurse -Force
+          $webPrev = "$webTarget`_prev"
+          if (Test-Path $webPrev) { Remove-Item $webPrev -Recurse -Force -ErrorAction SilentlyContinue }
+          if (Test-Path $webTarget) {
+            Robocopy-Mirror $webTarget $webPrev
+          }
+          Robocopy-Mirror $stageWeb $webTarget
 
           Remove-Item $env:STAGE_ROOT -Recurse -Force -ErrorAction SilentlyContinue
 
