@@ -134,6 +134,8 @@ jobs:
         shell: powershell
         run: |
           dotnet tool install --global dotnet-ef 2>$null
+          # Refresh PATH so the newly installed dotnet-ef global tool is found.
+          $env:PATH = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
           dotnet ef database update `
             --project src\NonCash.Infrastructure `
             --startup-project src\NonCash.API `
