@@ -35,10 +35,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 9.0.x
+      # .NET 9 SDK is pre-installed on the server; skip setup-dotnet to avoid
+      # permission errors writing to C:\Program Files\dotnet under the runner service account.
 
       - name: Restore
         run: dotnet restore NonCash.sln
