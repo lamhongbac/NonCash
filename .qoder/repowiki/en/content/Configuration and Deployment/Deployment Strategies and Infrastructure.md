@@ -27,6 +27,7 @@
 - Better directory structure organization for deployment artifacts
 - Updated GitHub Actions workflow with enhanced operational procedures
 - Added comprehensive production deployment guide with security hardening measures
+- **Updated**: Enhanced IIS deployment workflow with improved state management, retry logic for file operations, simplified .NET setup, and better error handling
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -87,7 +88,7 @@ F --> F2["setup-iis.ps1"]
 - [_bmad/bmm/config.yaml:1-17](file://_bmad/bmm/config.yaml#L1-L17)
 - [_bmad/core/config.yaml:1-10](file://_bmad/core/config.yaml#L1-L10)
 - [_bmad-output/implementation-artifacts/sprint-status.yaml:1-81](file://_bmad-output/implementation-artifacts/sprint-status.yaml#L1-L81)
-- [.github/workflows/deploy-iis.yml:1-144](file://.github/workflows/deploy-iis.yml#L1-L144)
+- [.github/workflows/deploy-iis.yml:1-175](file://.github/workflows/deploy-iis.yml#L1-L175)
 - [tools/deploy/publish.ps1:1-56](file://tools/deploy/publish.ps1#L1-L56)
 - [tools/deploy/setup-iis.ps1:1-68](file://tools/deploy/setup-iis.ps1#L1-L68)
 
@@ -235,10 +236,12 @@ The `.github/workflows/deploy-iis.yml` workflow implements a complete deployment
 - **Previous version preservation**: Automatically creates `_prev` folders for rollback capability
 - **App pool management**: Gracefully stops and restarts IIS application pools during deployment
 
-#### Health Checks and Validation
-- **API health endpoint**: Performs smoke tests against `/health` endpoint post-deployment
-- **Graceful error handling**: Continues deployment even if health checks fail (with warnings)
-- **Comprehensive logging**: Provides detailed output for troubleshooting deployment issues
+#### Enhanced State Management and Error Handling
+- **Improved state tracking**: Better monitoring of IIS site and app pool states before operations
+- **Retry logic for file operations**: Robust retry mechanism with 3 attempts for critical file operations
+- **Simplified .NET setup**: Skips dotnet SDK installation to avoid permission errors on server
+- **Comprehensive error handling**: Detailed exception handling with informative error messages
+- **Graceful degradation**: Continues deployment even if health checks fail (with warnings)
 
 #### Environment Configuration
 - **Self-hosted runner**: Runs directly on target Windows Server for direct IIS access
@@ -256,22 +259,22 @@ Dev->>GH : Push to main/deploy/*
 GH->>Runner : Trigger workflow
 Runner->>Runner : dotnet restore/build/test
 Runner->>Runner : Publish API & Web apps
-Runner->>IIS : Stop app pools
+Runner->>IIS : Stop app pools with state validation
 Runner->>IIS : Backup appsettings.json
-Runner->>IIS : Swap deployment folders
+Runner->>IIS : Swap deployment folders with retry logic
 Runner->>IIS : Restore appsettings.json
 Runner->>DB : Apply EF migrations
-Runner->>IIS : Start app pools
+Runner->>IIS : Start app pools with state validation
 Runner->>IIS : Health check /health
 IIS-->>Runner : Health status
 Runner-->>Dev : Deployment result
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-144](file://.github/workflows/deploy-iis.yml#L31-L144)
+- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:1-144](file://.github/workflows/deploy-iis.yml#L1-L144)
+- [.github/workflows/deploy-iis.yml:1-175](file://.github/workflows/deploy-iis.yml#L1-L175)
 
 ## Production Deployment Procedures
 
@@ -386,7 +389,7 @@ pg_dump -U postgres -a noncash > data_backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:64-116](file://.github/workflows/deploy-iis.yml#L64-L116)
+- [.github/workflows/deploy-iis.yml:74-136](file://.github/workflows/deploy-iis.yml#L74-L136)
 - [docs/deployment-guide.md:108-148](file://docs/deployment-guide.md#L108-L148)
 
 ## Rollback Capabilities
@@ -469,7 +472,7 @@ end
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:13-43](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L13-L43)
 
 **Section sources**
-- [.github/workflows/deploy-iis.yml:77-103](file://.github/workflows/deploy-iis.yml#L77-L103)
+- [.github/workflows/deploy-iis.yml:87-123](file://.github/workflows/deploy-iis.yml#L87-L123)
 - [_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md:1-112](file://_bmad-output/implementation-artifacts/4-4-rollback-mechanism.md#L1-L112)
 - [docs/deployment-guide.md:199-203](file://docs/deployment-guide.md#L199-L203)
 
@@ -519,7 +522,7 @@ CI --> I
 **Diagram sources**
 - [docs/architecture.md:9-26](file://docs/architecture.md#L9-L26)
 - [BMAD_STRUCTURE.md:39-56](file://BMAD_STRUCTURE.md#L39-L56)
-- [.github/workflows/deploy-iis.yml:31-144](file://.github/workflows/deploy-iis.yml#L31-L144)
+- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
 
 **Section sources**
 - [docs/architecture.md:1-26](file://docs/architecture.md#L1-L26)
@@ -548,6 +551,8 @@ Common operational issues and resolutions:
   - Verify IIS app pool status and application event logs
   - Validate database connectivity and migration status
   - Review backup/restore operations for configuration issues
+  - **New**: File operation failures - Check for file locks and retry logic effectiveness
+  - **New**: Permission errors - Verify runner service account has proper IIS and file system permissions
 
 **Section sources**
 - [_bmad-output/implementation-artifacts/4-3-commit-and-log.md:62-99](file://_bmad-output/implementation-artifacts/4-3-commit-and-log.md#L62-L99)
@@ -607,12 +612,12 @@ flowchart TD
 A[Code Push] --> B[GitHub Actions Trigger]
 B --> C[Build & Test]
 C --> D[Publish Applications]
-D --> E[Stop IIS App Pools]
+D --> E[Stop IIS App Pools with State Validation]
 E --> F[Backup Config Files]
-F --> G[Swap Deployment Folders]
+F --> G[Swap Deployment Folders with Retry Logic]
 G --> H[Restore Config Files]
 H --> I[Apply Database Migrations]
-I --> J[Start IIS App Pools]
+I --> J[Start IIS App Pools with State Validation]
 J --> K[Health Check]
 K --> L{Health OK?}
 L --> |Yes| M[Deployment Complete]
@@ -622,4 +627,4 @@ O --> P[Investigate Issues]
 ```
 
 **Diagram sources**
-- [.github/workflows/deploy-iis.yml:31-144](file://.github/workflows/deploy-iis.yml#L31-L144)
+- [.github/workflows/deploy-iis.yml:31-175](file://.github/workflows/deploy-iis.yml#L31-L175)
