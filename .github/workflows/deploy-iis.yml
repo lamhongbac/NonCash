@@ -53,13 +53,17 @@ jobs:
       - name: Publish Web
         run: dotnet publish src\NonCash.Web\NonCash.Web.csproj -c Release -o "$env:STAGE_ROOT\web" --no-build
 
-      - name: Stop app pools
+      - name: Stop IIS sites and app pools
         shell: powershell
         run: |
           Import-Module WebAdministration
+          foreach ($s in @('NonCash.API','NonCash.Web')) {
+            if (Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue) { Stop-Website -Name $s }
+          }
           foreach ($p in @('NonCashAPI','NonCashWeb')) {
             if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Stop-WebAppPool $p }
           }
+          Start-Sleep -Seconds 5
 
       - name: Backup production appsettings.json files
         shell: powershell
@@ -82,21 +86,31 @@ jobs:
           $apiTarget = $env:API_TARGET
           $webTarget = $env:WEB_TARGET
 
+          function Swap-WithRetry($target, $prev) {
+            $attempt = 0
+            while ($attempt -lt 3) {
+              try {
+                if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
+                Rename-Item $target $prev -ErrorAction Stop
+                return
+              } catch {
+                $attempt++
+                Write-Warning "Rename failed (attempt $attempt): $_"
+                Start-Sleep -Seconds 5
+              }
+            }
+            throw "Could not rename $target after 3 attempts. File is locked by another process."
+          }
+
           # API
           $prev = "$apiTarget`_prev"
-          if (Test-Path $apiTarget) {
-            if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
-            Rename-Item $apiTarget $prev
-          }
+          if (Test-Path $apiTarget) { Swap-WithRetry $apiTarget $prev }
           New-Item -ItemType Directory -Path $apiTarget -Force | Out-Null
           Copy-Item $stageApi $apiTarget -Recurse -Force
 
           # Web
           $prev = "$webTarget`_prev"
-          if (Test-Path $webTarget) {
-            if (Test-Path $prev) { Remove-Item $prev -Recurse -Force }
-            Rename-Item $webTarget $prev
-          }
+          if (Test-Path $webTarget) { Swap-WithRetry $webTarget $prev }
           New-Item -ItemType Directory -Path $webTarget -Force | Out-Null
           Copy-Item $stageWeb $webTarget -Recurse -Force
 
@@ -124,11 +138,16 @@ jobs:
             --startup-project src\NonCash.API `
             --connection "${{ secrets.NONCASH_DB_CONNECTION }}"
 
-      - name: Start app pools
+      - name: Start IIS app pools and sites
         shell: powershell
         run: |
           Import-Module WebAdministration
-          foreach ($p in @('NonCashAPI','NonCashWeb')) { Start-WebAppPool $p }
+          foreach ($p in @('NonCashAPI','NonCashWeb')) {
+            if (Get-Item "IIS:\AppPools\$p" -ErrorAction SilentlyContinue) { Start-WebAppPool $p }
+          }
+          foreach ($s in @('NonCash.API','NonCash.Web')) {
+            if (Get-Item "IIS:\Sites\$s" -ErrorAction SilentlyContinue) { Start-Website -Name $s }
+          }
 
       - name: Smoke test API health
         shell: powershell
