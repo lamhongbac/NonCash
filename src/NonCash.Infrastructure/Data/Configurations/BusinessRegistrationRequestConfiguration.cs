@@ -10,7 +10,48 @@ public class BusinessRegistrationRequestConfiguration : IEntityTypeConfiguration
     {
         builder.HasKey(r => r.Id);
 
-        builder.Property(r => r.BrandId).IsRequired();
+        // Business information captured at submission time.
+        builder.Property(r => r.BusinessName)
+            .IsRequired()
+            .HasMaxLength(200);
+
+        builder.Property(r => r.TaxCode)
+            .IsRequired()
+            .HasMaxLength(50);
+
+        builder.Property(r => r.ContactEmail)
+            .HasMaxLength(255);
+
+        builder.Property(r => r.PhoneNumber)
+            .HasMaxLength(50);
+
+        builder.Property(r => r.Address)
+            .HasMaxLength(500);
+
+        builder.Property(r => r.RepresentativeName)
+            .IsRequired()
+            .HasMaxLength(200);
+
+        // Optional first-brand declaration.
+        builder.Property(r => r.FirstBrandName)
+            .HasMaxLength(200);
+
+        builder.Property(r => r.ManagerUsername)
+            .HasMaxLength(100);
+
+        builder.Property(r => r.ManagerPasswordHash)
+            .HasMaxLength(500);
+
+        // Real entities are created only on approval; references are optional until then.
+        builder.Property(r => r.BusinessId);
+        builder.HasOne(r => r.Business)
+            .WithMany()
+            .HasForeignKey(r => r.BusinessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(r => r.BusinessId);
+
+        builder.Property(r => r.BrandId);
         builder.HasOne(r => r.Brand)
             .WithMany()
             .HasForeignKey(r => r.BrandId)
@@ -18,7 +59,7 @@ public class BusinessRegistrationRequestConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(r => r.BrandId);
 
-        builder.Property(r => r.SubmittedByUserId).IsRequired();
+        builder.Property(r => r.SubmittedByUserId);
         builder.HasOne(r => r.SubmittedBy)
             .WithMany()
             .HasForeignKey(r => r.SubmittedByUserId)

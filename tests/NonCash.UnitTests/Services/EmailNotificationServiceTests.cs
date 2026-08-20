@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NonCash.Core.Entities;
@@ -13,6 +14,7 @@ public class EmailNotificationServiceTests
     private readonly IUserAccountRepository _userAccountRepository;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IRepository<EmailLog> _emailLogRepository;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<EmailNotificationService> _logger;
     private readonly SmtpOptions _smtpOptions;
     private readonly EmailNotificationService _sut;
@@ -23,6 +25,7 @@ public class EmailNotificationServiceTests
         _templateRenderer = Substitute.For<IEmailTemplateRenderer>();
         _emailLogRepository = Substitute.For<IRepository<EmailLog>>();
         _logger = Substitute.For<ILogger<EmailNotificationService>>();
+        _configuration = new ConfigurationBuilder().Build();
         _smtpOptions = new SmtpOptions
         {
             Host = "", // Empty host → SendAsync will skip (no real SMTP in unit tests)
@@ -39,6 +42,7 @@ public class EmailNotificationServiceTests
             _userAccountRepository,
             _templateRenderer,
             _emailLogRepository,
+            _configuration,
             _logger);
     }
 

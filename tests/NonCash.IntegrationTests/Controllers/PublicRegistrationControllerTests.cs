@@ -31,7 +31,7 @@ public class PublicRegistrationControllerTests
     }
 
     [Fact]
-    public async Task SubmitAsync_WithValidData_CreatesBrandAndUser()
+    public async Task SubmitAsync_WithFirstBrandDeclaration_CreatesRequestOnly()
     {
         // Arrange
         var request = new RegistrationRequestDto(
@@ -41,6 +41,7 @@ public class PublicRegistrationControllerTests
             "0909000001",
             "123 Main St",
             "John Doe",
+            "Galaxy Brand",
             "galaxymanager",
             "Password123!");
 
@@ -49,9 +50,31 @@ public class PublicRegistrationControllerTests
 
         // Assert
         result.Success.Should().BeTrue();
-        result.BusinessId.Should().NotBeNull();
-        result.BrandId.Should().NotBeNull();
         result.RequestId.Should().NotBeNull();
+        result.BusinessId.Should().BeNull();
+        result.BrandId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SubmitAsync_WithoutFirstBrandDeclaration_CreatesRequestOnly()
+    {
+        // Arrange
+        var request = new RegistrationRequestDto(
+            "Nebula Restaurant",
+            "TXNEB001",
+            "nebula@example.com",
+            "0909000002",
+            "456 Main St",
+            "Jane Doe");
+
+        // Act
+        var result = await _registrationService.SubmitAsync(request);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.RequestId.Should().NotBeNull();
+        result.BusinessId.Should().BeNull();
+        result.BrandId.Should().BeNull();
     }
 
     [Fact]
@@ -65,6 +88,7 @@ public class PublicRegistrationControllerTests
             "0909000001",
             "123 Main St",
             "John Doe",
+            "Galaxy Brand",
             "galaxymanager1",
             "Password123!");
 
@@ -75,6 +99,7 @@ public class PublicRegistrationControllerTests
             "0909000002",
             "456 Main St",
             "Jane Doe",
+            "Galaxy Duplicate Brand",
             "galaxymanager2",
             "Password123!");
 
@@ -89,7 +114,7 @@ public class PublicRegistrationControllerTests
     }
 
     [Fact]
-    public async Task ReviewAsync_Approve_ActivatesBrandAndUser()
+    public async Task ReviewAsync_Approve_WithFirstBrandDeclaration_CreatesBusinessBrandAndUser()
     {
         // Arrange
         var request = new RegistrationRequestDto(
@@ -99,6 +124,7 @@ public class PublicRegistrationControllerTests
             "0909000001",
             "123 Main St",
             "John Doe",
+            "Galaxy Brand",
             "galaxymanager3",
             "Password123!");
 
@@ -118,6 +144,42 @@ public class PublicRegistrationControllerTests
 
         var status = await _registrationService.GetStatusAsync(submitResult.RequestId.Value);
         status!.Status.Should().Be(RegistrationStatus.Approved);
+
+        storedRequest = await _requestRepository.GetByIdAsync(submitResult.RequestId.Value);
+        storedRequest!.BusinessId.Should().NotBeNull();
+        storedRequest.BrandId.Should().NotBeNull();
+        storedRequest.SubmittedByUserId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ReviewAsync_Approve_WithoutFirstBrandDeclaration_CreatesBusinessOnly()
+    {
+        // Arrange
+        var request = new RegistrationRequestDto(
+            "Nebula Restaurant",
+            "TXNEB002",
+            "nebula@example.com",
+            "0909000002",
+            "456 Main St",
+            "Jane Doe");
+
+        var submitResult = await _registrationService.SubmitAsync(request);
+        var reviewerId = Guid.NewGuid();
+
+        var storedRequest = await _requestRepository.GetByIdAsync(submitResult.RequestId!.Value);
+        storedRequest!.ContractStatus = ContractStatus.Signed;
+        storedRequest.WelcomePolicyTemplateId = Guid.NewGuid();
+
+        // Act
+        var reviewResult = await _registrationService.ReviewAsync(submitResult.RequestId!.Value, reviewerId, true, null);
+
+        // Assert
+        reviewResult.Success.Should().BeTrue();
+
+        storedRequest = await _requestRepository.GetByIdAsync(submitResult.RequestId.Value);
+        storedRequest!.BusinessId.Should().NotBeNull();
+        storedRequest.BrandId.Should().BeNull();
+        storedRequest.SubmittedByUserId.Should().BeNull();
     }
 
     private class FakeBusinessRepository : IBusinessRepository

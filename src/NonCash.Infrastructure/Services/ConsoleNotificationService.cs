@@ -10,9 +10,9 @@ public class ConsoleNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
-    public Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default)
+    public Task NotifyRegistrationRejectedAsync(string email, string businessName, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
-        Console.WriteLine($"[NOTIFICATION] Registration for '{brandName}' has been REJECTED. User #{userId} notified. Reason: {reviewNotes ?? "n/a"}");
+        Console.WriteLine($"[NOTIFICATION] Registration for '{businessName}' has been REJECTED. Email '{email}' notified. Reason: {reviewNotes ?? "n/a"}");
         return Task.CompletedTask;
     }
 

@@ -470,7 +470,7 @@ public class CreditServiceTests
     private sealed class StubNotificationService : INotificationService
     {
         public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyRegistrationRejectedAsync(string email, string businessName, string? reviewNotes = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyAdjustmentPendingAsync(AdjustmentPendingNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;

@@ -5,7 +5,7 @@ Status: done
 ## Story
 
 As a Platform Admin/Manager,
-I want to review and approve or reject business registration requests,
+I want to review business registration requests, send a contract, collect the signed hardcopy, and approve or reject the business,
 So that only legitimate and verified businesses gain access to the NonCash platform.
 
 ## Acceptance Criteria
@@ -13,123 +13,167 @@ So that only legitimate and verified businesses gain access to the NonCash platf
 **AC1: Pending Registration List**
 Given a Platform Admin is on the Registration Management screen
 When they view the list
-Then they see all `BrandRegistrationRequest` records with `Status = Submitted`
-Ordered by `SubmittedAt` (oldest first)
-And each row shows: Company Name, Tax Code, Contact Email, Submitted Date
+Then they see `BusinessRegistrationRequest` records with `Status = Submitted`
+Split into two tabs:
+- Pending Contract: `Status = Submitted` and `ContractStatus != Signed`
+- Pending Review: `Status = Submitted` and `ContractStatus = Signed`
+And each card shows: Business Name, Tax Code, Contact Email, Phone, Address, Representative, First Brand info (if declared), Submitted Date
 
-**AC2: Registration Detail View**
-Given the Admin clicks a pending request
-When the detail opens
-Then they see all submitted information plus any auto-verification flags (e.g., Tax Code format valid, domain check placeholder)
+**AC2: Contract Workflow**
+Given a request is in Pending Contract
+When the Admin selects a Welcome Policy Template and clicks Send Contract
+Then the system:
+- Stores `WelcomePolicyTemplateId`, sets `ContractStatus = Sent`, and records `ContractSentAt`
+- Generates contract HTML including business info, welcome policy terms, and pricing appendix
+- Emails the contract to the applicant via `NotifyContractSentAsync`
 
-**AC3: Approve Registration**
-Given a request is under review
+**AC3: Signed Contract Upload**
+Given a contract has been sent
+When the Admin enters the signed contract file URL and clicks Upload Signed
+Then the system sets `ContractStatus = Signed` and stores `ContractFileUrl`
+And the request moves to Pending Review
+
+**AC4: Print Contract**
+Given a contract has been sent
+When the Admin clicks Print
+Then the system fetches the contract HTML with authentication and opens it in a new browser tab
+
+**AC5: Approve Registration**
+Given a request is in Pending Review (contract signed)
 When the Admin clicks Approve
 Then the system:
-- Updates `BrandRegistrationRequest.Status` to `Approved`
-- Updates `Brand.Status` to `Active`
-- Updates the linked `UserAccount.Status` to `Active`
+- Creates the `Business` record
+- If first brand was declared, creates the `Brand` and `UserAccount` (BrandManager, Active)
+- If no first brand was declared, creates only the Business
+- Assigns the selected Welcome Policy Template to the Business as its active `WelcomeGrantPolicy`
+- Grants welcome credits to the newly created brand (if any)
+- Updates `BusinessRegistrationRequest.Status` to `Approved`
 - Records `ReviewedAt`, `ReviewedByUserId`, and `ReviewNotes`
-- Triggers a notification to the business representative with login instructions
+- Triggers a welcome notification to the business contact
 
-**AC4: Reject Registration**
+**AC6: Reject Registration**
 Given a request is under review
 When the Admin clicks Reject
 Then the system:
-- Updates `BrandRegistrationRequest.Status` to `Rejected`
-- Updates `Brand.Status` to `Rejected`
-- Updates the linked `UserAccount.Status` to `Rejected` or deletes it (prefer status update for audit)
-- Requires the Admin to provide `ReviewNotes` (minimum 10 characters)
-- Records `ReviewedAt` and `ReviewedByUserId`
-- Triggers a rejection notification to the business representative with the reason
+- Updates `BusinessRegistrationRequest.Status` to `Rejected`
+- Records `ReviewedAt`, `ReviewedByUserId`, and `ReviewNotes`
+- Requires the Admin to provide `ReviewNotes`
+- Triggers a rejection notification to the business contact with the reason
+- Does not create any Business, Brand, or UserAccount records
 
-**AC5: Approval Permission Enforcement**
-Given a user with Role = BrandManager or Planner
-When they attempt to access the registration approval endpoints
+**AC7: Approval Guard**
+Given a request with `ContractStatus != Signed`
+When the Admin attempts to approve
+Then the system returns 400 with message "Signed contract must be uploaded before approval."
+
+**AC8: Approval Permission Enforcement**
+Given a user with Role != Admin
+When they attempt to access the registration review endpoints
 Then the system returns 403 Forbidden
 
-**AC6: Audit Trail**
+**AC9: Audit Trail**
 Given any approval or rejection action
 When completed
-Then the `BrandRegistrationRequest` record becomes immutable for status and review fields
+Then the `BusinessRegistrationRequest` record becomes immutable for status and review fields
 And a history of decisions is queryable by super-admins
 
 ## Tasks / Subtasks
 
-- [x] Task 1: Implement registration review service (AC1, AC3, AC4, AC6)
-  - [x] Subtask 1.1: `IRegistrationReviewService` with `GetPendingListAsync`, `ApproveAsync(Guid requestId, string? notes)`, `RejectAsync(Guid requestId, string notes)`
-  - [x] Subtask 1.2: Transaction: update request + brand + user account atomically
-  - [x] Subtask 1.3: Guard: only Admin role can execute; request must be in `Submitted` status
-  - [x] Subtask 1.4: Reject requires non-empty `ReviewNotes`
-- [x] Task 2: API endpoints (AC1, AC2, AC3, AC4, AC5)
-  - [x] Subtask 2.1: `GET /api/v1/admin/registrations?status=Submitted` — list pending
-  - [x] Subtask 2.2: `GET /api/v1/admin/registrations/{requestId}` — detail view
-  - [x] Subtask 2.3: `POST /api/v1/admin/registrations/{requestId}/approve` — approve
-  - [x] Subtask 2.4: `POST /api/v1/admin/registrations/{requestId}/reject` — reject
-  - [x] Subtask 2.5: DTOs: `RegistrationReviewRequest`, `RegistrationListResponse`, `RegistrationDetailResponse`
-- [x] Task 3: Blazor Admin UI (AC1, AC2, AC3, AC4)
-  - [x] Subtask 3.1: `RegistrationReview.razor` page under `NonCash.Web/Pages/Admin/`
-  - [x] Subtask 3.2: Data grid of pending registrations with sort/filter
-  - [x] Subtask 3.3: Detail drawer/modal with Approve/Reject actions
-  - [x] Subtask 3.4: Confirmation modal for Reject requiring notes input
-- [x] Task 4: Notification integration (AC3, AC4)
-  - [x] Subtask 4.1: Call `INotificationService` on approval/reject
-  - [x] Subtask 4.2: Full email delivery via `EmailNotificationService` with HTML templates (RegistrationApproved / RegistrationRejected)
-- [x] Task 5: Database migration
-  - [x] Subtask 5.1: Ensure `brand_registration_requests` table supports review fields
-- [x] Task 6: Tests
-  - [x] Subtask 6.1: Unit tests for approve/reject business rules and guards
-  - [x] Subtask 6.2: Integration tests for permission enforcement (403 for non-admins)
-  - [x] Subtask 6.3: Integration tests for transaction atomicity (if brand update fails, request stays Submitted)
-  - [x] Subtask 6.4: Integration tests for duplicate approval attempts (409 Conflict)
+- [x] Task 1: Implement registration review service (AC1, AC5, AC6, AC7, AC9)
+  - [x] Subtask 1.1: `IRegistrationService` with `GetPendingContractRequestsAsync`, `GetPendingReviewRequestsAsync`, `GetAllRequestsAsync`
+  - [x] Subtask 1.2: `SendContractAsync(Guid requestId, Guid welcomePolicyTemplateId, Guid senderUserId)`
+  - [x] Subtask 1.3: `UploadSignedContractAsync(Guid requestId, string contractFileUrl, Guid adminUserId)`
+  - [x] Subtask 1.4: `ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes)`
+  - [x] Subtask 1.5: Guard: only Admin role can execute; request must be in `Submitted` status
+  - [x] Subtask 1.6: Approve requires `ContractStatus = Signed`
+  - [x] Subtask 1.7: Reject requires non-empty `ReviewNotes`
+- [x] Task 2: Contract generation (AC2, AC4)
+  - [x] Subtask 2.1: `IContractService` with `GenerateContractHtmlAsync`
+  - [x] Subtask 2.2: Contract includes business info, welcome policy, pricing appendix, signature blocks
+  - [x] Subtask 2.3: Contract HTML used in both email and Print button
+- [x] Task 3: API endpoints (AC1, AC2, AC3, AC5, AC6, AC7, AC8)
+  - [x] Subtask 3.1: `GET /api/v1/admin/registration-requests/pending-contract` — list pending contract
+  - [x] Subtask 3.2: `GET /api/v1/admin/registration-requests/pending-review` — list pending review
+  - [x] Subtask 3.3: `GET /api/v1/admin/registration-requests` — list all
+  - [x] Subtask 3.4: `GET /api/v1/admin/registration-requests/{requestId}/contract` — print HTML
+  - [x] Subtask 3.5: `POST /api/v1/admin/registration-requests/{requestId}/send-contract` -> `{ welcomePolicyTemplateId }`
+  - [x] Subtask 3.6: `POST /api/v1/admin/registration-requests/{requestId}/upload-signed-contract` -> `{ contractFileUrl }`
+  - [x] Subtask 3.7: `POST /api/v1/admin/registration-requests/{requestId}/approve` -> `{ reviewNotes?: "string" }`
+  - [x] Subtask 3.8: `POST /api/v1/admin/registration-requests/{requestId}/reject` -> `{ reviewNotes: "string" }` (required)
+- [x] Task 4: Blazor Admin UI (AC1, AC2, AC3, AC4, AC5, AC6)
+  - [x] Subtask 4.1: `RegistrationRequests.razor` page under `NonCash.Web/Components/Pages/Admin/`
+  - [x] Subtask 4.2: Pending Contract / Pending Review / All Requests tabs
+  - [x] Subtask 4.3: Send Contract dialog with Welcome Policy Template selector
+  - [x] Subtask 4.4: Upload Signed Contract dialog
+  - [x] Subtask 4.5: Print button that opens contract in new tab
+  - [x] Subtask 4.6: Approve / Reject buttons with review notes input
+- [x] Task 5: Notification integration (AC2, AC5, AC6)
+  - [x] Subtask 5.1: `NotifyContractSentAsync` with contract HTML
+  - [x] Subtask 5.2: `NotifyBusinessActivatedAsync` on approval with conditional brand/credit info
+  - [x] Subtask 5.3: `NotifyRegistrationRejectedAsync` on rejection with reason
+- [x] Task 6: Database migration
+  - [x] Subtask 6.1: `BusinessRegistrationRequestContractWorkflow` migration adding contract columns
+  - [x] Subtask 6.2: `BusinessRegistrationRequestFirstBrandInfo` migration adding business info and first-brand columns
+- [x] Task 7: Tests
+  - [x] Subtask 7.1: Unit tests for approve/reject business rules and guards
+  - [x] Subtask 7.2: Integration tests for permission enforcement (403 for non-admins)
+  - [x] Subtask 7.3: Integration tests for contract-required-before-approval guard
+  - [x] Subtask 7.4: Integration tests for approval creating Business/Brand/User when first brand is declared
+  - [x] Subtask 7.5: Integration tests for approval creating Business only when no first brand is declared
 
 ## Dev Notes
 
 ### Architecture Compliance
 - This is an **admin-only** workflow. Enforce `[Authorize(Roles = "Admin")]` on all endpoints.
-- The approval/rejection is a **state machine** on `BrandRegistrationRequest`. Valid transitions: Submitted -> Approved, Submitted -> Rejected. No reversals.
-- Use a **database transaction** to ensure all three records (request, brand, user) update atomically. If any step fails, nothing commits.
-- The `UserAccount` created during self-registration (Story 1.5) is activated here. Ensure the auth service allows login only after this activation.
+- The approval/rejection is a **state machine** on `BusinessRegistrationRequest`. Valid transitions: Submitted -> Approved, Submitted -> Rejected. No reversals.
+- Contract workflow: Sent -> Signed -> Approved/Rejected.
+- Use a **database transaction** to ensure all created records (Business, Brand, User, WelcomeGrantPolicy) update atomically. If any step fails, nothing commits.
 
 ### File Structure Requirements
 ```
-src/NonCash.Core/Interfaces/IRegistrationReviewService.cs
-src/NonCash.Core/Services/RegistrationReviewService.cs
-src/NonCash.API/Controllers/AdminRegistrationsController.cs
-src/NonCash.Web/Pages/Admin/RegistrationReview.razor
+src/NonCash.Core/Interfaces/IRegistrationService.cs
+src/NonCash.Core/Services/RegistrationService.cs
+src/NonCash.Core/Interfaces/IContractService.cs
+src/NonCash.Infrastructure/Services/ContractService.cs
+src/NonCash.API/Controllers/RegistrationReviewController.cs
+src/NonCash.Web/Components/Pages/Admin/RegistrationRequests.razor
+src/NonCash.Web/wwwroot/js/contract-print.js
 ```
 
 ### Database Schema
-- Table: `brand_registration_requests` (extends Story 1.5 schema)
-- Additional context:
-  - `reviewed_by_user_id` (uuid FK -> user_accounts)
-  - `reviewed_at` (timestamptz)
-  - `review_notes` (text)
-  - Ensure composite status check performance: index on `(status, submitted_at)`
+- Table: `business_registration_requests` (extends Story 1.5 schema)
+- Additional columns:
+  - `contract_status` (varchar 20): None | Sent | Signed
+  - `contract_sent_at` (timestamptz nullable)
+  - `contract_file_url` (varchar 500)
+  - `welcome_policy_template_id` (uuid FK -> welcome_grant_policy_templates)
+  - `business_id` (uuid FK -> businesses, populated on approval)
+  - `brand_id` (uuid FK -> brands, populated on approval if first brand declared)
+  - `submitted_by_user_id` (uuid FK -> user_accounts, populated on approval if first brand declared)
+- Index: `IX_business_registration_requests_contract_status`, `IX_business_registration_requests_welcome_policy_template_id`
 
 ### API Contracts
-- `GET /api/v1/admin/registrations?status=Submitted&page=1&pageSize=20`
-- `GET /api/v1/admin/registrations/{requestId}`
-- `POST /api/v1/admin/registrations/{requestId}/approve` -> `{ reviewNotes?: "string" }`
-- `POST /api/v1/admin/registrations/{requestId}/reject` -> `{ reviewNotes: "string" }` (required)
+- `GET /api/v1/admin/registration-requests/pending-contract`
+- `GET /api/v1/admin/registration-requests/pending-review`
+- `GET /api/v1/admin/registration-requests`
+- `GET /api/v1/admin/registration-requests/{requestId}/contract` -> HTML
+- `POST /api/v1/admin/registration-requests/{requestId}/send-contract` -> `{ welcomePolicyTemplateId: Guid }`
+- `POST /api/v1/admin/registration-requests/{requestId}/upload-signed-contract` -> `{ contractFileUrl: string }`
+- `POST /api/v1/admin/registration-requests/{requestId}/approve` -> `{ reviewNotes?: "string" }`
+- `POST /api/v1/admin/registration-requests/{requestId}/reject` -> `{ reviewNotes: "string" }` (required)
 - 403 if role != Admin
-- 409 if request status != Submitted
+- 400 if request status != Submitted or contract not signed before approval
 - 400 if reject without reviewNotes
 
 ### Security & NFR
 - NFR3 (RBAC): Strict Admin-only access. This is a platform-level governance function.
-- NFR4: Admins may see all Brands regardless of tenant, but standard Brand scoping still applies to Brand data mutations.
+- NFR4: Admins may see all requests regardless of tenant, but standard Brand scoping still applies to Brand data mutations.
 - Immutability of review decisions: once Approved or Rejected, the request record status must not change. If a mistake is made, the business must re-register.
 
 ### Testing Standards
-- State machine tests: assert that `Rejected -> Approved` and `Approved -> Rejected` both return 409.
-- Transaction test: simulate DB failure during brand status update and assert request remains `Submitted`.
+- State machine tests: assert that `Rejected -> Approved` and `Approved -> Rejected` both fail.
+- Contract guard test: approve before signed contract returns 400.
 - Cross-role test: generate JWTs for each role and verify only Admin gets 200.
-
-### References
-- [Source: docs/data-models.md#Brand] — Brand status field.
-- [Source: docs/data-models.md#UserAccount] — User account status field.
-- [Source: Key Functionalities.txt#V] — Business Management, approval context.
 
 ## Dev Agent Record
 
@@ -141,26 +185,30 @@ Qoder AI Assistant
 
 - DateTime Kind=Unspecified bug when approving voucher plans — fixed with `DateTime.SpecifyKind(value, DateTimeKind.Utc)` in ApprovalService.cs
 - SMTP transient errors (ServiceNotAvailable, ServiceClosingTransmissionChannel) — handled with 3-retry exponential backoff policy
+- Admin page refresh threw `NavigationException` during prerender — fixed with `ClientAuthService.NavigateToLogin()` helper catching `NavigationException` and `InvalidOperationException`
+- Print button returned 401 because `AuthHttpHandler` failed to attach token in Blazor Server — fixed by manually attaching token in `PrintContractAsync`
 
 ### Completion Notes List
 
-- Registration approval/rejection wired with full email notifications (RegistrationApproved / RegistrationRejected HTML templates)
-- `EmailNotificationService` delivers via SMTP with retry policy and audit logging to `email_logs` table
-- Blazor UI: Email field added to Users.razor admin page; FinancialController role added to dropdown
-- E2E tested: plan approval flow sends real email via Gmail SMTP
-- All 126 tests pass (52 unit + 74 integration)
+- 2026-08-18: Initial contract workflow implemented (send contract, upload signed, approve/reject).
+- 2026-08-20: Refactored to request-only registration model:
+  - Business, Brand, and UserAccount created on approval instead of submission.
+  - First-brand declaration shown on request card.
+  - Welcome policy template assigned to Business on approval.
+- Contract HTML includes Pricing section and Appendix A for brand-level pricing.
+- Print button opens contract in new tab using `contract-print.js` helper.
+- All 137 tests pass (76 integration + 61 unit).
 
 ### File List
 
-- src/NonCash.Core/Services/RegistrationReviewService.cs
-- src/NonCash.Core/Services/ApprovalService.cs (DateTime Kind fix)
-- src/NonCash.API/Controllers/AdminRegistrationsController.cs
-- src/NonCash.API/Controllers/ApprovalsController.cs
-- src/NonCash.Infrastructure/Services/EmailNotificationService.cs
-- src/NonCash.Infrastructure/EmailTemplates/RegistrationApproved.html
+- src/NonCash.Core/Services/RegistrationService.cs
+- src/NonCash.Core/Interfaces/IContractService.cs
+- src/NonCash.Infrastructure/Services/ContractService.cs
+- src/NonCash.Infrastructure/EmailTemplates/ContractSent.html
+- src/NonCash.Infrastructure/EmailTemplates/ActiveBusiness.html
 - src/NonCash.Infrastructure/EmailTemplates/RegistrationRejected.html
-- src/NonCash.Web/Components/Pages/Admin/RegistrationReview.razor
-- src/NonCash.Web/Components/Pages/Admin/Users.razor (Email field + FinancialController role)
-- src/NonCash.Core/Entities/EmailLog.cs
-- tools/migration-add-email-log.sql
-
+- src/NonCash.API/Controllers/RegistrationReviewController.cs
+- src/NonCash.API/DTOs/RegistrationDtos.cs
+- src/NonCash.Web/Components/Pages/Admin/RegistrationRequests.razor
+- src/NonCash.Web/wwwroot/js/contract-print.js
+- src/NonCash.Web/Services/ClientAuthService.cs

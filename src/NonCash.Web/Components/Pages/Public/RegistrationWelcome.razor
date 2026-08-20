@@ -1,0 +1,52 @@
+@page "/registration-welcome/{RequestId}"
+@inject NavigationManager Navigation
+
+<PageTitle>Welcome to NonCash</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" Class="mb-4" />
+
+        <MudText Typo="Typo.h4" GutterBottom="true">Thank You for Registering!</MudText>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Your business registration has been submitted successfully. Our team will review your application and contact you shortly.
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Class="mb-4 text-left">
+            <strong>Request ID:</strong> @RequestId<br />
+            <strong>Next step:</strong> Contract review and approval by our admin team.
+        </MudAlert>
+
+        <MudText Typo="Typo.h6" GutterBottom="true" Class="mt-6">What happens next?</MudText>
+        <MudList T="string" Dense="true" Class="text-left mb-6">
+            <MudListItem T="string">
+                <MudText Typo="Typo.body2">1. We review your business information.</MudText>
+            </MudListItem>
+            <MudListItem T="string">
+                <MudText Typo="Typo.body2">2. We send you a contract and welcome policy.</MudText>
+            </MudListItem>
+            <MudListItem T="string">
+                <MudText Typo="Typo.body2">3. You sign and return the contract.</MudText>
+            </MudListItem>
+            <MudListItem T="string">
+                <MudText Typo="Typo.body2">4. Upon approval, your business is activated on NonCash.</MudText>
+            </MudListItem>
+        </MudList>
+
+        <MudText Typo="Typo.body2" Class="mb-6">
+            If you declared a first brand, your brand manager username and password will be activated automatically.<br />
+            If you did not declare a first brand, our team will work with you to create one after approval.
+        </MudText>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="@($"/registration-status/{RequestId}")" Class="mr-2">
+            Check Status
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/">
+            Back to Home
+        </MudButton>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter] public string RequestId { get; set; } = "";
+}

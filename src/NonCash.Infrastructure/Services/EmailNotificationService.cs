@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NonCash.Core.Entities;
@@ -25,6 +26,7 @@ public class EmailNotificationService : INotificationService
     private readonly IUserAccountRepository _userAccountRepository;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IRepository<EmailLog> _emailLogRepository;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<EmailNotificationService> _logger;
 
     public EmailNotificationService(
@@ -32,12 +34,14 @@ public class EmailNotificationService : INotificationService
         IUserAccountRepository userAccountRepository,
         IEmailTemplateRenderer templateRenderer,
         IRepository<EmailLog> emailLogRepository,
+        IConfiguration configuration,
         ILogger<EmailNotificationService> logger)
     {
         _smtpOptions = smtpOptions.Value;
         _userAccountRepository = userAccountRepository ?? throw new ArgumentNullException(nameof(userAccountRepository));
         _templateRenderer = templateRenderer ?? throw new ArgumentNullException(nameof(templateRenderer));
         _emailLogRepository = emailLogRepository;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger;
     }
 
@@ -66,12 +70,11 @@ public class EmailNotificationService : INotificationService
         }
     }
 
-    public async Task NotifyRegistrationRejectedAsync(Guid userId, string brandName, string? reviewNotes = null, CancellationToken cancellationToken = default)
+    public async Task NotifyRegistrationRejectedAsync(string email, string businessName, string? reviewNotes = null, CancellationToken cancellationToken = default)
     {
-        var user = await _userAccountRepository.GetByIdAsync(userId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(user?.Email))
+        if (string.IsNullOrWhiteSpace(email))
         {
-            _logger.LogInformation("Registration rejected notification for user {UserId} skipped: no email on file.", userId);
+            _logger.LogInformation("Registration rejected notification for '{BusinessName}' skipped: no email on file.", businessName);
             return;
         }
 
@@ -80,23 +83,32 @@ public class EmailNotificationService : INotificationService
             ? "the submitted information did not meet our verification requirements"
             : HtmlEncode(reviewNotes);
 
-        var subject = $"Your NonCash registration for '{brandName}' was not approved";
+        var subject = $"Your NonCash registration for '{businessName}' was not approved";
         var body = await _templateRenderer.RenderAsync("RegistrationRejected", new Dictionary<string, string?>
         {
-            ["BrandName"] = brandName,
+            ["BusinessName"] = businessName,
             ["Reason"] = reason
         }, cancellationToken);
 
-        await SendAsync(user.Email, subject, body, cancellationToken, "RegistrationRejected", "RegistrationRejected");
+        await SendAsync(email, subject, body, cancellationToken, "RegistrationRejected", "RegistrationRejected");
     }
 
     public async Task NotifyApplicantRegistrationSubmittedAsync(string email, string companyName, Guid requestId, CancellationToken cancellationToken = default)
     {
+        var webBaseUrl = _configuration["WebBaseUrl"]?.TrimEnd('/') ?? string.Empty;
+        var welcomeUrl = string.IsNullOrEmpty(webBaseUrl)
+            ? string.Empty
+            : $"{webBaseUrl}/registration-welcome/{requestId}";
+
         var subject = "Thank you for registering your business with NonCash";
         var body = await _templateRenderer.RenderAsync("ApplicantRegistrationSubmitted", new Dictionary<string, string?>
         {
             ["CompanyName"] = companyName,
-            ["RequestId"] = requestId.ToString()
+            ["RequestId"] = requestId.ToString(),
+            ["WelcomeUrl"] = welcomeUrl,
+            ["WelcomeLinkHtml"] = string.IsNullOrEmpty(welcomeUrl)
+                ? string.Empty
+                : $"<p><a href=\"{welcomeUrl}\" style=\"display:inline-block;padding:10px 20px;background-color:#1976d2;color:#fff;text-decoration:none;border-radius:6px;\">View Registration Welcome Page</a></p>"
         }, cancellationToken);
 
         await SendAsync(email, subject, body, cancellationToken, "ApplicantRegistrationSubmitted", "RegistrationConfirmation");
@@ -255,17 +267,30 @@ public class EmailNotificationService : INotificationService
             return;
         }
 
-        var expiresAtHtml = notification.ExpiresAt.HasValue
-            ? $"<p><strong>Welcome credits expire at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
-            : string.Empty;
+        string brandInfoHtml;
+        if (!string.IsNullOrWhiteSpace(notification.BrandName) && notification.CreditsGranted > 0)
+        {
+            var expiresAtHtml = notification.ExpiresAt.HasValue
+                ? $"<p><strong>Welcome credits expire at:</strong> {notification.ExpiresAt.Value:yyyy-MM-dd}</p>"
+                : string.Empty;
+
+            brandInfoHtml = $@"
+                <div style=""background-color: #f1f8e9; border: 1px solid #c5e1a5; border-radius: 6px; padding: 12px 16px; margin: 16px 0;"">
+                    <p style=""margin: 0;""><strong>Welcome credit policy for new brands:</strong> your new brand <strong>{notification.BrandName}</strong> has been granted <strong>{notification.CreditsGranted:N0}</strong> welcome credit(s). Each voucher consumes 1 credit, so you can issue up to {notification.CreditsGranted:N0} voucher(s) with this grant.</p>
+                    {expiresAtHtml}
+                </div>
+                <p>You can sign in with your registered account and start creating voucher plans and distributing vouchers to your customers.</p>";
+        }
+        else
+        {
+            brandInfoHtml = "<p>Our team will contact you shortly to set up your first brand and user account.</p>";
+        }
 
         var subject = $"Welcome to NonCash — '{notification.BusinessName}' is now active";
         var body = await _templateRenderer.RenderAsync("ActiveBusiness", new Dictionary<string, string?>
         {
             ["BusinessName"] = notification.BusinessName,
-            ["BrandName"] = notification.BrandName,
-            ["CreditsGranted"] = notification.CreditsGranted.ToString("N0"),
-            ["ExpiresAt"] = expiresAtHtml
+            ["BrandInfoHtml"] = brandInfoHtml
         }, cancellationToken);
 
         await SendAsync(notification.BusinessEmail, subject, body, cancellationToken, "ActiveBusiness", "BusinessActivated");

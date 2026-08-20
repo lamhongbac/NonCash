@@ -1,6 +1,7 @@
 using MudBlazor.Services;
 using NonCash.Web.Components;
 using NonCash.Core.Configuration;
+using NonCash.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,10 +22,11 @@ var environmentName = builder.Configuration[$"{EnvironmentConfig.SectionName}:Na
 var apiBaseUrl = builder.Configuration[$"ApiBaseUrls:{environmentName}"]
     ?? builder.Configuration["ApiBaseUrl"]
     ?? "https://localhost:7001/";
+builder.Services.AddTransient<AuthHttpHandler>();
 builder.Services.AddHttpClient("NonCashAPI", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
-});
+}).AddHttpMessageHandler<AuthHttpHandler>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("NonCashAPI"));
 
 var app = builder.Build();

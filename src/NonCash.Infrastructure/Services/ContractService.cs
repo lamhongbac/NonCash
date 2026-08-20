@@ -56,8 +56,19 @@ public class ContractService : IContractService
         sb.AppendLine("</div>");
 
         sb.AppendLine("<div class='section'>");
-        sb.AppendLine("<h2>3. Terms and Conditions</h2>");
+        sb.AppendLine("<h2>3. Pricing</h2>");
+        sb.AppendLine("<p>Credit pricing is set at the Brand level. Each Brand operated under this Business may have its own unit price, credit expiry, and related commercial terms. The applicable pricing for each Brand is listed in <strong>Appendix A — Brand Pricing</strong>, which forms part of this agreement.</p>");
+        sb.AppendLine("</div>");
+
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("<h2>4. Terms and Conditions</h2>");
         sb.AppendLine("<p>The business agrees to use the NonCash platform in accordance with the platform terms and conditions. Settlement, redemption, and credit rules are governed by the platform policies published at the time of use.</p>");
+        sb.AppendLine("</div>");
+
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("<h2>Appendix A — Brand Pricing</h2>");
+        sb.AppendLine($"<p><strong>Brand:</strong> {HtmlEncode(brandName)}</p>");
+        sb.AppendLine("<p>Pricing details for this Brand will be provided in a separate pricing appendix agreed by both parties.</p>");
         sb.AppendLine("</div>");
 
         sb.AppendLine("<div class='signature'>");

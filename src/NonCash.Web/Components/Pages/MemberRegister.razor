@@ -81,8 +81,10 @@
                         "Member",
                         null,
                         result.MemberAccountId,
-                        result.CustomerId);
+                        result.CustomerId,
+                        result.ExpiresAt);
 
+                    await AuthState.StartIdleTimerAsync();
                     Snackbar.Add($"Welcome, {result.FullName}!", Severity.Success);
                     Navigation.NavigateTo("/store", forceLoad: true);
                 }

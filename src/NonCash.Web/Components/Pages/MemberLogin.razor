@@ -72,8 +72,10 @@
                         result.User?.Role ?? "Member",
                         result.User?.BrandId,
                         result.User?.UserId ?? Guid.Empty,
-                        result.User?.CustomerId);
+                        result.User?.CustomerId,
+                        result.ExpiresAt);
 
+                    await AuthState.StartIdleTimerAsync();
                     Snackbar.Add($"Welcome, {AuthState.FullName}!", Severity.Success);
                     Navigation.NavigateTo("/store", forceLoad: true);
                 }

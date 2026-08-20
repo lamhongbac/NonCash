@@ -117,9 +117,18 @@ Existing sessions are invalidated on the next token validation.
 
 ## 4. Business Registration Approval
 
-Businesses can register themselves through the public self-registration flow. Before activation, the platform and the business must agree to a contract. Admins manage this workflow from the **Registration Review** page.
+Businesses can register themselves through the public self-registration flow. A registration is only a **request** until it is approved — no Business, Brand, or UserAccount exists before then. Before activation, the platform and the business must agree to a contract. Admins manage this workflow from the **Registration Review** page.
 
-### 4.1 Registration Statuses
+### 4.1 Optional First Brand Declaration
+
+During self-registration, the applicant may optionally declare a **First Brand**:
+
+- **Brand Name** — the name of the first brand to create under the business.
+- **Brand Manager Username / Password** — credentials for the first user, who will have the `BrandManager` role.
+
+If the applicant skips this section, only the **Business** record is created on approval. The admin must later create the first Brand and its user manually from the **Brands** or **Users** page.
+
+### 4.2 Registration Statuses
 
 A self-registered business moves through these stages:
 
@@ -131,7 +140,7 @@ A self-registered business moves through these stages:
 | `Approved` | Business activated. | — |
 | `Rejected` | Registration declined. | — |
 
-### 4.2 View Pending Registrations
+### 4.3 View Pending Registrations
 
 1. Go to **Registration Review**.
 2. Use the filter buttons:
@@ -139,13 +148,14 @@ A self-registered business moves through these stages:
    - **Pending Review** — requests with signed contracts ready for approval/rejection.
    - **All Requests** — every request.
 3. Each row displays:
-   - Company Name / Brand Name
-   - Tax Code / Contact Email
+   - Company Name / Tax Code / Contact Email / Phone / Address
+   - Representative Name
+   - First Brand and Manager (if declared), or a warning if none
    - Submitted Date
    - Selected Welcome Policy (if any)
    - Contract Status
 
-### 4.3 Send the Contract
+### 4.4 Send the Contract
 
 1. From **Pending Contract**, click **Send Contract** on the request.
 2. Select a **Welcome Policy Template** that reflects the agreed commercial terms.
@@ -162,7 +172,7 @@ The system:
 
 > **Tip:** Click **Print** on a request with a sent contract to open the agreement in a new browser tab for printing or saving as PDF.
 
-### 4.4 Upload Signed Contract
+### 4.5 Upload Signed Contract
 
 1. From **Pending Contract**, click **Upload Signed Contract** on a request whose contract status is `Sent`.
 2. Enter the file URL or path where the signed hardcopy is stored.
@@ -170,7 +180,7 @@ The system:
 
 The system sets the contract status to `Signed`. The request now appears under **Pending Review** and can be approved or rejected.
 
-### 4.5 Approve a Registration
+### 4.6 Approve a Registration
 
 1. From **Pending Review**, click **Approve**.
 2. Optionally add review notes.
@@ -178,17 +188,16 @@ The system sets the contract status to `Signed`. The request now appears under *
 
 The system atomically:
 
-- Sets the request status to `Approved`.
-- Activates the linked Brand (`Status = Active`).
-- Activates the linked UserAccount (`Status = Active`).
+- Creates the **Business** record and sets it to active.
+- If a first brand was declared, creates the **Brand** and the **UserAccount** with role `BrandManager`, both active.
 - Assigns the selected **Welcome Policy Template** to the new Business.
-- Grants the welcome credits defined by the template.
+- Grants the welcome credits defined by the template to the first brand (if one was declared).
 - Records `ReviewedAt`, `ReviewedByUserId`, and `ReviewNotes`.
-- Sends a **Business Activated** email to the business representative with login instructions and the welcome-credit details (delivered via SMTP; recorded in the email audit log).
+- Sends a **Business Activated** email to the business contact with login instructions and the welcome-credit details (delivered via SMTP; recorded in the email audit log).
 
 > **Note:** The **Business Activated** template is used only for approved self-registrations. Businesses created directly by an Admin receive the **Brand Created** email instead.
 
-### 4.6 Reject a Registration
+### 4.7 Reject a Registration
 
 1. From **Pending Review**, click **Reject**.
 2. Enter **Review Notes** (minimum 10 characters).
@@ -197,12 +206,10 @@ The system atomically:
 The system atomically:
 
 - Sets the request status to `Rejected`.
-- Sets the linked Brand status to `Rejected`.
-- Sets the linked UserAccount status to `Rejected` (or deletes it based on configuration).
 - Records `ReviewedAt` and `ReviewedByUserId`.
-- Sends a **Registration Rejected** email to the business representative with the reason and next steps (delivered via SMTP; recorded in the email audit log).
+- Sends a **Registration Rejected** email to the business contact with the reason and next steps (delivered via SMTP; recorded in the email audit log).
 
-### 4.7 Approval Rules
+### 4.8 Approval Rules
 
 - Only users with the `Admin` role can send contracts, upload signed contracts, approve, or reject registrations.
 - A request can only be approved or rejected once. Repeated attempts return a 409 Conflict.

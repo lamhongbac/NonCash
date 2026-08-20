@@ -43,7 +43,14 @@
             }
             else if (_status.Status == "Approved")
             {
-                <MudAlert Severity="Severity.Success" Class="mt-4">Congratulations! Your application has been approved. You can now log in.</MudAlert>
+                @if (_status.HasFirstBrandDeclaration)
+                {
+                    <MudAlert Severity="Severity.Success" Class="mt-4">Congratulations! Your application has been approved. You can now log in with your brand manager username and password.</MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Class="mt-4">Congratulations! Your application has been approved. Our team will contact you to set up your first brand.</MudAlert>
+                }
             }
             else if (_status.Status == "Rejected")
             {
@@ -112,5 +119,6 @@
         public DateTime SubmittedAt { get; set; }
         public DateTime? ReviewedAt { get; set; }
         public string? ReviewNotes { get; set; }
+        public bool HasFirstBrandDeclaration { get; set; }
     }
 }

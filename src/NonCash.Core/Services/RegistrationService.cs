@@ -23,8 +23,9 @@ public record RegistrationRequestDto(
     string PhoneNumber,
     string Address,
     string RepresentativeName,
-    string Username,
-    string Password
+    string? FirstBrandName = null,
+    string? ManagerUsername = null,
+    string? ManagerPassword = null
 );
 
 public record RegistrationResult
@@ -43,12 +44,10 @@ public record RegistrationResult
         Status = RegistrationStatus.Submitted;
     }
 
-    public RegistrationResult(bool success, Guid requestId, Guid businessId, Guid brandId, RegistrationStatus status)
+    public RegistrationResult(bool success, Guid requestId, RegistrationStatus status)
     {
         Success = success;
         RequestId = requestId;
-        BusinessId = businessId;
-        BrandId = brandId;
         Status = status;
     }
 }
@@ -57,19 +56,25 @@ public record RegistrationStatusInfo(
     RegistrationStatus Status,
     DateTime SubmittedAt,
     DateTime? ReviewedAt,
-    string? ReviewNotes
+    string? ReviewNotes,
+    bool HasFirstBrandDeclaration
 );
 
 public record RegistrationRequestSummary(
     Guid RequestId,
-    Guid BrandId,
-    Guid SubmittedByUserId,
+    Guid? BusinessId,
+    Guid? BrandId,
+    Guid? SubmittedByUserId,
     string BusinessName,
-    string BrandName,
+    string? BrandName,
     string TaxCode,
-    string ContactEmail,
+    string? ContactEmail,
+    string? PhoneNumber,
+    string? Address,
     string RepresentativeName,
-    string Username,
+    string? FirstBrandName,
+    string? ManagerUsername,
+    bool HasFirstBrandDeclaration,
     RegistrationStatus Status,
     ContractStatus ContractStatus,
     DateTime? ContractSentAt,
@@ -127,69 +132,56 @@ public class RegistrationService : IRegistrationService
             return new RegistrationResult(false, "Company name is required.");
         if (string.IsNullOrWhiteSpace(request.TaxCode))
             return new RegistrationResult(false, "Tax code is required.");
-        if (string.IsNullOrWhiteSpace(request.Username))
-            return new RegistrationResult(false, "Username is required.");
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-            return new RegistrationResult(false, "Password must be at least 8 characters.");
         if (string.IsNullOrWhiteSpace(request.RepresentativeName))
             return new RegistrationResult(false, "Representative name is required.");
+
+        var hasFirstBrand = !string.IsNullOrWhiteSpace(request.FirstBrandName);
+        if (hasFirstBrand)
+        {
+            if (string.IsNullOrWhiteSpace(request.ManagerUsername))
+                return new RegistrationResult(false, "Manager username is required when first brand is declared.");
+            if (string.IsNullOrWhiteSpace(request.ManagerPassword) || request.ManagerPassword.Length < 8)
+                return new RegistrationResult(false, "Manager password must be at least 8 characters.");
+        }
 
         // Check tax code uniqueness against existing businesses
         var existingBusiness = await _businessRepository.GetByTaxCodeAsync(request.TaxCode.Trim(), cancellationToken);
         if (existingBusiness != null)
-        {
             return new RegistrationResult(false, "DuplicateTaxCode");
-        }
 
-        // Check username uniqueness
-        if (await _userAccountRepository.UsernameExistsAsync(request.Username.Trim().ToLowerInvariant(), cancellationToken))
+        // Check tax code uniqueness against pending requests
+        var pendingRequestWithSameTaxCode = (await _requestRepository.FindAsync(
+            r => r.TaxCode == request.TaxCode.Trim() && r.Status == RegistrationStatus.Submitted,
+            cancellationToken)).FirstOrDefault();
+        if (pendingRequestWithSameTaxCode != null)
+            return new RegistrationResult(false, "DuplicateTaxCode");
+
+        // Check username uniqueness (only when a first brand is declared)
+        if (hasFirstBrand && !string.IsNullOrWhiteSpace(request.ManagerUsername))
         {
-            return new RegistrationResult(false, "Username already exists.");
+            if (await _userAccountRepository.UsernameExistsAsync(request.ManagerUsername.Trim().ToLowerInvariant(), cancellationToken))
+                return new RegistrationResult(false, "Username already exists.");
+
+            // Also check against pending requests to avoid collisions before approval
+            var pendingRequestWithSameUsername = (await _requestRepository.FindAsync(
+                r => r.ManagerUsername == request.ManagerUsername.Trim().ToLowerInvariant() && r.Status == RegistrationStatus.Submitted,
+                cancellationToken)).FirstOrDefault();
+            if (pendingRequestWithSameUsername != null)
+                return new RegistrationResult(false, "Username already exists.");
         }
 
-        // Create Business (the legal company)
-        var business = new Business
+        // Create registration request only; Business/Brand/UserAccount are created on approval.
+        var registrationRequest = new BusinessRegistrationRequest
         {
             BusinessName = request.CompanyName.Trim(),
             TaxCode = request.TaxCode.Trim(),
-            Address = request.Address?.Trim() ?? string.Empty,
             ContactEmail = request.ContactEmail?.Trim(),
             PhoneNumber = request.PhoneNumber?.Trim(),
-            IsActive = false
-        };
-        await _businessRepository.AddAsync(business, cancellationToken);
-        await _businessRepository.SaveChangesAsync(cancellationToken);
-
-        // Create the first Brand under the business with PendingActivation status
-        var brand = new Brand
-        {
-            BusinessId = business.Id,
-            Name = request.CompanyName.Trim(),
-            TaxCode = request.TaxCode.Trim(),
-            ContactEmail = request.ContactEmail?.Trim(),
-            Status = BrandStatus.PendingActivation
-        };
-        await _brandRepository.AddAsync(brand, cancellationToken);
-        await _brandRepository.SaveChangesAsync(cancellationToken);
-
-        // Create UserAccount for the representative with PendingActivation status
-        var user = new UserAccount
-        {
-            Username = request.Username.Trim().ToLowerInvariant(),
-            PasswordHash = _authService.HashPassword(request.Password),
-            FullName = request.RepresentativeName.Trim(),
-            Role = UserRole.BrandManager,
-            BrandId = brand.Id,
-            Status = UserStatus.PendingActivation
-        };
-        await _userAccountRepository.AddAsync(user, cancellationToken);
-        await _userAccountRepository.SaveChangesAsync(cancellationToken);
-
-        // Create registration request
-        var registrationRequest = new BusinessRegistrationRequest
-        {
-            BrandId = brand.Id,
-            SubmittedByUserId = user.Id,
+            Address = request.Address?.Trim(),
+            RepresentativeName = request.RepresentativeName.Trim(),
+            FirstBrandName = hasFirstBrand ? request.FirstBrandName!.Trim() : null,
+            ManagerUsername = hasFirstBrand ? request.ManagerUsername!.Trim().ToLowerInvariant() : null,
+            ManagerPasswordHash = hasFirstBrand ? _authService.HashPassword(request.ManagerPassword!) : null,
             SubmittedAt = DateTime.UtcNow,
             Status = RegistrationStatus.Submitted,
             ContractStatus = ContractStatus.None
@@ -199,16 +191,16 @@ public class RegistrationService : IRegistrationService
 
         // Notify admins
         await _notificationService.NotifyAdminNewRegistrationAsync(
-            registrationRequest.Id, brand.Name, cancellationToken);
+            registrationRequest.Id, registrationRequest.BusinessName, cancellationToken);
 
         // Send thank-you email to the applicant
         if (!string.IsNullOrWhiteSpace(request.ContactEmail))
         {
             await _notificationService.NotifyApplicantRegistrationSubmittedAsync(
-                request.ContactEmail, brand.Name, registrationRequest.Id, cancellationToken);
+                request.ContactEmail, registrationRequest.BusinessName, registrationRequest.Id, cancellationToken);
         }
 
-        return new RegistrationResult(true, registrationRequest.Id, business.Id, brand.Id, RegistrationStatus.Submitted);
+        return new RegistrationResult(true, registrationRequest.Id, RegistrationStatus.Submitted);
     }
 
     public async Task<RegistrationStatusInfo?> GetStatusAsync(Guid requestId, CancellationToken cancellationToken = default)
@@ -220,7 +212,8 @@ public class RegistrationService : IRegistrationService
             request.Status,
             request.SubmittedAt,
             request.ReviewedAt,
-            request.ReviewNotes
+            request.ReviewNotes,
+            !string.IsNullOrWhiteSpace(request.FirstBrandName)
         );
     }
 
@@ -276,18 +269,11 @@ public class RegistrationService : IRegistrationService
         _requestRepository.Update(request);
         await _requestRepository.SaveChangesAsync(cancellationToken);
 
-        var brand = await _brandRepository.GetByIdAsync(request.BrandId, cancellationToken);
-        var business = brand != null
-            ? await _businessRepository.GetByIdAsync(brand.BusinessId, cancellationToken)
-            : null;
-
-        var representative = await _userAccountRepository.GetByIdAsync(request.SubmittedByUserId, cancellationToken);
-
         var contractHtml = await _contractService.GenerateContractHtmlAsync(
-            business?.BusinessName ?? brand?.Name ?? "",
-            brand?.Name ?? "",
-            business?.TaxCode ?? brand?.TaxCode ?? "",
-            representative?.FullName,
+            request.BusinessName,
+            request.FirstBrandName ?? string.Empty,
+            request.TaxCode,
+            request.RepresentativeName,
             template.Name,
             template.WelcomeCredits,
             template.WelcomeCreditExpiryMonths,
@@ -296,9 +282,9 @@ public class RegistrationService : IRegistrationService
         // Notify applicant that contract has been sent.
         await _notificationService.NotifyContractSentAsync(
             new ContractSentNotification(
-                business?.ContactEmail ?? brand?.ContactEmail,
-                business?.BusinessName ?? brand?.Name ?? "",
-                brand?.Name ?? "",
+                request.ContactEmail,
+                request.BusinessName,
+                request.FirstBrandName ?? string.Empty,
                 template.Name,
                 template.WelcomeCredits,
                 template.WelcomeCreditExpiryMonths,
@@ -353,6 +339,73 @@ public class RegistrationService : IRegistrationService
         if (approve && request.ContractStatus != ContractStatus.Signed)
             return new ReviewResult(false, "Signed contract must be uploaded before approval.");
 
+        Business? business = null;
+        Brand? brand = null;
+        UserAccount? user = null;
+        CreditBatch? welcomeBatch = null;
+
+        if (approve)
+        {
+            // Create the Business record on approval.
+            business = new Business
+            {
+                BusinessName = request.BusinessName,
+                TaxCode = request.TaxCode,
+                Address = request.Address ?? string.Empty,
+                ContactEmail = request.ContactEmail,
+                PhoneNumber = request.PhoneNumber,
+                IsActive = true
+            };
+            await _businessRepository.AddAsync(business, cancellationToken);
+            await _businessRepository.SaveChangesAsync(cancellationToken);
+            request.BusinessId = business.Id;
+
+            // Assign the selected/default welcome policy template to the business.
+            if (_welcomePolicyService != null)
+            {
+                await _welcomePolicyService.AssignTemplateToBusinessAsync(
+                    business.Id, request.WelcomePolicyTemplateId, reviewerUserId, cancellationToken);
+            }
+
+            // Create the first Brand and its manager if the applicant declared them.
+            if (!string.IsNullOrWhiteSpace(request.FirstBrandName) &&
+                !string.IsNullOrWhiteSpace(request.ManagerUsername) &&
+                !string.IsNullOrWhiteSpace(request.ManagerPasswordHash))
+            {
+                brand = new Brand
+                {
+                    BusinessId = business.Id,
+                    Name = request.FirstBrandName,
+                    TaxCode = request.TaxCode,
+                    ContactEmail = request.ContactEmail,
+                    Status = BrandStatus.Active
+                };
+                await _brandRepository.AddAsync(brand, cancellationToken);
+                await _brandRepository.SaveChangesAsync(cancellationToken);
+                request.BrandId = brand.Id;
+
+                user = new UserAccount
+                {
+                    Username = request.ManagerUsername,
+                    PasswordHash = request.ManagerPasswordHash,
+                    FullName = request.RepresentativeName,
+                    Role = UserRole.BrandManager,
+                    BrandId = brand.Id,
+                    Email = request.ContactEmail,
+                    Status = UserStatus.Active
+                };
+                await _userAccountRepository.AddAsync(user, cancellationToken);
+                await _userAccountRepository.SaveChangesAsync(cancellationToken);
+                request.SubmittedByUserId = user.Id;
+
+                // Grant welcome credits to the newly activated brand (policy-driven).
+                if (_creditService != null)
+                {
+                    welcomeBatch = await _creditService.GrantWelcomeAsync(brand.Id, sendNotification: false, cancellationToken);
+                }
+            }
+        }
+
         // Update the registration request
         request.Status = approve ? RegistrationStatus.Approved : RegistrationStatus.Rejected;
         request.ReviewedAt = DateTime.UtcNow;
@@ -361,67 +414,23 @@ public class RegistrationService : IRegistrationService
         _requestRepository.Update(request);
         await _requestRepository.SaveChangesAsync(cancellationToken);
 
-        // Update the associated Brand
-        var brand = await _brandRepository.GetByIdAsync(request.BrandId, cancellationToken);
-        CreditBatch? welcomeBatch = null;
-        if (brand != null)
-        {
-            brand.Status = approve ? BrandStatus.Active : BrandStatus.Suspended;
-            _brandRepository.Update(brand);
-            await _brandRepository.SaveChangesAsync(cancellationToken);
-
-            // Epic 10: welcome credit grant when the brand is activated on approval (policy-driven).
-            // Notification is suppressed here; the business-activation email below carries the credit info.
-            if (approve && _creditService != null)
-            {
-                welcomeBatch = await _creditService.GrantWelcomeAsync(brand.Id, sendNotification: false, cancellationToken);
-            }
-        }
-
-        // Update the associated Business
-        var business = await _businessRepository.GetByIdAsync(brand?.BusinessId ?? Guid.Empty, cancellationToken);
-        if (business != null)
-        {
-            business.IsActive = approve;
-            _businessRepository.Update(business);
-            await _businessRepository.SaveChangesAsync(cancellationToken);
-
-            // On approval, assign the selected/default welcome policy template to the business
-            // before granting credits, so the grant uses the negotiated terms.
-            if (approve && _welcomePolicyService != null)
-            {
-                await _welcomePolicyService.AssignTemplateToBusinessAsync(
-                    business.Id, request.WelcomePolicyTemplateId, reviewerUserId, cancellationToken);
-            }
-        }
-
-        // Update the associated UserAccount
-        var user = await _userAccountRepository.GetByIdAsync(request.SubmittedByUserId, cancellationToken);
-        if (user != null)
-        {
-            user.Status = approve ? UserStatus.Active : UserStatus.Locked;
-            _userAccountRepository.Update(user);
-            await _userAccountRepository.SaveChangesAsync(cancellationToken);
-        }
-
         // Notify the applicant: exactly one email per outcome.
         if (approve)
         {
-            // Welcome the newly activated business (includes the welcome credit policy).
-            if (business != null)
-            {
-                await _notificationService.NotifyBusinessActivatedAsync(new BusinessActivatedNotification(
-                    business.ContactEmail ?? brand?.ContactEmail,
-                    business.BusinessName,
-                    brand?.Name ?? "",
-                    welcomeBatch?.OriginalAmount ?? 0,
-                    welcomeBatch?.ExpiresAt), cancellationToken);
-            }
+            await _notificationService.NotifyBusinessActivatedAsync(new BusinessActivatedNotification(
+                request.ContactEmail,
+                request.BusinessName,
+                brand?.Name ?? string.Empty,
+                welcomeBatch?.OriginalAmount ?? 0,
+                welcomeBatch?.ExpiresAt), cancellationToken);
         }
         else
         {
             await _notificationService.NotifyRegistrationRejectedAsync(
-                request.SubmittedByUserId, brand?.Name ?? "", request.ReviewNotes, cancellationToken);
+                request.ContactEmail ?? string.Empty,
+                request.BusinessName,
+                request.ReviewNotes,
+                cancellationToken);
         }
 
         return new ReviewResult(true);
@@ -433,9 +442,6 @@ public class RegistrationService : IRegistrationService
         var summaries = new List<RegistrationRequestSummary>();
         foreach (var r in requests)
         {
-            var brand = await _brandRepository.GetByIdAsync(r.BrandId, cancellationToken);
-            var business = brand != null ? await _businessRepository.GetByIdAsync(brand.BusinessId, cancellationToken) : null;
-            var user = await _userAccountRepository.GetByIdAsync(r.SubmittedByUserId, cancellationToken);
             string? reviewedByName = null;
             if (r.ReviewedByUserId.HasValue)
             {
@@ -445,14 +451,19 @@ public class RegistrationService : IRegistrationService
 
             summaries.Add(new RegistrationRequestSummary(
                 r.Id,
+                r.BusinessId,
                 r.BrandId,
                 r.SubmittedByUserId,
-                business?.BusinessName ?? "",
-                brand?.Name ?? "",
-                business?.TaxCode ?? brand?.TaxCode ?? "",
-                business?.ContactEmail ?? brand?.ContactEmail ?? "",
-                user?.FullName ?? "",
-                user?.Username ?? "",
+                r.BusinessName,
+                r.FirstBrandName,
+                r.TaxCode,
+                r.ContactEmail,
+                r.PhoneNumber,
+                r.Address,
+                r.RepresentativeName,
+                r.FirstBrandName,
+                r.ManagerUsername,
+                !string.IsNullOrWhiteSpace(r.FirstBrandName),
                 r.Status,
                 r.ContractStatus,
                 r.ContractSentAt,

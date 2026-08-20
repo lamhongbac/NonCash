@@ -3,6 +3,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>Registration Requests</PageTitle>
@@ -30,12 +31,20 @@ else
     {
         <MudCard Class="mb-4" Elevation="2">
             <MudCardContent>
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <div>
                         <MudText Typo="Typo.h6">@req.BusinessName</MudText>
-                        <MudText Typo="Typo.body2">Brand: @req.BrandName</MudText>
-                        <MudText Typo="Typo.body2">Tax Code: @req.TaxCode | Email: @req.ContactEmail</MudText>
-                        <MudText Typo="Typo.body2">Representative: @req.RepresentativeName (@req.Username)</MudText>
+                        <MudText Typo="Typo.body2">Tax Code: @req.TaxCode | Email: @req.ContactEmail | Phone: @req.PhoneNumber</MudText>
+                        <MudText Typo="Typo.body2">Address: @req.Address</MudText>
+                        <MudText Typo="Typo.body2">Representative: @req.RepresentativeName</MudText>
+                        @if (req.HasFirstBrandDeclaration)
+                        {
+                            <MudText Typo="Typo.body2">First Brand: @req.FirstBrandName | Manager: @req.ManagerUsername</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Warning">No first brand declared — admin must create brand after approval.</MudText>
+                        }
                         <MudText Typo="Typo.body2">Submitted: @req.SubmittedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
                         @if (!string.IsNullOrEmpty(req.WelcomePolicyTemplateName))
                         {
@@ -56,7 +65,7 @@ else
                             {
                                 <MudAlert Severity="Severity.Info" Class="mb-2">Contract Sent @(!string.IsNullOrEmpty(req.ContractSentAt) ? $"at {req.ContractSentAt}" : "")</MudAlert>
                                 <MudStack Row="true" Spacing="2">
-                                    <MudButton Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" Href="@($"api/v1/admin/registration-requests/{req.RequestId}/contract")" Target="_blank">
+                                    <MudButton Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => PrintContractAsync(req))">
                                         <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" Class="mr-1" /> Print
                                     </MudButton>
                                     <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenUploadContractDialog(req))">
@@ -213,7 +222,7 @@ else
         await AuthState.InitializeAsync();
         if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
-            Navigation.NavigateTo("/login");
+            AuthState.NavigateToLogin();
             return;
         }
 
@@ -283,6 +292,45 @@ else
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load policy templates: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task PrintContractAsync(RegistrationRequestItem item)
+    {
+        // Open the blank window synchronously while still inside the user-initiated click event,
+        // so the browser allows the popup. The HTML is written after the async API call.
+        var opened = await JSRuntime.InvokeAsync<bool>("noncashContractPrint.openWindow");
+        if (!opened) return;
+
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/admin/registration-requests/{item.RequestId}/contract");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var html = await response.Content.ReadAsStringAsync();
+                await JSRuntime.InvokeVoidAsync("noncashContractPrint.writeHtml", html);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Snackbar.Add("Session expired. Please log in again.", Severity.Warning);
+            }
+            else
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                var message = string.IsNullOrWhiteSpace(errorBody)
+                    ? $"Contract request failed ({(int)response.StatusCode})."
+                    : $"Contract request failed ({(int)response.StatusCode}): {errorBody}";
+                Snackbar.Add(message, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load contract: {ex.Message}", Severity.Error);
         }
     }
 
@@ -487,11 +535,14 @@ else
     {
         public Guid RequestId { get; set; }
         public string BusinessName { get; set; } = "";
-        public string BrandName { get; set; } = "";
         public string TaxCode { get; set; } = "";
-        public string ContactEmail { get; set; } = "";
+        public string? ContactEmail { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Address { get; set; }
         public string RepresentativeName { get; set; } = "";
-        public string Username { get; set; } = "";
+        public string? FirstBrandName { get; set; }
+        public string? ManagerUsername { get; set; }
+        public bool HasFirstBrandDeclaration { get; set; }
         public string Status { get; set; } = "";
         public string ContractStatus { get; set; } = "";
         public string? ContractSentAt { get; set; }

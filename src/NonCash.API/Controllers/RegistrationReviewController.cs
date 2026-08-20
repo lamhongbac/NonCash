@@ -13,24 +13,15 @@ public class RegistrationReviewController : ControllerBase
 {
     private readonly IRegistrationService _registrationService;
     private readonly IContractService _contractService;
-    private readonly IBusinessRepository _businessRepository;
-    private readonly IBrandRepository _brandRepository;
-    private readonly IUserAccountRepository _userAccountRepository;
     private readonly IWelcomePolicyService _welcomePolicyService;
 
     public RegistrationReviewController(
         IRegistrationService registrationService,
         IContractService contractService,
-        IBusinessRepository businessRepository,
-        IBrandRepository brandRepository,
-        IUserAccountRepository userAccountRepository,
         IWelcomePolicyService welcomePolicyService)
     {
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
         _contractService = contractService ?? throw new ArgumentNullException(nameof(contractService));
-        _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
-        _brandRepository = brandRepository ?? throw new ArgumentNullException(nameof(brandRepository));
-        _userAccountRepository = userAccountRepository ?? throw new ArgumentNullException(nameof(userAccountRepository));
         _welcomePolicyService = welcomePolicyService ?? throw new ArgumentNullException(nameof(welcomePolicyService));
     }
 
@@ -71,15 +62,11 @@ public class RegistrationReviewController : ControllerBase
         if (template == null)
             return NotFound(new { error = "Welcome policy template not found." });
 
-        var brand = await _brandRepository.GetByIdAsync(request.BrandId, cancellationToken);
-        var business = brand != null ? await _businessRepository.GetByIdAsync(brand.BusinessId, cancellationToken) : null;
-        var representative = await _userAccountRepository.GetByIdAsync(request.SubmittedByUserId, cancellationToken);
-
         var contractHtml = await _contractService.GenerateContractHtmlAsync(
-            business?.BusinessName ?? brand?.Name ?? "",
-            brand?.Name ?? "",
-            business?.TaxCode ?? brand?.TaxCode ?? "",
-            representative?.FullName,
+            request.BusinessName,
+            request.FirstBrandName ?? string.Empty,
+            request.TaxCode,
+            request.RepresentativeName,
             template.Name,
             template.WelcomeCredits,
             template.WelcomeCreditExpiryMonths,
@@ -147,23 +134,26 @@ public class RegistrationReviewController : ControllerBase
         return claim != null && Guid.TryParse(claim.Value, out var id) ? id : Guid.Empty;
     }
 
-    private static AdminRegistrationRequestDto MapToDto(RegistrationRequestSummary s) => new(
-        s.RequestId,
-        s.BusinessName,
-        s.BrandName,
-        s.TaxCode,
-        s.ContactEmail,
-        s.RepresentativeName,
-        s.Username,
-        s.Status.ToString(),
-        s.ContractStatus.ToString(),
-        s.ContractSentAt,
-        s.ContractFileUrl,
-        s.WelcomePolicyTemplateId,
-        s.WelcomePolicyTemplateName,
-        s.SubmittedAt,
-        s.ReviewedAt,
-        s.ReviewNotes,
-        s.ReviewedByName
-    );
+    private static AdminRegistrationRequestDto MapToDto(RegistrationRequestSummary s) => new()
+    {
+        RequestId = s.RequestId,
+        BusinessName = s.BusinessName,
+        TaxCode = s.TaxCode,
+        ContactEmail = s.ContactEmail,
+        PhoneNumber = s.PhoneNumber,
+        Address = s.Address,
+        RepresentativeName = s.RepresentativeName,
+        FirstBrandName = s.FirstBrandName,
+        ManagerUsername = s.ManagerUsername,
+        Status = s.Status.ToString(),
+        ContractStatus = s.ContractStatus.ToString(),
+        ContractSentAt = s.ContractSentAt,
+        ContractFileUrl = s.ContractFileUrl,
+        WelcomePolicyTemplateId = s.WelcomePolicyTemplateId,
+        WelcomePolicyTemplateName = s.WelcomePolicyTemplateName,
+        SubmittedAt = s.SubmittedAt,
+        ReviewedAt = s.ReviewedAt,
+        ReviewNotes = s.ReviewNotes,
+        ReviewedByName = s.ReviewedByName
+    };
 }

@@ -10,17 +10,26 @@ namespace NonCash.API.Controllers;
 public class PublicRegistrationController : ControllerBase
 {
     private readonly IRegistrationService _registrationService;
+    private readonly ILogger<PublicRegistrationController> _logger;
 
-    public PublicRegistrationController(IRegistrationService registrationService)
+    public PublicRegistrationController(IRegistrationService registrationService, ILogger<PublicRegistrationController> logger)
     {
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<BusinessRegistrationResponse>> Register(
-        SubmitBusinessRegistrationRequest request, CancellationToken cancellationToken)
+        [FromBody] SubmitBusinessRegistrationRequest request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "Received business registration for {CompanyName}. FirstBrandName='{FirstBrandName}', ManagerUsername='{ManagerUsername}', HasPassword={HasPassword}.",
+            request.CompanyName,
+            request.FirstBrandName,
+            request.ManagerUsername,
+            !string.IsNullOrEmpty(request.ManagerPassword));
+
         var dto = new RegistrationRequestDto(
             request.CompanyName,
             request.TaxCode,
@@ -28,8 +37,9 @@ public class PublicRegistrationController : ControllerBase
             request.PhoneNumber,
             request.Address,
             request.RepresentativeName,
-            request.Username,
-            request.Password);
+            request.FirstBrandName,
+            request.ManagerUsername,
+            request.ManagerPassword);
 
         var result = await _registrationService.SubmitAsync(dto, cancellationToken);
 
@@ -43,8 +53,6 @@ public class PublicRegistrationController : ControllerBase
 
         return Ok(new BusinessRegistrationResponse(
             result.RequestId!.Value,
-            result.BusinessId!.Value,
-            result.BrandId!.Value,
             result.Status.ToString()));
     }
 
@@ -60,6 +68,7 @@ public class PublicRegistrationController : ControllerBase
             status.Status.ToString(),
             status.SubmittedAt,
             status.ReviewedAt,
-            status.ReviewNotes));
+            status.ReviewNotes,
+            status.HasFirstBrandDeclaration));
     }
 }

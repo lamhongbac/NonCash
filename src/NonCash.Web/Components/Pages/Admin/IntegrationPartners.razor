@@ -156,7 +156,7 @@ else
         await AuthState.InitializeAsync();
         if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
-            Navigation.NavigateTo("/login");
+            AuthState.NavigateToLogin();
             return;
         }
 
