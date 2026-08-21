@@ -74,13 +74,15 @@ public record BusinessActivatedNotification(
 
 /// <summary>Payload sent to the business contact when the contract is sent for signature.</summary>
 public record ContractSentNotification(
+    Guid RequestId,
     string? BusinessEmail,
     string BusinessName,
     string BrandName,
     string PolicyTemplateName,
     int WelcomeCredits,
     int? WelcomeCreditExpiryMonths,
-    string ContractHtml);
+    string ContractHtml,
+    string ConfirmationToken);
 
 /// <summary>Payload sent to a brand after a credit purchase batch is created.</summary>
 public record CreditPurchasedNotification(

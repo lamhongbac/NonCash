@@ -1,0 +1,161 @@
+@page "/confirm-contract"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Confirm Contract — NonCash</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Confirm Platform Agreement</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-6">
+            Enter the confirmation key from your email and agree to the terms to complete this step.
+        </MudText>
+
+        @if (_success)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                <strong>Agreement confirmed.</strong> Your registration will be reviewed by our team shortly.
+            </MudAlert>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Href="/">
+                Return to Home
+            </MudButton>
+        }
+        else
+        {
+            <MudForm @ref="_form" Model="_model">
+                <MudTextField @bind-Value="_model.RequestId"
+                              Label="Request ID"
+                              Required="true"
+                              RequiredError="Request ID is required"
+                              Variant="Variant.Outlined"
+                              Class="mb-3"
+                              Disabled="!string.IsNullOrEmpty(_prefilledRequestId)" />
+
+                <MudTextField @bind-Value="_model.Token"
+                              Label="Confirmation Key"
+                              Required="true"
+                              RequiredError="Confirmation key is required"
+                              Variant="Variant.Outlined"
+                              Class="mb-3"
+                              Disabled="!string.IsNullOrEmpty(_prefilledToken)" />
+
+                <MudCheckBox @bind-Value="_model.Agreed"
+                             Label="I have read and agree to the platform agreement terms."
+                             Required="true"
+                             RequiredError="You must agree to the terms before confirming."
+                             Class="mb-4" />
+            </MudForm>
+
+            @if (_errorMessage is not null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">
+                    @_errorMessage
+                </MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleConfirm"
+                       Disabled="_loading">
+                @if (_loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Confirm Agreement
+            </MudButton>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private ConfirmModel _model = new();
+    private bool _loading = false;
+    private bool _success = false;
+    private string? _errorMessage = null;
+    private string? _prefilledRequestId = null;
+    private string? _prefilledToken = null;
+
+    protected override void OnInitialized()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("requestId", out var requestIdValue))
+        {
+            _prefilledRequestId = requestIdValue.ToString();
+            _model.RequestId = _prefilledRequestId;
+        }
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("token", out var tokenValue))
+        {
+            _prefilledToken = tokenValue.ToString();
+            _model.Token = _prefilledToken;
+        }
+    }
+
+    private async Task HandleConfirm()
+    {
+        _errorMessage = null;
+
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid) return;
+        }
+
+        if (!_model.Agreed)
+        {
+            _errorMessage = "You must agree to the terms before confirming.";
+            return;
+        }
+
+        if (!Guid.TryParse(_model.RequestId, out var requestId))
+        {
+            _errorMessage = "Request ID is not valid.";
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/v1/public/register/{requestId}/confirm-contract", new { token = _model.Token });
+            if (response.IsSuccessStatusCode)
+            {
+                _success = true;
+                Snackbar.Add("Contract confirmed successfully.", Severity.Success);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                _errorMessage = error?.error ?? "Confirmation failed. Please check the key and try again.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+            else
+            {
+                _errorMessage = "An unexpected error occurred. Please try again later.";
+                Snackbar.Add(_errorMessage, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Network error: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public class ConfirmModel
+    {
+        public string RequestId { get; set; } = "";
+        public string Token { get; set; } = "";
+        public bool Agreed { get; set; } = false;
+    }
+
+    private class ErrorResponse
+    {
+        public string? error { get; set; }
+    }
+}

@@ -13,6 +13,7 @@ public interface IRegistrationService
     Task<IReadOnlyList<RegistrationRequestSummary>> GetAllRequestsAsync(CancellationToken cancellationToken = default);
     Task<ReviewResult> SendContractAsync(Guid requestId, Guid welcomePolicyTemplateId, Guid senderUserId, CancellationToken cancellationToken = default);
     Task<ReviewResult> UploadSignedContractAsync(Guid requestId, string contractFileUrl, Guid adminUserId, CancellationToken cancellationToken = default);
+    Task<ReviewResult> ConfirmContractAsync(Guid requestId, string token, string? clientIp, CancellationToken cancellationToken = default);
     Task<ReviewResult> ReviewAsync(Guid requestId, Guid reviewerUserId, bool approve, string? reviewNotes, CancellationToken cancellationToken = default);
 }
 
@@ -81,6 +82,8 @@ public record RegistrationRequestSummary(
     string? ContractFileUrl,
     Guid? WelcomePolicyTemplateId,
     string? WelcomePolicyTemplateName,
+    Guid? ContractTemplateId,
+    string? ContractTemplateName,
     DateTime SubmittedAt,
     DateTime? ReviewedAt,
     string? ReviewNotes,
@@ -100,6 +103,8 @@ public class RegistrationService : IRegistrationService
     private readonly ICreditService? _creditService;
     private readonly IWelcomePolicyService? _welcomePolicyService;
     private readonly IContractService? _contractService;
+    private readonly IContractTemplateService? _contractTemplateService;
+    private readonly ISubscriptionFeePolicyService? _subscriptionFeePolicyService;
     private readonly CreditConfig _creditConfig;
 
     public RegistrationService(
@@ -112,6 +117,8 @@ public class RegistrationService : IRegistrationService
         ICreditService? creditService = null,
         IWelcomePolicyService? welcomePolicyService = null,
         IContractService? contractService = null,
+        IContractTemplateService? contractTemplateService = null,
+        ISubscriptionFeePolicyService? subscriptionFeePolicyService = null,
         CreditConfig? creditConfig = null)
     {
         _businessRepository = businessRepository ?? throw new ArgumentNullException(nameof(businessRepository));
@@ -123,6 +130,8 @@ public class RegistrationService : IRegistrationService
         _creditService = creditService;
         _welcomePolicyService = welcomePolicyService;
         _contractService = contractService;
+        _contractTemplateService = contractTemplateService;
+        _subscriptionFeePolicyService = subscriptionFeePolicyService;
         _creditConfig = creditConfig ?? new CreditConfig();
     }
 
@@ -220,7 +229,7 @@ public class RegistrationService : IRegistrationService
     public async Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingReviewRequestsAsync(CancellationToken cancellationToken = default)
     {
         var requests = await _requestRepository.FindAsync(
-            r => r.Status == RegistrationStatus.Submitted && r.ContractStatus == ContractStatus.Signed,
+            r => r.Status == RegistrationStatus.Submitted && (r.ContractStatus == ContractStatus.Signed || r.ContractStatus == ContractStatus.Confirmed),
             cancellationToken);
         return await BuildSummariesAsync(requests, cancellationToken);
     }
@@ -228,7 +237,7 @@ public class RegistrationService : IRegistrationService
     public async Task<IReadOnlyList<RegistrationRequestSummary>> GetPendingContractRequestsAsync(CancellationToken cancellationToken = default)
     {
         var requests = await _requestRepository.FindAsync(
-            r => r.Status == RegistrationStatus.Submitted && r.ContractStatus != ContractStatus.Signed,
+            r => r.Status == RegistrationStatus.Submitted && r.ContractStatus != ContractStatus.Signed && r.ContractStatus != ContractStatus.Confirmed,
             cancellationToken);
         return await BuildSummariesAsync(requests, cancellationToken);
     }
@@ -258,37 +267,56 @@ public class RegistrationService : IRegistrationService
         if (_contractService == null)
             return new ReviewResult(false, "Contract service is not available.");
 
+        if (_subscriptionFeePolicyService == null)
+            return new ReviewResult(false, "Subscription fee policy service is not available.");
+
+        var subscriptionPolicy = await _subscriptionFeePolicyService.GetEffectivePolicyAsync(cancellationToken: cancellationToken);
+        if (subscriptionPolicy is null)
+            return new ReviewResult(false, "No active subscription fee policy found. Please create an active subscription fee policy before sending the contract.");
+
         var template = await _welcomePolicyService.GetTemplateAsync(welcomePolicyTemplateId, cancellationToken);
         if (template == null || !template.IsActive)
             return new ReviewResult(false, "Welcome policy template not found or inactive.");
 
+        // Resolve the active contract template (or null if none exists yet; fallback HTML is used).
+        var contractTemplate = await (_contractTemplateService?.GetDefaultTemplateAsync(cancellationToken) ?? Task.FromResult<ContractTemplate?>(null));
+
         request.WelcomePolicyTemplateId = welcomePolicyTemplateId;
+        request.ContractTemplateId = contractTemplate?.Id;
         request.ContractStatus = ContractStatus.Sent;
         request.ContractSentAt = DateTime.UtcNow;
+        request.ContractConfirmationToken = GenerateConfirmationToken();
         request.UpdatedAt = DateTime.UtcNow;
         _requestRepository.Update(request);
         await _requestRepository.SaveChangesAsync(cancellationToken);
 
-        var contractHtml = await _contractService.GenerateContractHtmlAsync(
+        var contractData = new ContractData(
             request.BusinessName,
             request.FirstBrandName ?? string.Empty,
             request.TaxCode,
             request.RepresentativeName,
             template.Name,
             template.WelcomeCredits,
-            template.WelcomeCreditExpiryMonths,
+            template.WelcomeCreditExpiryMonths);
+
+        var contractHtml = await _contractService.GenerateContractHtmlAsync(
+            contractData,
+            _creditConfig,
+            contractTemplate?.Id,
             cancellationToken);
 
         // Notify applicant that contract has been sent.
         await _notificationService.NotifyContractSentAsync(
             new ContractSentNotification(
+                request.Id,
                 request.ContactEmail,
                 request.BusinessName,
                 request.FirstBrandName ?? string.Empty,
                 template.Name,
                 template.WelcomeCredits,
                 template.WelcomeCreditExpiryMonths,
-                contractHtml),
+                contractHtml,
+                request.ContractConfirmationToken!),
             cancellationToken);
 
         return new ReviewResult(true);
@@ -322,6 +350,38 @@ public class RegistrationService : IRegistrationService
         return new ReviewResult(true);
     }
 
+    public async Task<ReviewResult> ConfirmContractAsync(
+        Guid requestId,
+        string token,
+        string? clientIp,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return new ReviewResult(false, "Confirmation token is required.");
+
+        var request = await _requestRepository.GetByIdAsync(requestId, cancellationToken);
+        if (request == null)
+            return new ReviewResult(false, "Registration request not found.");
+
+        if (request.Status != RegistrationStatus.Submitted)
+            return new ReviewResult(false, "This request has already been reviewed.");
+
+        if (request.ContractStatus != ContractStatus.Sent)
+            return new ReviewResult(false, "Contract must be sent before it can be confirmed.");
+
+        if (!string.Equals(request.ContractConfirmationToken, token.Trim(), StringComparison.Ordinal))
+            return new ReviewResult(false, "Invalid confirmation token.");
+
+        request.ContractStatus = ContractStatus.Confirmed;
+        request.ContractConfirmedAt = DateTime.UtcNow;
+        request.ContractConfirmedByIp = clientIp;
+        request.UpdatedAt = DateTime.UtcNow;
+        _requestRepository.Update(request);
+        await _requestRepository.SaveChangesAsync(cancellationToken);
+
+        return new ReviewResult(true);
+    }
+
     public async Task<ReviewResult> ReviewAsync(
         Guid requestId,
         Guid reviewerUserId,
@@ -336,8 +396,8 @@ public class RegistrationService : IRegistrationService
         if (request.Status != RegistrationStatus.Submitted)
             return new ReviewResult(false, "This request has already been reviewed.");
 
-        if (approve && request.ContractStatus != ContractStatus.Signed)
-            return new ReviewResult(false, "Signed contract must be uploaded before approval.");
+        if (approve && request.ContractStatus != ContractStatus.Signed && request.ContractStatus != ContractStatus.Confirmed)
+            return new ReviewResult(false, "Contract must be confirmed by the business or a signed copy uploaded before approval.");
 
         Business? business = null;
         Brand? brand = null;
@@ -470,6 +530,8 @@ public class RegistrationService : IRegistrationService
                 r.ContractFileUrl,
                 r.WelcomePolicyTemplateId,
                 r.WelcomePolicyTemplate?.Name,
+                r.ContractTemplateId,
+                r.ContractTemplate?.Name,
                 r.SubmittedAt,
                 r.ReviewedAt,
                 r.ReviewNotes,
@@ -477,5 +539,19 @@ public class RegistrationService : IRegistrationService
             ));
         }
         return summaries;
+    }
+
+    private static string GenerateConfirmationToken()
+    {
+        // 8-character alphanumeric token, easy to read/type but unpredictable.
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var buffer = new byte[8];
+        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            rng.GetBytes(buffer);
+
+        var token = new char[8];
+        for (int i = 0; i < token.Length; i++)
+            token[i] = chars[buffer[i] % chars.Length];
+        return new string(token);
     }
 }

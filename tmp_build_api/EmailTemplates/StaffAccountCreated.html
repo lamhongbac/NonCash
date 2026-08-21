@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Account Created</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #1976d2; color: #fff; padding: 20px;">
+            <h2 style="margin: 0;">Your NonCash Account Has Been Created</h2>
+        </div>
+        <div style="padding: 24px;">
+            <p>Dear {{FullName}},</p>
+            <p>An account has been created for you on the NonCash platform.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr><td style="padding: 6px 0; color: #666;">Username:</td><td style="padding: 6px 0;"><strong>{{Username}}</strong></td></tr>
+                <tr><td style="padding: 6px 0; color: #666;">Role:</td><td style="padding: 6px 0;"><strong>{{Role}}</strong></td></tr>
+                <tr><td style="padding: 6px 0; color: #666;">Brand:</td><td style="padding: 6px 0;"><strong>{{BrandName}}</strong></td></tr>
+            </table>
+            <p>Please contact your administrator to receive your initial password or to reset it on first login.</p>
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+        </div>
+    </div>
+</body>
+</html>

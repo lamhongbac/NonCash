@@ -27,6 +27,17 @@ public class CreditConfig
     /// <summary>Fallback months until a welcome-grant batch expires. Null = never.</summary>
     public int? WelcomeCreditExpiryMonths { get; set; } = 12;
 
+    /// <summary>
+    /// Platform subscription fee charged per minimum-commitment term. During the MVP period
+    /// this is typically set to 0 so the contract can state "subscription is free for MVP".
+    /// </summary>
+    public decimal SubscriptionFeeVnd { get; set; } = 0m;
+
+    /// <summary>
+    /// Minimum commitment period (in months) for the platform subscription. Common value is 12.
+    /// </summary>
+    public int MinimumCommitmentMonths { get; set; } = 12;
+
     /// <summary>Fallback days before batch expiry to warn the brand.</summary>
     public int? ExpiryWarningDays { get; set; } = 30;
 

@@ -308,6 +308,9 @@ public class EmailNotificationService : INotificationService
             ? $"<p><strong>Credit expiry:</strong> {notification.WelcomeCreditExpiryMonths.Value} month(s) after activation</p>"
             : string.Empty;
 
+        var webBaseUrl = (_configuration["WebBaseUrl"] ?? "https://localhost:7162/").TrimEnd('/');
+        var confirmationUrl = $"{webBaseUrl}/confirm-contract?requestId={notification.RequestId}&token={notification.ConfirmationToken}";
+
         var subject = $"NonCash contract for '{notification.BusinessName}'";
         var body = await _templateRenderer.RenderAsync("ContractSent", new Dictionary<string, string?>
         {
@@ -316,7 +319,9 @@ public class EmailNotificationService : INotificationService
             ["PolicyTemplateName"] = notification.PolicyTemplateName,
             ["WelcomeCredits"] = notification.WelcomeCredits.ToString("N0"),
             ["ExpiryHtml"] = expiryHtml,
-            ["ContractHtml"] = notification.ContractHtml
+            ["ContractHtml"] = notification.ContractHtml,
+            ["ConfirmationUrl"] = confirmationUrl,
+            ["ConfirmationToken"] = notification.ConfirmationToken
         }, cancellationToken);
 
         await SendAsync(notification.BusinessEmail, subject, body, cancellationToken, "ContractSent", "ContractSent");

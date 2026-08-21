@@ -101,6 +101,8 @@ builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ICreditPolicyService, CreditPolicyService>();
 builder.Services.AddScoped<IWelcomePolicyService, WelcomePolicyService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IContractTemplateService, ContractTemplateService>();
+builder.Services.AddScoped<ISubscriptionFeePolicyService, SubscriptionFeePolicyService>();
 builder.Services.AddScoped<ICreditAdjustmentService, CreditAdjustmentService>();
 
 // Integration partners (Epic 6)
@@ -149,6 +151,18 @@ else
     var webRootPath = builder.Environment.WebRootPath
         ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
     builder.Services.AddSingleton<IImageStorageService>(new LocalStorageImageService(webRootPath));
+}
+
+// Document storage (signed contracts) — same MSA/Local toggle as images
+if (imageStorageMode.Equals("MSA", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<IDocumentStorageService, MsaDocumentStorageService>();
+}
+else
+{
+    var documentWebRootPath = builder.Environment.WebRootPath
+        ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+    builder.Services.AddSingleton<IDocumentStorageService>(new LocalStorageDocumentService(documentWebRootPath));
 }
 
 // JWT Authentication

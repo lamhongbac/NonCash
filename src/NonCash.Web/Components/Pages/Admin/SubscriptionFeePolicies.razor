@@ -1,0 +1,269 @@
+@page "/admin/subscription-fee-policies"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Subscription Fee Policies</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Subscription Fee Policies</MudText>
+
+<MudText Typo="Typo.body2" Class="mb-4" Color="Color.Surface">
+    Define date-ranged subscription fee policies. The contract will use the active policy effective on the contract date.
+    If <strong>Is Free</strong> is checked, the amount is ignored. At least one active policy is required before sending a contract.
+</MudText>
+
+@if (_policies.Any() && !_policies.Any(p => p.IsActive && p.EffectiveFrom <= DateTime.Today && (p.EffectiveTo == null || p.EffectiveTo >= DateTime.Today)))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        No active subscription fee policy covers today's date. Contracts cannot be sent until an active policy is created.
+    </MudAlert>
+}
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudSwitch T="bool" @bind-Value="_includeInactive" Color="Color.Primary" Label="Show inactive" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadPolicies">Refresh</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="NewPolicy">New Policy</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_policies" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Fee</MudTh>
+                <MudTh>Commitment (mo)</MudTh>
+                <MudTh>Effective From</MudTh>
+                <MudTh>Effective To</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Fee">@(context.IsFree ? "Free" : $"{context.AmountVnd:N0} VND")</MudTd>
+                <MudTd DataLabel="Commitment">@context.MinimumCommitmentMonths</MudTd>
+                <MudTd DataLabel="Effective From">@context.EffectiveFrom.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Effective To">@(context.EffectiveTo?.ToString("yyyy-MM-dd") ?? "∞")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditPolicy(context)" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@if (_editingPolicy != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">@(_editingPolicy.Id == Guid.Empty ? "New Policy" : $"Edit Policy — {_editingPolicy.Name}")</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_editingPolicy.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_editingPolicy.IsActive" Color="Color.Success" Label="Active" />
+                <MudSwitch T="bool" @bind-Value="_editingPolicy.IsFree" Color="Color.Info" Label="Is Free" Class="ml-4" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_editingPolicy.AmountVnd" Label="Amount (VND)" Variant="Variant.Outlined" Min="0"
+                                 Disabled="_editingPolicy.IsFree" Format="N0" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_editingPolicy.MinimumCommitmentMonths" Label="Minimum Commitment (months)" Variant="Variant.Outlined" Min="1" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_editingPolicy.EffectiveFrom" Label="Effective From" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_editingPolicy.EffectiveTo" Label="Effective To (optional)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePolicy" Disabled="_submitting">Save</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _editingPolicy = null">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = false;
+    private bool _submitting = false;
+    private bool _includeInactive = false;
+
+    private List<SubscriptionFeePolicyDto> _policies = new();
+    private SubscriptionFeePolicyEditModel? _editingPolicy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            AuthState.NavigateToLogin();
+            return;
+        }
+        await LoadPolicies();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadPolicies()
+    {
+        _loading = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/subscription-fee-policies?includeInactive={_includeInactive}");
+            if (resp.IsSuccessStatusCode)
+                _policies = await resp.Content.ReadFromJsonAsync<List<SubscriptionFeePolicyDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load subscription fee policies.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private void NewPolicy()
+    {
+        _editingPolicy = new SubscriptionFeePolicyEditModel
+        {
+            EffectiveFrom = DateTime.Today,
+            MinimumCommitmentMonths = 12
+        };
+    }
+
+    private void EditPolicy(SubscriptionFeePolicyDto p)
+    {
+        _editingPolicy = new SubscriptionFeePolicyEditModel
+        {
+            Id = p.Id,
+            Name = p.Name,
+            AmountVnd = p.AmountVnd,
+            IsFree = p.IsFree,
+            MinimumCommitmentMonths = p.MinimumCommitmentMonths,
+            EffectiveFrom = p.EffectiveFrom,
+            EffectiveTo = p.EffectiveTo,
+            IsActive = p.IsActive
+        };
+    }
+
+    private async Task SavePolicy()
+    {
+        if (_editingPolicy == null) return;
+        if (string.IsNullOrWhiteSpace(_editingPolicy.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+        if (!_editingPolicy.EffectiveFrom.HasValue)
+        {
+            Snackbar.Add("Effective From is required.", Severity.Warning);
+            return;
+        }
+        if (_editingPolicy.EffectiveTo.HasValue && _editingPolicy.EffectiveTo.Value < _editingPolicy.EffectiveFrom.Value)
+        {
+            Snackbar.Add("Effective To must be on or after Effective From.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                _editingPolicy.Name,
+                _editingPolicy.AmountVnd,
+                _editingPolicy.IsFree,
+                _editingPolicy.MinimumCommitmentMonths,
+                EffectiveFrom = _editingPolicy.EffectiveFrom.Value,
+                _editingPolicy.EffectiveTo,
+                _editingPolicy.IsActive
+            };
+
+            var resp = _editingPolicy.Id == Guid.Empty
+                ? await SendAsync(HttpMethod.Post, "api/v1/subscription-fee-policies", payload)
+                : await SendAsync(HttpMethod.Put, $"api/v1/subscription-fee-policies/{_editingPolicy.Id}", payload);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Subscription fee policy saved.", Severity.Success);
+                _editingPolicy = null;
+                await LoadPolicies();
+            }
+            else
+            {
+                var errJson = await resp.Content.ReadAsStringAsync();
+                var errMessage = TryParseError(errJson) ?? errJson;
+                Snackbar.Add($"Save failed: {errMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private static string? TryParseError(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("error", out var errorProp))
+                return errorProp.GetString();
+        }
+        catch
+        {
+            // ignored
+        }
+        return null;
+    }
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class SubscriptionFeePolicyDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public decimal AmountVnd { get; set; }
+        public bool IsFree { get; set; }
+        public int MinimumCommitmentMonths { get; set; }
+        public DateTime EffectiveFrom { get; set; }
+        public DateTime? EffectiveTo { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private class SubscriptionFeePolicyEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public decimal AmountVnd { get; set; }
+        public bool IsFree { get; set; }
+        public int MinimumCommitmentMonths { get; set; } = 12;
+        public DateTime? EffectiveFrom { get; set; } = DateTime.Today;
+        public DateTime? EffectiveTo { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

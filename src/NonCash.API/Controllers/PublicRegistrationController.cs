@@ -71,4 +71,23 @@ public class PublicRegistrationController : ControllerBase
             status.ReviewNotes,
             status.HasFirstBrandDeclaration));
     }
+
+    [HttpPost("register/{requestId:guid}/confirm-contract")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ConfirmContract(Guid requestId, [FromBody] ConfirmContractDto dto, CancellationToken cancellationToken)
+    {
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _registrationService.ConfirmContractAsync(
+            requestId, dto.Token, clientIp, cancellationToken);
+
+        if (!result.Success)
+            return BadRequest(new { error = result.ErrorMessage });
+
+        return Ok(new { message = "Contract confirmed successfully." });
+    }
+}
+
+public class ConfirmContractDto
+{
+    public string Token { get; set; } = string.Empty;
 }

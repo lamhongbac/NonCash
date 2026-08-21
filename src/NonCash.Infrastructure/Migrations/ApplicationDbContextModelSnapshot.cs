@@ -236,6 +236,18 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("contact_email");
 
+                    b.Property<string>("ContractConfirmationToken")
+                        .HasColumnType("text")
+                        .HasColumnName("contract_confirmation_token");
+
+                    b.Property<DateTime?>("ContractConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("contract_confirmed_at");
+
+                    b.Property<string>("ContractConfirmedByIp")
+                        .HasColumnType("text")
+                        .HasColumnName("contract_confirmed_by_ip");
+
                     b.Property<string>("ContractFileUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -250,6 +262,10 @@ namespace NonCash.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("contract_status");
+
+                    b.Property<Guid?>("ContractTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_template_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -330,6 +346,8 @@ namespace NonCash.Infrastructure.Migrations
 
                     b.HasIndex("ContractStatus");
 
+                    b.HasIndex("ContractTemplateId");
+
                     b.HasIndex("ReviewedByUserId");
 
                     b.HasIndex("Status");
@@ -339,6 +357,60 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("WelcomePolicyTemplateId");
 
                     b.ToTable("business_registration_requests", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.ContractTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("HtmlTemplate")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("html_template");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasDatabaseName("IX_contract_templates_is_default")
+                        .HasFilter("is_default = true");
+
+                    b.ToTable("contract_templates", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.CreditAdjustmentRequest", b =>
@@ -1349,6 +1421,74 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("settlement_entries", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.SubscriptionFeePolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AmountVnd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount_vnd");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateTime?>("EffectiveTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_to");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsFree")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_free");
+
+                    b.Property<int>("MinimumCommitmentMonths")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(12)
+                        .HasColumnName("minimum_commitment_months");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "EffectiveFrom", "EffectiveTo")
+                        .HasDatabaseName("IX_subscription_fee_policies_effective");
+
+                    b.ToTable("subscription_fee_policies", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.UserAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2208,6 +2348,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasForeignKey("BusinessId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("NonCash.Core.Entities.ContractTemplate", "ContractTemplate")
+                        .WithMany()
+                        .HasForeignKey("ContractTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("NonCash.Core.Entities.UserAccount", "ReviewedBy")
                         .WithMany()
                         .HasForeignKey("ReviewedByUserId")
@@ -2226,6 +2371,8 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Brand");
 
                     b.Navigation("Business");
+
+                    b.Navigation("ContractTemplate");
 
                     b.Navigation("ReviewedBy");
 

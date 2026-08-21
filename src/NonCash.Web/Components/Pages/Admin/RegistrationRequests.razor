@@ -1,4 +1,5 @@
 @page "/admin/registration-requests"
+@using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -16,6 +17,13 @@
     <MudButton Variant="@(_filter == "pending-review" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("pending-review"))">Pending Review</MudButton>
     <MudButton Variant="@(_filter == "all" ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" OnClick="@(() => FilterChanged("all"))">All Requests</MudButton>
 </MudStack>
+
+@if (!_hasActiveSubscriptionPolicy)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        No active subscription fee policy exists for today. Please create one in <strong>Subscription Fee Policies</strong> before sending contracts.
+    </MudAlert>
+}
 
 @if (_loading)
 {
@@ -57,13 +65,13 @@ else
                             @if (req.ContractStatus == "None")
                             {
                                 <MudAlert Severity="Severity.Warning" Class="mb-2">Contract Not Sent</MudAlert>
-                                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenSendContractDialog(req))">
+                                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => _ = OpenSendContractDialog(req))">
                                     <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" Class="mr-1" /> Send Contract
                                 </MudButton>
                             }
                             else if (req.ContractStatus == "Sent")
                             {
-                                <MudAlert Severity="Severity.Info" Class="mb-2">Contract Sent @(!string.IsNullOrEmpty(req.ContractSentAt) ? $"at {req.ContractSentAt}" : "")</MudAlert>
+                                <MudAlert Severity="Severity.Info" Class="mb-2">Contract Sent @(!string.IsNullOrEmpty(req.ContractSentAt) ? $"at {req.ContractSentAt}" : "") — awaiting business confirmation</MudAlert>
                                 <MudStack Row="true" Spacing="2">
                                     <MudButton Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => PrintContractAsync(req))">
                                         <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" Class="mr-1" /> Print
@@ -73,9 +81,21 @@ else
                                     </MudButton>
                                 </MudStack>
                             }
+                            else if (req.ContractStatus == "Confirmed")
+                            {
+                                <MudAlert Severity="Severity.Success" Class="mb-2">Contract Confirmed by Business</MudAlert>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
+                                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
+                                    </MudButton>
+                                    <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => OpenRejectDialog(req))">
+                                        <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" Class="mr-1" /> Reject
+                                    </MudButton>
+                                </MudStack>
+                            }
                             else if (req.ContractStatus == "Signed")
                             {
-                                <MudAlert Severity="Severity.Success" Class="mb-2">Contract Signed</MudAlert>
+                                <MudAlert Severity="Severity.Success" Class="mb-2">Contract Signed (Uploaded)</MudAlert>
                                 <MudStack Row="true" Spacing="2">
                                     <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
                                         <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
@@ -112,7 +132,7 @@ else
     <DialogContent>
         <MudStack Spacing="2">
             <MudAlert Severity="Severity.Info" Dense="true">
-                Select the welcome-grant policy to attach to the contract. The business must sign and return the hardcopy before you can approve.
+                Select the welcome-grant policy to attach to the contract. The business can confirm acceptance online, or the admin can upload a signed hardcopy.
             </MudAlert>
 
             <MudSelect T="Guid?" @bind-Value="_selectedTemplateId" Label="Welcome policy template" Variant="Variant.Outlined"
@@ -142,14 +162,18 @@ else
     <DialogContent>
         <MudStack Spacing="2">
             <MudAlert Severity="Severity.Info" Dense="true">
-                Enter the URL/path where the signed contract file is stored. After uploading, the request can be approved or rejected.
+                Upload the signed contract as a PDF or image. This is optional if the business has already confirmed online.
             </MudAlert>
-            <MudTextField @bind-Value="_contractFileUrl" Label="Contract file URL" Variant="Variant.Outlined" Required="true" />
+            <MudFileUpload T="IBrowserFile" @bind-Value="_signedContractFile" Accept=".pdf,.jpg,.jpeg,.png" />
+            @if (_signedContractFile != null)
+            {
+                <MudText Typo="Typo.body2">Selected: @_signedContractFile.Name (@((_signedContractFile.Size / 1024.0 / 1024.0).ToString("0.##")) MB)</MudText>
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
         <MudButton Variant="Variant.Text" OnClick="CloseDialog">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ConfirmUploadSignedContract" Disabled="_submitting">Upload</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ConfirmUploadSignedContract" Disabled="_submitting || _signedContractFile == null">Upload</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -195,6 +219,7 @@ else
     private bool _loading = true;
     private bool _submitting = false;
     private string _filter = "pending-contract";
+    private bool _hasActiveSubscriptionPolicy = false;
 
     private bool _showSendContractDialog = false;
     private bool _showUploadContractDialog = false;
@@ -203,7 +228,7 @@ else
     private RegistrationRequestItem? _selectedRequest;
     private Guid? _selectedTemplateId;
     private string _reviewNotes = "";
-    private string _contractFileUrl = "";
+    private IBrowserFile? _signedContractFile;
 
     private int _resolvedCredits => _selectedTemplateId.HasValue
         ? (_templates.FirstOrDefault(t => t.Id == _selectedTemplateId.Value)?.WelcomeCredits ?? _defaultTemplate?.WelcomeCredits ?? 0)
@@ -228,6 +253,25 @@ else
 
         await LoadTemplates();
         await LoadRequests();
+        await CheckActiveSubscriptionPolicyAsync();
+    }
+
+    private async Task CheckActiveSubscriptionPolicyAsync()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var request = new HttpRequestMessage(HttpMethod.Get, "api/v1/subscription-fee-policies/effective");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            _hasActiveSubscriptionPolicy = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            _hasActiveSubscriptionPolicy = false;
+        }
     }
 
     private async Task FilterChanged(string value)
@@ -334,8 +378,15 @@ else
         }
     }
 
-    private void OpenSendContractDialog(RegistrationRequestItem item)
+    private async Task OpenSendContractDialog(RegistrationRequestItem item)
     {
+        await CheckActiveSubscriptionPolicyAsync();
+        if (!_hasActiveSubscriptionPolicy)
+        {
+            Snackbar.Add("No active subscription fee policy found. Please create one in Subscription Fee Policies before sending the contract.", Severity.Warning);
+            return;
+        }
+
         _selectedRequest = item;
         _selectedTemplateId = _defaultTemplate?.Id;
         _reviewNotes = "";
@@ -345,7 +396,7 @@ else
     private void OpenUploadContractDialog(RegistrationRequestItem item)
     {
         _selectedRequest = item;
-        _contractFileUrl = item.ContractFileUrl ?? "";
+        _signedContractFile = null;
         _showUploadContractDialog = true;
     }
 
@@ -372,7 +423,7 @@ else
         _selectedRequest = null;
         _selectedTemplateId = null;
         _reviewNotes = "";
-        _contractFileUrl = "";
+        _signedContractFile = null;
     }
 
     private async Task ConfirmSendContract()
@@ -423,9 +474,9 @@ else
     private async Task ConfirmUploadSignedContract()
     {
         if (_selectedRequest == null) return;
-        if (string.IsNullOrWhiteSpace(_contractFileUrl))
+        if (_signedContractFile == null)
         {
-            Snackbar.Add("Please enter the contract file URL.", Severity.Warning);
+            Snackbar.Add("Please select a signed contract file.", Severity.Warning);
             return;
         }
 
@@ -434,12 +485,42 @@ else
 
         try
         {
+            // Step 1: upload the file to the document storage endpoint.
+            using var content = new MultipartFormDataContent();
+            var fileStream = _signedContractFile.OpenReadStream(maxAllowedSize: 12 * 1024 * 1024);
+            var fileContent = new StreamContent(fileStream);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(_signedContractFile.ContentType);
+            content.Add(fileContent, "file", _signedContractFile.Name);
+            content.Add(new StringContent("signed_contracts"), "entity");
+            content.Add(new StringContent(_selectedRequest.RequestId.ToString()), "uniqueCode");
+
+            var uploadRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/upload/document") { Content = content };
+            if (!string.IsNullOrEmpty(token))
+                uploadRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var uploadResponse = await Http.SendAsync(uploadRequest);
+            if (!uploadResponse.IsSuccessStatusCode)
+            {
+                var uploadError = await uploadResponse.Content.ReadFromJsonAsync<UploadErrorResponse>();
+                Snackbar.Add(uploadError?.error ?? "Failed to upload the file.", Severity.Error);
+                return;
+            }
+
+            var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<UploadSuccessResponse>();
+            var fileUrl = uploadResult?.url;
+            if (string.IsNullOrWhiteSpace(fileUrl))
+            {
+                Snackbar.Add("Upload succeeded but no file URL was returned.", Severity.Error);
+                return;
+            }
+
+            // Step 2: attach the stored URL to the registration request.
             var request = new HttpRequestMessage(HttpMethod.Post,
                 $"api/v1/admin/registration-requests/{_selectedRequest.RequestId}/upload-signed-contract");
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            request.Content = JsonContent.Create(new { ContractFileUrl = _contractFileUrl });
+            request.Content = JsonContent.Create(new { ContractFileUrl = fileUrl });
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
             var response = await Http.SendAsync(request);
@@ -567,6 +648,18 @@ else
 
     private class ErrorResponse
     {
+        public string? error { get; set; }
+    }
+
+    private class UploadSuccessResponse
+    {
+        public bool success { get; set; }
+        public string? url { get; set; }
+    }
+
+    private class UploadErrorResponse
+    {
+        public bool success { get; set; }
         public string? error { get; set; }
     }
 }

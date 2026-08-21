@@ -43,6 +43,8 @@ public class AdminRegistrationRequestDto
     public string? ContractFileUrl { get; set; }
     public Guid? WelcomePolicyTemplateId { get; set; }
     public string? WelcomePolicyTemplateName { get; set; }
+    public Guid? ContractTemplateId { get; set; }
+    public string? ContractTemplateName { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewNotes { get; set; }

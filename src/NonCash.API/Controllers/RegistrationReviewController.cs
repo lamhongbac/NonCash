@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NonCash.API.DTOs;
+using NonCash.Core.Configuration;
 using NonCash.Core.Interfaces;
 using NonCash.Core.Services;
 
@@ -14,15 +15,18 @@ public class RegistrationReviewController : ControllerBase
     private readonly IRegistrationService _registrationService;
     private readonly IContractService _contractService;
     private readonly IWelcomePolicyService _welcomePolicyService;
+    private readonly CreditConfig _creditConfig;
 
     public RegistrationReviewController(
         IRegistrationService registrationService,
         IContractService contractService,
-        IWelcomePolicyService welcomePolicyService)
+        IWelcomePolicyService welcomePolicyService,
+        CreditConfig creditConfig)
     {
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
         _contractService = contractService ?? throw new ArgumentNullException(nameof(contractService));
         _welcomePolicyService = welcomePolicyService ?? throw new ArgumentNullException(nameof(welcomePolicyService));
+        _creditConfig = creditConfig ?? throw new ArgumentNullException(nameof(creditConfig));
     }
 
     [HttpGet("pending-review")]
@@ -62,14 +66,19 @@ public class RegistrationReviewController : ControllerBase
         if (template == null)
             return NotFound(new { error = "Welcome policy template not found." });
 
-        var contractHtml = await _contractService.GenerateContractHtmlAsync(
+        var contractData = new ContractData(
             request.BusinessName,
             request.FirstBrandName ?? string.Empty,
             request.TaxCode,
             request.RepresentativeName,
             template.Name,
             template.WelcomeCredits,
-            template.WelcomeCreditExpiryMonths,
+            template.WelcomeCreditExpiryMonths);
+
+        var contractHtml = await _contractService.GenerateContractHtmlAsync(
+            contractData,
+            _creditConfig,
+            request.ContractTemplateId,
             cancellationToken);
 
         return Content(contractHtml, "text/html");
@@ -151,6 +160,8 @@ public class RegistrationReviewController : ControllerBase
         ContractFileUrl = s.ContractFileUrl,
         WelcomePolicyTemplateId = s.WelcomePolicyTemplateId,
         WelcomePolicyTemplateName = s.WelcomePolicyTemplateName,
+        ContractTemplateId = s.ContractTemplateId,
+        ContractTemplateName = s.ContractTemplateName,
         SubmittedAt = s.SubmittedAt,
         ReviewedAt = s.ReviewedAt,
         ReviewNotes = s.ReviewNotes,

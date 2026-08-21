@@ -12,6 +12,7 @@ public enum ContractStatus
 {
     None,
     Sent,
+    Confirmed,
     Signed
 }
 
@@ -49,13 +50,20 @@ public class BusinessRegistrationRequest : BaseEntity
 
     // Contract workflow (Option A): policy is selected and contract is sent before approval.
     public Guid? WelcomePolicyTemplateId { get; set; }
+    public Guid? ContractTemplateId { get; set; }
     public ContractStatus ContractStatus { get; set; } = ContractStatus.None;
     public DateTime? ContractSentAt { get; set; }
     public string? ContractFileUrl { get; set; }
+
+    // Digital confirmation alternative to signed contract upload.
+    public string? ContractConfirmationToken { get; set; }
+    public DateTime? ContractConfirmedAt { get; set; }
+    public string? ContractConfirmedByIp { get; set; }
 
     public Business? Business { get; set; }
     public Brand? Brand { get; set; }
     public UserAccount? SubmittedBy { get; set; }
     public UserAccount? ReviewedBy { get; set; }
     public WelcomeGrantPolicyTemplate? WelcomePolicyTemplate { get; set; }
+    public ContractTemplate? ContractTemplate { get; set; }
 }

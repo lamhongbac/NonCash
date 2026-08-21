@@ -1,0 +1,302 @@
+@page "/admin/contract-templates"
+@attribute [StreamRendering]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+<PageTitle>Contract Templates</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Contract Templates</MudText>
+
+<MudText Typo="Typo.body2" Class="mb-4" Color="Color.Surface">
+    Edit the HTML contract used for business registration agreements. The active default template is used automatically
+    when an admin sends a contract. Placeholders such as <code>{{BusinessName}}</code>, <code>{{SubscriptionFeeVnd}}</code>,
+    and <code>{{MinimumCommitmentMonths}}</code> are replaced at render time.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudSwitch T="bool" @bind-Value="_includeInactive" Color="Color.Primary" Label="Show inactive" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadTemplates">Refresh</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="NewTemplate">New Template</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_templates" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    @context.Name
+                    @if (context.IsDefault)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">Default</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditTemplate(context)" />
+                    @if (!context.IsDefault)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Info"
+                                       title="Set as default" OnClick="() => SetDefault(context)" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@if (_editingTemplate != null)
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">@(_editingTemplate.Id == Guid.Empty ? "New Template" : $"Edit Template — {_editingTemplate.Name}")</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_editingTemplate.Name" Label="Name" Variant="Variant.Outlined" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_editingTemplate.IsActive" Color="Color.Success" Label="Active" />
+                <MudSwitch T="bool" @bind-Value="_editingTemplate.IsDefault" Color="Color.Info" Label="Set as default" Class="ml-4" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Available placeholders</MudText>
+                <MudText Typo="Typo.caption" Class="mb-2 d-block">
+                    <code>{{BusinessName}}</code> <code>{{BrandName}}</code> <code>{{TaxCode}}</code> <code>{{RepresentativeName}}</code>
+                    <code>{{PolicyTemplateName}}</code> <code>{{WelcomeCredits}}</code> <code>{{WelcomeCreditExpiryMonths}}</code>
+                    <code>{{WelcomeCreditExpiryText}}</code> <code>{{SubscriptionFeeVnd}}</code> <code>{{MinimumCommitmentMonths}}</code>
+                    <code>{{PricePerCreditVnd}}</code> <code>{{Today}}</code>
+                </MudText>
+                <MudTextField @bind-Value="_editingTemplate.HtmlTemplate" Label="HTML Template" Variant="Variant.Outlined"
+                              Lines="20" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTemplate" Disabled="_submitting">Save</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _editingTemplate = null">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = false;
+    private bool _submitting = false;
+    private bool _includeInactive = false;
+
+    private List<ContractTemplateDto> _templates = new();
+    private ContractTemplateEditModel? _editingTemplate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsLoggedIn || !string.Equals(AuthState.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            AuthState.NavigateToLogin();
+            return;
+        }
+        await LoadTemplates();
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? payload = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        if (payload != null)
+            req.Content = JsonContent.Create(payload);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    private async Task LoadTemplates()
+    {
+        _loading = true;
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, $"api/v1/contract-templates?includeInactive={_includeInactive}");
+            if (resp.IsSuccessStatusCode)
+                _templates = await resp.Content.ReadFromJsonAsync<List<ContractTemplateDto>>() ?? new();
+            else
+                Snackbar.Add("Failed to load contract templates.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private void NewTemplate()
+    {
+        _editingTemplate = new ContractTemplateEditModel
+        {
+            HtmlTemplate = GetDefaultHtmlTemplate()
+        };
+    }
+
+    private void EditTemplate(ContractTemplateDto t)
+    {
+        _editingTemplate = new ContractTemplateEditModel
+        {
+            Id = t.Id,
+            Name = t.Name,
+            HtmlTemplate = t.HtmlTemplate,
+            IsActive = t.IsActive,
+            IsDefault = t.IsDefault
+        };
+    }
+
+    private async Task SaveTemplate()
+    {
+        if (_editingTemplate == null) return;
+        if (string.IsNullOrWhiteSpace(_editingTemplate.Name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editingTemplate.HtmlTemplate))
+        {
+            Snackbar.Add("HTML template is required.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            var payload = new
+            {
+                _editingTemplate.Name,
+                _editingTemplate.HtmlTemplate,
+                _editingTemplate.IsActive,
+                _editingTemplate.IsDefault
+            };
+
+            var resp = _editingTemplate.Id == Guid.Empty
+                ? await SendAsync(HttpMethod.Post, "api/v1/contract-templates", payload)
+                : await SendAsync(HttpMethod.Put, $"api/v1/contract-templates/{_editingTemplate.Id}", payload);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Contract template saved.", Severity.Success);
+                _editingTemplate = null;
+                await LoadTemplates();
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Save failed: {err}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally { _submitting = false; }
+    }
+
+    private async Task SetDefault(ContractTemplateDto t)
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Post, $"api/v1/contract-templates/{t.Id}/set-default");
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{t.Name}' is now the default contract template.", Severity.Success);
+                await LoadTemplates();
+            }
+            else
+            {
+                Snackbar.Add("Set default failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string GetDefaultHtmlTemplate()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>1. Business Information</h2>");
+        sb.AppendLine("    <p><strong>Business Name:</strong> {{BusinessName}}</p>");
+        sb.AppendLine("    <p><strong>Brand Name:</strong> {{BrandName}}</p>");
+        sb.AppendLine("    <p><strong>Tax Code:</strong> {{TaxCode}}</p>");
+        sb.AppendLine("    <p><strong>Representative:</strong> {{RepresentativeName}}</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>2. Welcome Policy</h2>");
+        sb.AppendLine("    <p><strong>Policy:</strong> {{PolicyTemplateName}}</p>");
+        sb.AppendLine("    <p><strong>Welcome Credits:</strong> {{WelcomeCredits}}</p>");
+        sb.AppendLine("    <p><strong>Credit Expiry:</strong> {{WelcomeCreditExpiryText}}</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>3. Pricing</h2>");
+        sb.AppendLine("    <p>Credit pricing is set at the Brand level. Each Brand operated under this Business may have its own unit price, credit expiry, and related commercial terms. The applicable pricing for each Brand is listed in <strong>Appendix A — Brand Pricing</strong>, which forms part of this agreement.</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>4. Subscription Fee</h2>");
+        sb.AppendLine("    <p>During the MVP period, the Platform Subscription Fee is waived (0 VND). After the MVP period, the Business shall pay a Platform Subscription Fee of <strong>{{SubscriptionFeeVnd}} VND</strong> per <strong>{{MinimumCommitmentMonths}}-month</strong> term, unless otherwise agreed in writing by both parties.</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>5. Terms and Conditions</h2>");
+        sb.AppendLine("    <p>The business agrees to use the NonCash platform in accordance with the platform terms and conditions. Settlement, redemption, and credit rules are governed by the platform policies published at the time of use.</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("    <h2>Appendix A — Brand Pricing</h2>");
+        sb.AppendLine("    <p><strong>Brand:</strong> {{BrandName}}</p>");
+        sb.AppendLine("    <p>Pricing details for this Brand will be provided in a separate pricing appendix agreed by both parties.</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("");
+        sb.AppendLine("<div class='signature'>");
+        sb.AppendLine("    <div class='signature-box'>");
+        sb.AppendLine("        <strong>Platform Representative</strong><br/>NonCash Platform");
+        sb.AppendLine("    </div>");
+        sb.AppendLine("    <div class='signature-box'>");
+        sb.AppendLine("        <strong>Business Representative</strong><br/>{{RepresentativeName}}");
+        sb.AppendLine("    </div>");
+        sb.AppendLine("</div>");
+        return sb.ToString();
+    }
+
+    // ── Local DTOs ───────────────────────────────────────────────
+    private class ContractTemplateDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string HtmlTemplate { get; set; } = "";
+        public bool IsActive { get; set; }
+        public bool IsDefault { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class ContractTemplateEditModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string HtmlTemplate { get; set; } = "";
+        public bool IsActive { get; set; } = true;
+        public bool IsDefault { get; set; }
+    }
+}

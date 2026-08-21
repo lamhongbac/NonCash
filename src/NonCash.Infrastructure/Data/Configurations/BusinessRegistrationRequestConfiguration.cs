@@ -104,6 +104,13 @@ public class BusinessRegistrationRequestConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(r => r.WelcomePolicyTemplateId);
 
+        builder.HasOne(r => r.ContractTemplate)
+            .WithMany()
+            .HasForeignKey(r => r.ContractTemplateId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(r => r.ContractTemplateId);
+
         builder.Property(r => r.CreatedAt).IsRequired();
         builder.Property(r => r.UpdatedAt).IsRequired(false);
     }

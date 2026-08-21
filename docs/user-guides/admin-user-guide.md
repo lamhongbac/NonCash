@@ -135,8 +135,9 @@ A self-registered business moves through these stages:
 | Stage | Meaning | Admin Action |
 |---|---|---|
 | `Submitted` | Business registered; contract not yet sent. | Send contract |
-| `Contract Sent` | Contract emailed to the business; awaiting signature. | Print contract, upload signed copy |
-| `Contract Signed` | Signed hardcopy received. | Approve or reject |
+| `Contract Sent` | Contract emailed to the business; awaiting confirmation. | Print contract, upload signed copy (optional) |
+| `Contract Confirmed` | Business accepted the contract online. | Approve or reject |
+| `Contract Signed` | Signed hardcopy uploaded by admin. | Approve or reject |
 | `Approved` | Business activated. | — |
 | `Rejected` | Registration declined. | — |
 
@@ -167,20 +168,42 @@ The system:
 
 - Maps the selected policy template to the request.
 - Generates a platform agreement (HTML) from the policy terms and business details.
+- Generates a confirmation key and includes it in the email.
 - Emails the contract to the business contact using the **Contract Sent** template.
 - Sets the request contract status to `Sent`.
 
+The business can then confirm acceptance online. Once confirmed, the request moves to **Pending Review** automatically.
+
 > **Tip:** Click **Print** on a request with a sent contract to open the agreement in a new browser tab for printing or saving as PDF.
 
-### 4.5 Upload Signed Contract
+### 4.5 Business Confirms the Contract
+
+The business contact receives an email containing:
+
+- The platform agreement.
+- A one-click **Confirm Agreement** link.
+- A confirmation key as a fallback.
+
+To confirm:
+
+1. Click the confirmation link, or visit `/confirm-contract`.
+2. Enter the request ID and confirmation key (pre-filled if using the link).
+3. Check **I agree to the platform agreement terms**.
+4. Click **Confirm Agreement**.
+
+The system sets the contract status to `Confirmed`. The request appears under **Pending Review**.
+
+### 4.6 Upload Signed Contract (Optional)
+
+If the business provides a signed hardcopy instead of confirming online:
 
 1. From **Pending Contract**, click **Upload Signed Contract** on a request whose contract status is `Sent`.
-2. Enter the file URL or path where the signed hardcopy is stored.
+2. Choose the signed contract file (PDF, JPG, or PNG, up to 10 MB).
 3. Click **Upload**.
 
-The system sets the contract status to `Signed`. The request now appears under **Pending Review** and can be approved or rejected.
+The system stores the file, sets the contract status to `Signed`, and the request appears under **Pending Review** where it can be approved or rejected.
 
-### 4.6 Approve a Registration
+### 4.7 Approve a Registration
 
 1. From **Pending Review**, click **Approve**.
 2. Optionally add review notes.
@@ -197,7 +220,7 @@ The system atomically:
 
 > **Note:** The **Business Activated** template is used only for approved self-registrations. Businesses created directly by an Admin receive the **Brand Created** email instead.
 
-### 4.7 Reject a Registration
+### 4.8 Reject a Registration
 
 1. From **Pending Review**, click **Reject**.
 2. Enter **Review Notes** (minimum 10 characters).

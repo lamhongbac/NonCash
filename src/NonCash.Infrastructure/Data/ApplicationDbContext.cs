@@ -38,6 +38,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<CreditPricingPolicy> CreditPricingPolicies => Set<CreditPricingPolicy>();
     public DbSet<WelcomeGrantPolicy> WelcomeGrantPolicies => Set<WelcomeGrantPolicy>();
     public DbSet<WelcomeGrantPolicyTemplate> WelcomeGrantPolicyTemplates => Set<WelcomeGrantPolicyTemplate>();
+    public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
+    public DbSet<SubscriptionFeePolicy> SubscriptionFeePolicies => Set<SubscriptionFeePolicy>();
     public DbSet<BrandGroup> BrandGroups => Set<BrandGroup>();
     public DbSet<BrandGroupMember> BrandGroupMembers => Set<BrandGroupMember>();
     public DbSet<CreditBatch> CreditBatches => Set<CreditBatch>();
