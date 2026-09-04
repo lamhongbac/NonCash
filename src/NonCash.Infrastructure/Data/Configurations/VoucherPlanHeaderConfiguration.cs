@@ -1,11 +1,31 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NonCash.Core.Entities;
+using System.Text.Json;
 
 namespace NonCash.Infrastructure.Data.Configurations;
 
 public class VoucherPlanHeaderConfiguration : IEntityTypeConfiguration<VoucherPlanHeader>
 {
+    // Epic 3: VoucherScope is persisted as a single jsonb column via a value converter.
+    // A converter (rather than an owned-entity ToJson mapping) keeps this provider-agnostic:
+    // Npgsql stores real jsonb, while the SQLite/InMemory integration-test providers store it
+    // as text/in-memory. PascalCase keys match System.Text.Json "General" defaults.
+    private static readonly JsonSerializerOptions ScopeJsonOptions = new(JsonSerializerDefaults.General);
+
+    private static readonly ValueConverter<VoucherScope, string> ScopeConverter = new(
+        v => JsonSerializer.Serialize(v, ScopeJsonOptions),
+        v => string.IsNullOrWhiteSpace(v)
+            ? new VoucherScope()
+            : JsonSerializer.Deserialize<VoucherScope>(v, ScopeJsonOptions) ?? new VoucherScope());
+
+    private static readonly ValueComparer<VoucherScope> ScopeComparer = new(
+        (a, b) => JsonSerializer.Serialize(a, ScopeJsonOptions) == JsonSerializer.Serialize(b, ScopeJsonOptions),
+        v => JsonSerializer.Serialize(v, ScopeJsonOptions).GetHashCode(),
+        v => JsonSerializer.Deserialize<VoucherScope>(JsonSerializer.Serialize(v, ScopeJsonOptions), ScopeJsonOptions)!);
+
     public void Configure(EntityTypeBuilder<VoucherPlanHeader> builder)
     {
         builder.ToTable("voucher_plan_headers");
@@ -66,29 +86,10 @@ public class VoucherPlanHeaderConfiguration : IEntityTypeConfiguration<VoucherPl
             .HasForeignKey(p => p.PreviousVersionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasMany(p => p.PlanOutlets)
-            .WithOne(po => po.Plan)
-            .HasForeignKey(po => po.PlanId)
-            .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-
-public class PlanOutletConfiguration : IEntityTypeConfiguration<PlanOutlet>
-{
-    public void Configure(EntityTypeBuilder<PlanOutlet> builder)
-    {
-        builder.ToTable("plan_outlets");
-
-        builder.HasKey(po => new { po.PlanId, po.OutletId });
-
-        builder.HasOne(po => po.Plan)
-            .WithMany(p => p.PlanOutlets)
-            .HasForeignKey(po => po.PlanId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasOne(po => po.Outlet)
-            .WithMany()
-            .HasForeignKey(po => po.OutletId)
-            .OnDelete(DeleteBehavior.Cascade);
+        // Epic 3: applicability scope stored as a single jsonb column ("scope") on the header,
+        // serialized via the provider-agnostic converter above (no separate table/join).
+        builder.Property(p => p.Scope)
+            .HasColumnType("jsonb")
+            .HasConversion(ScopeConverter, ScopeComparer);
     }
 }

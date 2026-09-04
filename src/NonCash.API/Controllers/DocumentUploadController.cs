@@ -34,6 +34,7 @@ public class DocumentUploadController : ControllerBase
         IFormFile file,
         [FromForm] string entity,
         [FromForm] string uniqueCode,
+        [FromForm] string fieldName,
         CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
@@ -43,12 +44,17 @@ public class DocumentUploadController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(entity))
         {
-            return BadRequest(new DocumentUploadResponse(false, Error: "The 'entity' field is required (e.g., 'signed_contracts')."));
+            return BadRequest(new DocumentUploadResponse(false, Error: "The 'entity' field is required (client table name, e.g., 'business_registration_requests')."));
         }
 
         if (string.IsNullOrWhiteSpace(uniqueCode))
         {
-            return BadRequest(new DocumentUploadResponse(false, Error: "The 'uniqueCode' field is required (e.g., '{requestId}')."));
+            return BadRequest(new DocumentUploadResponse(false, Error: "The 'uniqueCode' field is required (record id, e.g., '{requestId}')."));
+        }
+
+        if (string.IsNullOrWhiteSpace(fieldName))
+        {
+            return BadRequest(new DocumentUploadResponse(false, Error: "The 'fieldName' field is required (DB column storing the URL, e.g., 'contract_file_url')."));
         }
 
         await using var stream = file.OpenReadStream();
@@ -58,6 +64,7 @@ public class DocumentUploadController : ControllerBase
             file.ContentType,
             entity,
             uniqueCode,
+            fieldName,
             cancellationToken);
 
         if (!result.Success)

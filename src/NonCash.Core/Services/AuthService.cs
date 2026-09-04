@@ -10,17 +10,20 @@ public class AuthService : IAuthService
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly INotificationService _notificationService;
+    private readonly ICustomerRepository _customerRepository;
 
     public AuthService(
         IUserAccountRepository userRepository,
         IMemberAccountRepository memberRepository,
         IJwtTokenService jwtTokenService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        ICustomerRepository customerRepository)
     {
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
         _memberRepository = memberRepository ?? throw new ArgumentNullException(nameof(memberRepository));
         _jwtTokenService = jwtTokenService ?? throw new ArgumentNullException(nameof(jwtTokenService));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+        _customerRepository = customerRepository ?? throw new ArgumentNullException(nameof(customerRepository));
     }
 
     public async Task<AuthResult> LoginAsync(string username, string password, CancellationToken cancellationToken = default)
@@ -62,6 +65,13 @@ public class AuthService : IAuthService
             return new MemberAuthResult(false, ErrorMessage: "Account is pending activation.");
 
         if (member.Status == MemberAccountStatus.Locked)
+            return new MemberAuthResult(false, ErrorMessage: "Account is locked.");
+
+        // Matrix row 10 (O2): platform-blacklisted customers cannot log in. The customer's
+        // Status is read directly (NOT mirrored into MemberAccount.Status) so an
+        // un-blacklist restores login instantly (P4 reversibility).
+        var memberCustomer = await _customerRepository.GetByIdAsync(member.CustomerId, cancellationToken);
+        if (memberCustomer?.Status == CustomerStatus.Blacklisted)
             return new MemberAuthResult(false, ErrorMessage: "Account is locked.");
 
         if (!VerifyPassword(password, member.PasswordHash))

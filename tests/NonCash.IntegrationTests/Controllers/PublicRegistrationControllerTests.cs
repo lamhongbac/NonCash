@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NonCash.API.Controllers;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 using NonCash.Core.Services;
@@ -19,7 +21,7 @@ public class PublicRegistrationControllerTests
         var userAccountRepository = new FakeUserAccountRepository();
         _requestRepository = new FakeBusinessRegistrationRequestRepository();
         var notificationService = new ConsoleNotificationService();
-        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService);
+        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService, new FakeCustomerRepository());
 
         _registrationService = new RegistrationService(
             new FakeBusinessRepository(),
@@ -182,6 +184,43 @@ public class PublicRegistrationControllerTests
         storedRequest.SubmittedByUserId.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Register_BlacklistedCustomer_Returns403()
+    {
+        // Matrix row 11 (gap #7): a platform-blacklisted customer cannot self-register
+        // a member account. Generic message — no blacklist detail leak.
+        // Arrange — an existing customer with the registered phone is blacklisted
+        var phone = "0909333333";
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(),
+            PhoneNumber = phone,
+            FullName = "Banned Customer",
+            Email = "banned@example.com",
+            Status = CustomerStatus.Blacklisted
+        };
+        var customerRepository = new FakeCustomerRepository(new[] { customer });
+        var memberRepository = new FakeMemberAccountRepository();
+        var authService = new AuthService(
+            new FakeUserAccountRepository(),
+            memberRepository,
+            new FakeJwtTokenService(),
+            new ConsoleNotificationService(),
+            customerRepository);
+        var customerService = new CustomerService(customerRepository, new FakeBrandCustomerRepository());
+        var controller = new MemberRegistrationController(customerService, customerRepository, memberRepository, authService);
+
+        var request = new MemberRegisterRequest("bannedmember", "Password@123", "Banned Customer", phone, "banned@example.com");
+
+        // Act
+        var result = await controller.Register(request, CancellationToken.None);
+
+        // Assert
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        memberRepository.Added.Should().BeEmpty();
+    }
+
     private class FakeBusinessRepository : IBusinessRepository
     {
         private readonly List<Business> _businesses = new();
@@ -283,6 +322,8 @@ public class PublicRegistrationControllerTests
 
     private class FakeMemberAccountRepository : IMemberAccountRepository
     {
+        public List<MemberAccount> Added { get; } = new();
+
         public Task<MemberAccount?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
         public Task<bool> UsernameExistsAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<MemberAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
@@ -290,9 +331,54 @@ public class PublicRegistrationControllerTests
         public Task<IEnumerable<MemberAccount>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<MemberAccount>>(new List<MemberAccount>());
         public Task<IEnumerable<MemberAccount>> FindAsync(Expression<Func<MemberAccount, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<MemberAccount>>(new List<MemberAccount>());
         public Task<int> CountAsync(Expression<Func<MemberAccount, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(0);
-        public Task<MemberAccount> AddAsync(MemberAccount entity, CancellationToken cancellationToken = default) => Task.FromResult(entity);
+        public Task<MemberAccount> AddAsync(MemberAccount entity, CancellationToken cancellationToken = default)
+        {
+            entity.Id = Guid.NewGuid();
+            Added.Add(entity);
+            return Task.FromResult(entity);
+        }
         public void Update(MemberAccount entity) { }
         public void Delete(MemberAccount entity) { }
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    // Stateful stub: tests seed customers (e.g. a blacklisted one); the rest is inert.
+    private class FakeCustomerRepository : ICustomerRepository
+    {
+        private readonly List<Customer> _customers;
+
+        public FakeCustomerRepository(IEnumerable<Customer>? customers = null)
+            => _customers = customers?.ToList() ?? new List<Customer>();
+
+        public Task<Customer?> GetByPhoneNumberAsync(string phoneNumber, CancellationToken cancellationToken = default) => Task.FromResult(_customers.FirstOrDefault(c => c.PhoneNumber == phoneNumber));
+        public Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) => Task.FromResult(_customers.FirstOrDefault(c => c.Email == email));
+        public Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken cancellationToken = default) => Task.FromResult(_customers.Any(c => c.PhoneNumber == phoneNumber));
+        public Task<bool> EmailExistsAsync(string email, Guid? excludeCustomerId = null, CancellationToken cancellationToken = default) => Task.FromResult(_customers.Any(c => c.Email == email && c.Id != excludeCustomerId));
+        public Task<IEnumerable<Customer>> SearchAsync(string? search, CustomerStatus? status, CancellationToken cancellationToken = default, Guid? brandId = null) => Task.FromResult<IEnumerable<Customer>>(_customers);
+        public Task<int> CountAsync(string? search, CustomerStatus? status, CancellationToken cancellationToken = default, Guid? brandId = null) => Task.FromResult(_customers.Count);
+        public Task<Customer?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(_customers.FirstOrDefault(c => c.Id == id));
+        public Task<IEnumerable<Customer>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Customer>>(_customers);
+        public Task<IEnumerable<Customer>> FindAsync(Expression<Func<Customer, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Customer>>(_customers.AsQueryable().Where(predicate).ToList());
+        public Task<int> CountAsync(Expression<Func<Customer, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(_customers.AsQueryable().Count(predicate));
+        public Task<Customer> AddAsync(Customer entity, CancellationToken cancellationToken = default)
+        {
+            entity.Id = Guid.NewGuid();
+            _customers.Add(entity);
+            return Task.FromResult(entity);
+        }
+        public void Update(Customer entity) { }
+        public void Delete(Customer entity) { }
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    // The register path never touches brand mappings (self-registered customers are
+    // platform assets until their first brand interaction — D2); inert ctor stub.
+    private class FakeBrandCustomerRepository : IBrandCustomerRepository
+    {
+        public Task EnsureAsync(Guid brandId, Guid customerId, BrandCustomerSource source, Guid? createdBy = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<BrandCustomer?> FindAsync(Guid brandId, Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult<BrandCustomer?>(null);
+        public Task<IReadOnlyList<BrandCustomer>> GetForBrandAsync(Guid brandId, IEnumerable<Guid> customerIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<BrandCustomer>>(new List<BrandCustomer>());
+        public Task<bool> IsBlockedAsync(Guid brandId, Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task SetBlockedAsync(Guid brandId, Guid customerId, bool blocked, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

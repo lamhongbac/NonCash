@@ -12,7 +12,8 @@ namespace NonCash.Infrastructure.Services;
 public class MsaImageStorageService : IImageStorageService
 {
     private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
-    private const string MediaType = "images";
+    // MSA MediaTypeEnum name (PascalCase), matching the proven MediaStorageDemo ("Images").
+    private const string MediaType = "Images";
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -65,7 +66,7 @@ public class MsaImageStorageService : IImageStorageService
 
         // Step 1: Delete previous files for this entity+uniqueCode (avoids orphaned files on MSA)
         _logger.LogDebug("MSA: Deleting previous media for entity={Entity}, uniqueCode={UniqueCode}", entity, uniqueCode);
-        var deleteResult = await _msaClient.DeleteAsync(entity, uniqueCode, MediaType);
+        var deleteResult = await _msaClient.DeleteAsync(entity, uniqueCode, "image", MediaType);
         if (!deleteResult)
         {
             _logger.LogWarning("MSA: Delete call returned non-success for entity={Entity}, uniqueCode={UniqueCode}. Continuing with upload.", entity, uniqueCode);
@@ -73,7 +74,9 @@ public class MsaImageStorageService : IImageStorageService
 
         // Step 2: Upload new file to MSA
         _logger.LogDebug("MSA: Uploading file for entity={Entity}, uniqueCode={UniqueCode}, fileName={FileName}", entity, uniqueCode, fileName);
-        var uploadResult = await _msaClient.UploadAsync(entity, uniqueCode, MediaType, stream, fileName);
+        // Images already encode the target field in uniqueCode (e.g. "{id}_cover_image"),
+        // so a stable FieldName is sufficient for MSA folder building here.
+        var uploadResult = await _msaClient.UploadAsync(entity, uniqueCode, "image", MediaType, stream, fileName);
 
         if (!uploadResult.IsSuccess)
         {
@@ -93,7 +96,8 @@ public class MsaImageStorageService : IImageStorageService
             return;
 
         _logger.LogDebug("MSA: Deleting media for entity={Entity}, uniqueCode={UniqueCode}", entity, uniqueCode);
-        var result = await _msaClient.DeleteAsync(entity, uniqueCode, MediaType);
+        // Empty fieldName = wildcard: delete all fields for this record.
+        var result = await _msaClient.DeleteAsync(entity, uniqueCode, "", MediaType);
         if (!result)
         {
             _logger.LogWarning("MSA: Delete returned non-success for entity={Entity}, uniqueCode={UniqueCode}", entity, uniqueCode);

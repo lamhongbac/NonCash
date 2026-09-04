@@ -25,7 +25,11 @@ public class EmailNotificationServiceTests
         _templateRenderer = Substitute.For<IEmailTemplateRenderer>();
         _emailLogRepository = Substitute.For<IRepository<EmailLog>>();
         _logger = Substitute.For<ILogger<EmailNotificationService>>();
-        _configuration = new ConfigurationBuilder().Build();
+        // Non-dev environment so tests exercise the real delivery path (SMTP host still empty → skipped).
+        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Environment:Name"] = "production"
+        }).Build();
         _smtpOptions = new SmtpOptions
         {
             Host = "", // Empty host → SendAsync will skip (no real SMTP in unit tests)
@@ -169,5 +173,38 @@ public class EmailNotificationServiceTests
         await _sut.NotifyAdminNewRegistrationAsync(Guid.NewGuid(), "TestCompany");
 
         await _templateRenderer.DidNotReceive().RenderAsync(Arg.Any<string>(), Arg.Any<Dictionary<string, string?>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendAsync_DevMode_SuppressesDeliveryEvenWithSmtpConfigured()
+    {
+        // Regression: dev mode must never deliver real email, even when SMTP is fully configured.
+        var devConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Environment:Name"] = "dev"
+        }).Build();
+        var sut = new EmailNotificationService(
+            Options.Create(new SmtpOptions
+            {
+                Host = "smtp.example.com",
+                Port = 587,
+                Username = "user",
+                Password = "pass",
+                FromAddress = "noreply@example.com"
+            }),
+            _userAccountRepository,
+            _templateRenderer,
+            _emailLogRepository,
+            devConfig,
+            _logger);
+        _templateRenderer.RenderAsync(Arg.Any<string>(), Arg.Any<Dictionary<string, string?>>(), Arg.Any<CancellationToken>())
+            .Returns("<html>rendered</html>");
+
+        await sut.NotifyPasswordResetAsync(new PasswordResetNotification("user@test.com", "John Doe", "token", DateTime.UtcNow.AddMinutes(30)));
+
+        // Suppressed attempt is audited instead of sent.
+        await _emailLogRepository.Received(1).AddAsync(
+            Arg.Is<EmailLog>(l => !l.Success && l.ErrorMessage != null && l.ErrorMessage.Contains("dev mode")),
+            Arg.Any<CancellationToken>());
     }
 }

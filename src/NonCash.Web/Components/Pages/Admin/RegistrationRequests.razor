@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 @inject NonCash.Web.Services.ClientAuthService AuthState
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 
 <PageTitle>Registration Requests</PageTitle>
 
@@ -95,7 +96,15 @@ else
                             }
                             else if (req.ContractStatus == "Signed")
                             {
-                                <MudAlert Severity="Severity.Success" Class="mb-2">Contract Signed (Uploaded)</MudAlert>
+                                <MudAlert Severity="Severity.Success" Class="mb-2">
+                                    Contract Signed (Uploaded)
+                                    @if (!string.IsNullOrEmpty(req.ContractFileUrl))
+                                    {
+                                        <MudLink Href="@ResolveFileUrl(req.ContractFileUrl)" Target="_blank" Typo="Typo.body2" Class="ml-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /> View file
+                                        </MudLink>
+                                    }
+                                </MudAlert>
                                 <MudStack Row="true" Spacing="2">
                                     <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" OnClick="@(() => OpenApproveDialog(req))">
                                         <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" /> Approve
@@ -164,7 +173,7 @@ else
             <MudAlert Severity="Severity.Info" Dense="true">
                 Upload the signed contract as a PDF or image. This is optional if the business has already confirmed online.
             </MudAlert>
-            <MudFileUpload T="IBrowserFile" @bind-Value="_signedContractFile" Accept=".pdf,.jpg,.jpeg,.png" />
+            <MudFileUpload T="IBrowserFile" @bind-Files="_signedContractFile" Accept=".pdf,.jpg,.jpeg,.png" />
             @if (_signedContractFile != null)
             {
                 <MudText Typo="Typo.body2">Selected: @_signedContractFile.Name (@((_signedContractFile.Size / 1024.0 / 1024.0).ToString("0.##")) MB)</MudText>
@@ -491,8 +500,10 @@ else
             var fileContent = new StreamContent(fileStream);
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(_signedContractFile.ContentType);
             content.Add(fileContent, "file", _signedContractFile.Name);
-            content.Add(new StringContent("signed_contracts"), "entity");
+            // MSA folder structure = extension of the client table: entity(table) / uniqueCode(id) / fieldName(column).
+            content.Add(new StringContent("business_registration_requests"), "entity");
             content.Add(new StringContent(_selectedRequest.RequestId.ToString()), "uniqueCode");
+            content.Add(new StringContent("contract_file_url"), "fieldName");
 
             var uploadRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/upload/document") { Content = content };
             if (!string.IsNullOrEmpty(token))
@@ -526,7 +537,7 @@ else
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Signed contract uploaded successfully.", Severity.Success);
+                Snackbar.Add($"Signed contract uploaded: {ResolveFileUrl(fileUrl)}", Severity.Success);
                 CloseDialog();
                 await LoadRequests();
             }
@@ -644,6 +655,27 @@ else
         public int? WelcomeCreditExpiryMonths { get; set; }
         public bool IsActive { get; set; }
         public bool IsDefault { get; set; }
+    }
+
+    private string ResolveFileUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+
+        // Absolute URLs are returned as-is.
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return url;
+
+        // Local dev fallback: files served from API host (e.g. /uploads/...).
+        if (url.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+        {
+            var envName = Configuration["Environment:Name"] ?? "dev";
+            var apiBase = Configuration[$"ApiBaseUrls:{envName}"] ?? Configuration["ApiBaseUrl"] ?? "";
+            return $"{apiBase.TrimEnd('/')}/{url.TrimStart('/')}";
+        }
+
+        // MSA relative URL: compose against CDN endpoint.
+        var cdnBase = Configuration["MediaServiceConfig:CDNEndpointURL"] ?? "";
+        return $"{cdnBase.TrimEnd('/')}/{url.TrimStart('/')}";
     }
 
     private class ErrorResponse

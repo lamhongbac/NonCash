@@ -47,7 +47,7 @@ public class AuthControllerTests
             .Build();
 
         _jwtTokenService = new JwtTokenService(configuration);
-        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService, new ConsoleNotificationService());
+        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService, new ConsoleNotificationService(), new CustomerRepository(_context));
     }
 
     private AuthController CreateController()

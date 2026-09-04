@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @implements IDisposable
 @inject NonCash.Web.Services.ClientAuthService AuthState
+@inject HttpClient Http
 
 <MudThemeProvider />
 <MudDialogProvider />
@@ -12,6 +13,13 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         <MudText Typo="Typo.h6" Class="ml-3">NonCash</MudText>
         <MudSpacer />
+        @if (_environmentName != null)
+        {
+            var isDev = _environmentName.Equals("dev", StringComparison.OrdinalIgnoreCase);
+            <MudChip T="string" Size="Size.Small" Color="@(isDev ? Color.Warning : Color.Error)" Class="mr-3">
+                @(isDev ? "DEV MODE - emails off" : "PRODUCTION - real emails ON")
+            </MudChip>
+        }
         @if (AuthState.IsLoggedIn)
         {
             <MudText Typo="Typo.body2" Class="mr-3 mt-1" Color="Color.Primary">@AuthState.FullName (@AuthState.Role)</MudText>
@@ -63,6 +71,7 @@
             {
                 <MudText Typo="Typo.caption" Class="px-4">Brand Manager</MudText>
                 <MudNavLink Href="/brandmanager/plans" Icon="@Icons.Material.Filled.Assignment">Voucher Plans</MudNavLink>
+                <MudNavLink Href="/brandmanager/distribute" Icon="@Icons.Material.Filled.Campaign">Distribute Vouchers</MudNavLink>
                 <MudNavLink Href="/brandmanager/outlets" Icon="@Icons.Material.Filled.Store">Outlets</MudNavLink>
                 <MudNavLink Href="/brandmanager/customers" Icon="@Icons.Material.Filled.Contacts">Customers</MudNavLink>
                 <MudNavLink Href="/brandmanager/credits" Icon="@Icons.Material.Filled.Toll">My Credits</MudNavLink>
@@ -94,6 +103,7 @@
 
 @code {
     private bool _drawerOpen = true;
+    private string? _environmentName;
 
     protected override async Task OnInitializedAsync()
     {
@@ -104,7 +114,28 @@
         {
             await AuthState.StartIdleTimerAsync();
         }
+
+        await LoadSystemInfoAsync();
     }
+
+    private async Task LoadSystemInfoAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/v1/system/info");
+            if (response.IsSuccessStatusCode)
+            {
+                var info = await response.Content.ReadFromJsonAsync<SystemInfoDto>();
+                _environmentName = info?.Environment;
+            }
+        }
+        catch
+        {
+            // Badge is best-effort; never break the layout when the API is unreachable.
+        }
+    }
+
+    private record SystemInfoDto(string Environment, bool EmailDelivery);
 
     private void OnAuthStateChanged()
     {

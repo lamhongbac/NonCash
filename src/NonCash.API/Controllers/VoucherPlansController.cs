@@ -145,7 +145,7 @@ public class VoucherPlansController : ControllerBase
         p.ApprovalStatus.ToString(),
         p.ImageUrl,
         p.IconUrl,
-        p.PlanOutlets.Select(po => po.OutletId).ToList(),
+        p.Scope.Outlets,
         p.CreatedAt,
         p.UpdatedAt,
         p.VersionNumber,

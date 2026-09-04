@@ -18,12 +18,21 @@ public record CustomerResponse(
     string? Email,
     string Status,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    bool? IsBrandBlocked = null
 );
 
 public record CustomerImportResponse(
     int Created,
     int Updated,
     int ErrorCount,
-    IReadOnlyList<string> Errors
+    IReadOnlyList<CustomerImportErrorDto> Errors
+);
+
+public record CustomerImportErrorDto(
+    int Row,
+    string PhoneNumber,
+    string FullName,
+    string? Email,
+    string Message
 );

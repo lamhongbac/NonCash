@@ -61,13 +61,15 @@ public class TransferAcceptanceTestFixture : IDisposable
 
         var jwtConfig = TestJwtConfig.Create();
         JwtTokenService = new JwtTokenService(jwtConfig);
-        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService, new ConsoleNotificationService());
+        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService, new ConsoleNotificationService(), CustomerRepository);
 
         TransferService = new VoucherTransferService(
             VoucherRepository,
             CustomerRepository,
             MemberRepository,
-            TransferRepository);
+            TransferRepository,
+            new BrandCustomerRepository(Context),
+            new VoucherPlanRepository(Context));
 
         SeedAsync().GetAwaiter().GetResult();
     }

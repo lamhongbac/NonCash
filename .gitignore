@@ -10,3 +10,7 @@ obj/
 TestResults/
 *.user
 *.suo
+
+# Build output directories (dotnet build -o ...) - never commit binaries
+tmp_build_*/
+build_tmp_*/

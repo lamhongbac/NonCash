@@ -77,6 +77,63 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("brands", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.BrandCustomer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("BlockedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("blocked_at");
+
+                    b.Property<Guid>("BrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("brand_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_blocked");
+
+                    b.Property<bool>("MarketingOptOut")
+                        .HasColumnType("boolean")
+                        .HasColumnName("marketing_opt_out");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BrandId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("BrandId", "CustomerId")
+                        .IsUnique();
+
+                    b.ToTable("brand_customers", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.BrandGroup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -875,6 +932,10 @@ namespace NonCash.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasFilter("\"email\" IS NOT NULL");
+
                     b.HasIndex("PhoneNumber")
                         .IsUnique();
 
@@ -1271,23 +1332,6 @@ namespace NonCash.Infrastructure.Migrations
                         .HasDatabaseName("IX_payment_transactions_status");
 
                     b.ToTable("payment_transactions", "public");
-                });
-
-            modelBuilder.Entity("NonCash.Core.Entities.PlanOutlet", b =>
-                {
-                    b.Property<Guid>("PlanId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("plan_id");
-
-                    b.Property<Guid>("OutletId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("outlet_id");
-
-                    b.HasKey("PlanId", "OutletId");
-
-                    b.HasIndex("OutletId");
-
-                    b.ToTable("plan_outlets", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.PurchaseOrder", b =>
@@ -1843,6 +1887,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("publish_date");
 
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("scope");
+
                     b.Property<string>("ShortDescription")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -2317,6 +2366,25 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("Business");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.BrandCustomer", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Brand", "Brand")
+                        .WithMany()
+                        .HasForeignKey("BrandId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Brand");
+
+                    b.Navigation("Customer");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.BrandGroupMember", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.BrandGroup", "BrandGroup")
@@ -2573,25 +2641,6 @@ namespace NonCash.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("PurchaseOrder");
-                });
-
-            modelBuilder.Entity("NonCash.Core.Entities.PlanOutlet", b =>
-                {
-                    b.HasOne("NonCash.Core.Entities.Outlet", "Outlet")
-                        .WithMany()
-                        .HasForeignKey("OutletId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("NonCash.Core.Entities.VoucherPlanHeader", "Plan")
-                        .WithMany("PlanOutlets")
-                        .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Outlet");
-
-                    b.Navigation("Plan");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.PurchaseOrder", b =>
@@ -2880,11 +2929,6 @@ namespace NonCash.Infrastructure.Migrations
             modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>
                 {
                     b.Navigation("Deliveries");
-                });
-
-            modelBuilder.Entity("NonCash.Core.Entities.VoucherPlanHeader", b =>
-                {
-                    b.Navigation("PlanOutlets");
                 });
 #pragma warning restore 612, 618
         }

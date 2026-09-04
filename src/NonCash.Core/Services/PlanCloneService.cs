@@ -40,7 +40,7 @@ public class PlanCloneService : IPlanCloneService
             return new CloneResult(false, ErrorCode: "InvalidStatus",
                 ErrorMessage: $"Only Rejected plans can be cloned. Current status: {source.ApprovalStatus}.");
 
-        // AC1 + AC4: Deep clone scalar fields and PlanOutlets; nullify approval fields
+        // AC1 + AC4: Deep clone scalar fields and Scope; nullify approval fields
         var clone = new VoucherPlanHeader
         {
             PlanDate = DateTime.UtcNow,
@@ -66,14 +66,13 @@ public class PlanCloneService : IPlanCloneService
             VersionNumber = await ComputeNextVersionAsync(source, cancellationToken)
         };
 
-        // AC4: Cascade clone of PlanOutlets via navigation
-        if (source.PlanOutlets != null)
+        // AC4 / Epic 3: clone the applicability scope (copy all three id lists)
+        clone.Scope = new VoucherScope
         {
-            foreach (var outlet in source.PlanOutlets)
-            {
-                clone.PlanOutlets.Add(new PlanOutlet { OutletId = outlet.OutletId });
-            }
-        }
+            Companies = source.Scope.Companies.ToList(),
+            Brands = source.Scope.Brands.ToList(),
+            Outlets = source.Scope.Outlets.ToList()
+        };
 
         await _planRepository.AddAsync(clone, cancellationToken);
         await _planRepository.SaveChangesAsync(cancellationToken);

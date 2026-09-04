@@ -62,6 +62,11 @@ public class VoucherGenerationService : IVoucherGenerationService
         var existing = await _detailRepository.FindAsync(d => d.ParentId == planId, cancellationToken);
         var startSeq = existing.Count() + 1;
 
+        // Approved-quantity gate: total generated vouchers must never exceed the plan's TargetQuantity
+        var remaining = plan.TargetQuantity - existing.Count();
+        if (quantity > remaining)
+            return new GenerationResult(false, ErrorMessage: $"QuantityExceedsRemaining: Only {remaining} vouchers remain for this plan (approved {plan.TargetQuantity}, generated {existing.Count()}).");
+
         for (int i = 0; i < quantity; i++)
         {
             var seq = startSeq + i;

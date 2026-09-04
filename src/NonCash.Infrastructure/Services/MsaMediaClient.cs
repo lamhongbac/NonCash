@@ -45,15 +45,20 @@ public class MsaMediaClient
     public async Task<MsaUploadResult> UploadAsync(
         string entity,
         string uniqueCode,
+        string fieldName,
         string mediaType,
         Stream fileStream,
         string fileName)
     {
+        // Mirrors the proven MediaStorageDemo contract: values are sent as-is (no lowercasing).
+        // MediaType is a MSA enum (e.g. "Images", "Documents"); Entity/UniqueCode/FieldName
+        // build the storage folder as an extension of the client table (table / id / column).
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent(_appCode), "AppCode");
-        form.Add(new StringContent(mediaType.ToLowerInvariant()), "MediaType");
-        form.Add(new StringContent(entity.ToLowerInvariant()), "Entity");
-        form.Add(new StringContent(uniqueCode.ToLowerInvariant()), "UniqueCode");
+        form.Add(new StringContent(mediaType), "MediaType");
+        form.Add(new StringContent(entity), "Entity");
+        form.Add(new StringContent(uniqueCode), "UniqueCode");
+        form.Add(new StringContent(fieldName), "FieldName");
 
         var fileContent = new StreamContent(fileStream);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -101,14 +106,15 @@ public class MsaMediaClient
     /// Deletes all media files associated with the given entity + uniqueCode.
     /// Uses MSA's metadata-based wildcard deletion.
     /// </summary>
-    public async Task<bool> DeleteAsync(string entity, string uniqueCode, string mediaType)
+    public async Task<bool> DeleteAsync(string entity, string uniqueCode, string fieldName, string mediaType)
     {
         var payload = new
         {
             appCode = _appCode,
-            mediaType = mediaType.ToLowerInvariant(),
-            entity = entity.ToLowerInvariant(),
-            uniqueCode = uniqueCode.ToLowerInvariant(),
+            mediaType = mediaType,
+            entity = entity,
+            uniqueCode = uniqueCode,
+            fieldName = fieldName,
             fileName = ""
         };
 

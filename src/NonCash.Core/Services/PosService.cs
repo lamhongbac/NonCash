@@ -16,6 +16,8 @@ public class PosService : IPosService
     private readonly ISettlementService _settlementService;
     private readonly ICreditService _creditService;
     private readonly IVoucherEventPublisher _eventPublisher;
+    private readonly IMemberAccountRepository _memberRepository;
+    private readonly IBrandCustomerRepository _brandCustomerRepository;
 
     public PosService(
         IRepository<VoucherPlanDetail> detailRepository,
@@ -26,7 +28,9 @@ public class PosService : IPosService
         IVoucherLockRepository lockRepository,
         ISettlementService settlementService,
         ICreditService creditService,
-        IVoucherEventPublisher eventPublisher)
+        IVoucherEventPublisher eventPublisher,
+        IMemberAccountRepository memberRepository,
+        IBrandCustomerRepository brandCustomerRepository)
     {
         _detailRepository = detailRepository;
         _planRepository = planRepository;
@@ -37,6 +41,8 @@ public class PosService : IPosService
         _settlementService = settlementService;
         _creditService = creditService;
         _eventPublisher = eventPublisher;
+        _memberRepository = memberRepository;
+        _brandCustomerRepository = brandCustomerRepository;
     }
 
     public async Task<PosVerifyResult> VerifyAsync(
@@ -161,6 +167,21 @@ public class PosService : IPosService
             {
                 await _settlementService.CreateSettlementEntryAsync(
                     usage, issuingBrandId, faceValue, cancellationToken);
+            }
+        }
+
+        // Customer-model redesign: redeeming links the member's customer to the issuing brand.
+        // O1 (customer-action-matrix): deliberately NO customer-status check — held vouchers
+        // stay redeemable even when the customer is blocked/blacklisted (grandfathering).
+        if (outcome == CommitOutcome.Success
+            && lockedDetail?.MemberId != null
+            && issuingBrandId != Guid.Empty)
+        {
+            var redeemingMember = await _memberRepository.GetByIdAsync(lockedDetail.MemberId.Value, cancellationToken);
+            if (redeemingMember != null)
+            {
+                await _brandCustomerRepository.EnsureAsync(
+                    issuingBrandId, redeemingMember.CustomerId, BrandCustomerSource.Redemption, null, cancellationToken);
             }
         }
 
@@ -295,7 +316,9 @@ public class PosService : IPosService
             ctx.Failure = "OutletNotAuthorized";
             return ctx;
         }
-        if (!plan.PlanOutlets.Any(po => po.OutletId == outletId))
+        // Epic 3 (scope storage only): still checks the explicit outlet list. Hierarchy-aware
+        // resolution (empty Outlets = whole brand/company) is deferred to the redeem analysis.
+        if (!plan.Scope.Outlets.Contains(outletId))
         {
             ctx.Failure = "OutletNotAuthorized";
             return ctx;

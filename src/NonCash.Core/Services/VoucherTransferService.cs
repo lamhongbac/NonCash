@@ -11,17 +11,23 @@ public class VoucherTransferService : IVoucherTransferService
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IVoucherTransferRepository _transferRepository;
+    private readonly IBrandCustomerRepository _brandCustomerRepository;
+    private readonly IVoucherPlanRepository _planRepository;
 
     public VoucherTransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
-        IVoucherTransferRepository transferRepository)
+        IVoucherTransferRepository transferRepository,
+        IBrandCustomerRepository brandCustomerRepository,
+        IVoucherPlanRepository planRepository)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _transferRepository = transferRepository;
+        _brandCustomerRepository = brandCustomerRepository;
+        _planRepository = planRepository;
     }
 
     public async Task<InitiateTransferResult> InitiateAsync(
@@ -52,6 +58,17 @@ public class VoucherTransferService : IVoucherTransferService
 
         if (recipient.Id == senderId)
             return new InitiateTransferResult(false, ErrorCode: "SelfTransferNotAllowed", ErrorMessage: "Cannot transfer a voucher to yourself.");
+
+        // Matrix rows 5-6 (gap #5): check the RECIPIENT before creating the transfer.
+        // S2: platform-blacklisted recipients cannot receive new vouchers (P2: new action).
+        var recipientCustomer = await _customerRepository.GetByIdAsync(recipient.CustomerId, cancellationToken);
+        if (recipientCustomer == null || recipientCustomer.Status == CustomerStatus.Blacklisted)
+            return new InitiateTransferResult(false, ErrorCode: "RecipientBlacklisted", ErrorMessage: "This transfer cannot be completed.");
+
+        // S1: a block by the voucher's owning brand stops gifting INTO that brand's ecosystem.
+        var voucherPlan = await _planRepository.GetByIdAsync(voucher.ParentId, cancellationToken);
+        if (voucherPlan != null && await _brandCustomerRepository.IsBlockedAsync(voucherPlan.BrandId, recipientCustomer.Id, cancellationToken))
+            return new InitiateTransferResult(false, ErrorCode: "RecipientBrandBlocked", ErrorMessage: "This transfer cannot be completed.");
 
         var now = DateTime.UtcNow;
         var transfer = new VoucherTransfer
@@ -95,7 +112,22 @@ public class VoucherTransferService : IVoucherTransferService
         if (transfer.Status != VoucherTransferStatus.PendingAcceptance)
             return new TransferActionResult(false, Status: transfer.Status.ToString(), ErrorCode: "AlreadyResolved", ErrorMessage: $"Transfer is already {transfer.Status}.");
 
-        return await _transferRepository.AcceptAsync(transferId, recipientId, cancellationToken);
+        var acceptResult = await _transferRepository.AcceptAsync(transferId, recipientId, cancellationToken);
+
+        // Auto-link: accepting a gifted voucher of brand X makes the recipient brand X's customer.
+        if (acceptResult.Success)
+        {
+            var giftedVoucher = await _detailRepository.GetByIdAsync(transfer.VoucherId, cancellationToken);
+            if (giftedVoucher != null)
+            {
+                var giftedPlan = await _planRepository.GetByIdAsync(giftedVoucher.ParentId, cancellationToken);
+                var recipientMember = await _memberRepository.GetByIdAsync(recipientId, cancellationToken);
+                if (giftedPlan != null && recipientMember != null)
+                    await _brandCustomerRepository.EnsureAsync(giftedPlan.BrandId, recipientMember.CustomerId, BrandCustomerSource.GiftingAuto, null, cancellationToken);
+            }
+        }
+
+        return acceptResult;
     }
 
     public async Task<TransferActionResult> RejectAsync(

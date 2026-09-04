@@ -115,16 +115,17 @@
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return url;
 
+        var envName = Configuration["Environment:Name"] ?? "dev";
+        var apiBase = Configuration[$"ApiBaseUrls:{envName}"] ?? Configuration["ApiBaseUrl"] ?? "";
+
         // Local dev fallback: files served from API host (e.g. /uploads/...)
         if (url.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
         {
-            var envName = Configuration[$"Environment:Name"] ?? "dev";
-            var apiBase = Configuration[$"ApiBaseUrls:{envName}"] ?? Configuration["ApiBaseUrl"] ?? "";
             return $"{apiBase.TrimEnd('/')}/{url.TrimStart('/')}";
         }
 
-        var cdnBase = Configuration["MediaServiceConfig:CDNEndpointURL"] ?? "";
-        return $"{cdnBase.TrimEnd('/')}/{url.TrimStart('/')}";
+        // MSA relative URL: proxy through the API over HTTPS to avoid mixed-content blocking.
+        return $"{apiBase.TrimEnd('/')}/api/v1/media/content?path={Uri.EscapeDataString(url)}";
     }
 
     private string ExpiryStyle

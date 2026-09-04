@@ -9,11 +9,12 @@ namespace NonCash.UnitTests.Services;
 public class CustomerServiceTests
 {
     private readonly ICustomerRepository _customerRepository = Substitute.For<ICustomerRepository>();
+    private readonly IBrandCustomerRepository _brandCustomerRepository = Substitute.For<IBrandCustomerRepository>();
     private readonly CustomerService _sut;
 
     public CustomerServiceTests()
     {
-        _sut = new CustomerService(_customerRepository);
+        _sut = new CustomerService(_customerRepository, _brandCustomerRepository);
     }
 
     [Fact]
@@ -186,6 +187,66 @@ public class CustomerServiceTests
         // Assert
         result.Created.Should().Be(0);
         result.Updated.Should().Be(0);
-        result.Errors.Should().ContainSingle().Which.Should().Contain("Invalid phone number");
+        result.Errors.Should().ContainSingle().Which.Message.Should().Contain("Invalid phone number");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithBrandId_WritesMapping()
+    {
+        // Arrange
+        _customerRepository.PhoneNumberExistsAsync("1234567890", Arg.Any<CancellationToken>()).Returns(false);
+        _customerRepository.AddAsync(Arg.Any<Customer>(), Arg.Any<CancellationToken>()).Returns(x => x.Arg<Customer>());
+        var brandId = Guid.NewGuid();
+        var createdBy = Guid.NewGuid();
+
+        // Act
+        var result = await _sut.CreateAsync("1234567890", "John Doe", null, default, brandId, createdBy);
+
+        // Assert
+        await _brandCustomerRepository.Received(1).EnsureAsync(
+            brandId, result.Id, BrandCustomerSource.Manual, createdBy, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpsertAsync_Reimport_StillEnsuresMappingForCreatedAndUpdatedRows()
+    {
+        // Arrange — stateful stub: first lookup misses, second hits the stored customer,
+        // so the first import CREATES and the second import UPDATES the same row.
+        var brandId = Guid.NewGuid();
+        Customer? stored = null;
+        _customerRepository.GetByPhoneNumberAsync("4445556666", Arg.Any<CancellationToken>())
+            .Returns(_ => stored);
+        _customerRepository.AddAsync(Arg.Any<Customer>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                stored = ci.Arg<Customer>();
+                return stored;
+            });
+        var records = new List<CustomerImportRecord> { new("4445556666", "Reimported Customer", null) };
+
+        // Act
+        await _sut.UpsertAsync(records, default, brandId, null);
+        await _sut.UpsertAsync(records, default, brandId, null);
+
+        // Assert — every import pass re-invokes the idempotent EnsureAsync
+        // (created branch AND updated branch); dedup itself lives in the repository.
+        await _brandCustomerRepository.Received(2).EnsureAsync(
+            brandId, Arg.Any<Guid>(), BrandCustomerSource.Import, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BlockAsync_Then_Unblock_DelegatesToRepository()
+    {
+        // Arrange
+        var brandId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        // Act
+        await _sut.BlockAsync(brandId, customerId);
+        await _sut.UnblockAsync(brandId, customerId);
+
+        // Assert
+        await _brandCustomerRepository.Received(1).SetBlockedAsync(brandId, customerId, true, Arg.Any<CancellationToken>());
+        await _brandCustomerRepository.Received(1).SetBlockedAsync(brandId, customerId, false, Arg.Any<CancellationToken>());
     }
 }

@@ -17,7 +17,7 @@ This guide is for **Brand Managers**, **Planners**, and **Approvers** who operat
 After login, the Brand dashboard provides navigation based on your role:
 
 - **Outlets** — manage physical store locations (Brand Manager).
-- **Customers** — manage customer records and blacklist (Brand Manager).
+- **Customers** — manage customer records and per-brand blocking (Brand Manager).
 - **Plans** — create and manage voucher campaigns (Planner).
 - **Approvals** — review and approve/reject pending plans (Approver).
 - **Distribution** — execute batch promotions and view distribution reports (Brand Manager).
@@ -58,27 +58,34 @@ The system automatically assigns the Outlet to your Brand and generates an `ApiK
 
 ## 3. Customer Record Management
 
-Customer records are global in NonCash because a customer may hold vouchers from multiple Brands. Brand Managers can create, update, import, and blacklist customers.
+Customer identities are global on the NonCash platform — one customer may hold vouchers from multiple Brands — but you only see the customers **mapped to your brand**. A mapping is created when you add or import the customer, or automatically when the customer receives one of your promotions, buys one of your plans, or receives a voucher transfer from your brand. Customers who have never interacted with your brand are not visible to you.
 
 ### 3.1 Create a Customer
 
 1. Go to **Customers**.
-2. Click **Create Customer**.
+2. Click **Add**.
 3. Enter the details:
    - **Phone Number** — required, unique across the platform.
    - **Full Name** — optional.
    - **Email** — optional.
-   - **Status** — `Active` or `Blacklisted`.
 4. Click **Save**.
 
-The system normalizes the phone number before storage (non-digit characters are stripped).
+The system normalizes the phone number before storage (non-digit characters are stripped), and the new customer is automatically mapped to your brand.
 
-### 3.2 Blacklist a Customer
+### 3.2 Block a Customer (this brand)
 
-1. From the Customer list, click **Blacklist** on the row you want to block.
-2. Confirm the action.
+1. From the Customer list, click the **Block** icon (crossed circle) on the row you want to stop.
+2. The customer's status chip changes to `Blocked (this brand)`.
 
-Blacklisted customers are excluded from future batch promotions and self-purchases.
+A per-brand block stops that customer from:
+
+- Receiving your **promotions** (skipped with a `BrandBlocked` reason).
+- **Buying your Gift plans** (the order is rejected).
+- Being **gifted or transferred** your vouchers.
+
+It does **not** affect their relationship with other brands, and it does not stop them from redeeming vouchers they already hold — value that was already granted stays usable. Click the **Unblock** icon (check mark) on the row to reverse it; the change is immediate.
+
+> **Brand block vs. platform blacklist:** Blacklisting a customer platform-wide (which also blocks their login and all new actions) is an Admin-only action. As a Brand Manager you control only your own brand's relationship with the customer.
 
 ### 3.3 Import Customers in Bulk
 
@@ -88,12 +95,16 @@ Blacklisted customers are excluded from future batch promotions and self-purchas
 4. Review the parsed preview.
 5. Click **Confirm Import**.
 
-The system uses upsert logic: existing customers are matched by phone number and updated if the name or email changed.
+The system uses upsert logic: existing customers are matched by phone number and updated if the name or email changed. Every imported row is mapped to **your brand** — re-importing the same file never duplicates mappings.
 
 ### 3.4 Search Customers
 
-- Search by **Phone Number**, **Full Name**, or **Email**.
-- Blacklisted customers are visually flagged in the UI.
+- The list is scoped to your brand's customers — other brands' customers never appear.
+- Type in the single **Search** box to match **Phone Number**, **Full Name**, or **Email** at the same time.
+- Matching is partial (`contains`): no need to type the whole value — any fragment works.
+- Letter case is ignored for names and emails; spaces and dashes are ignored for phone numbers (e.g. `090-123` matches `090123...`).
+- Press **Enter** (or the **Search** button) to run the search.
+- Customers you blocked show a red `Blocked (this brand)` chip in the status column.
 
 ---
 
@@ -199,7 +210,8 @@ The system:
 
 - Matches phone numbers to existing Customers.
 - Creates placeholder Customer records for unknown phone numbers.
-- Skips blacklisted customers and reports them in a warning list.
+- Skips platform-blacklisted customers and customers you blocked for your brand, and reports them in a warning list.
+- Auto-links every eligible recipient to your brand (receiving your promotion makes them your customer).
 - Assigns one voucher per customer (`MemberID = Customer.UserAccount.Id`).
 - Creates a `VoucherDistribution` record with `Method = Promotion` for each assignment.
 - Fails entirely if voucher stock is insufficient (all-or-nothing transaction).
@@ -302,8 +314,8 @@ Pay by bank transfer, then contact the platform Admin with the transfer referenc
 | --- | --- | --- |
 | Create an Outlet | Outlets | BrandManager |
 | Close an Outlet | Outlets > Edit | BrandManager |
-| Create a Customer | Customers | BrandManager |
-| Blacklist a Customer | Customers > Blacklist | BrandManager |
+| Create a Customer | Customers > Add | BrandManager |
+| Block a Customer (this brand) | Customers > Block | BrandManager |
 | Import Customers | Customers > Import | BrandManager |
 | Create a Plan | Plans | Planner |
 | Submit Plan for Approval | Plans > Open Plan | Planner |
@@ -326,7 +338,7 @@ Pay by bank transfer, then contact the platform Admin with the transfer referenc
 | Plan save fails validation | Face Value <= 0, Net Value > Face Value, or date errors | Check the validation messages and correct the form. |
 | Cannot edit a Plan | Plan is already Approved or Rejected | Only Pending plans can be edited. |
 | Batch promotion shows Insufficient Stock | Not enough unassigned vouchers | Generate more vouchers or reduce the recipient list. |
-| Customer skipped in promotion | Customer is Blacklisted | Remove from blacklist or exclude from the list. |
+| Customer skipped in promotion | Customer is platform-blacklisted or blocked for your brand | Unblock the customer from your list, or ask the platform Admin to review the blacklist; or exclude them from the recipient list. |
 | Transfer appears Expired | Recipient did not act within 7 days | Sender can initiate a new transfer. |
 | Image upload returns 400 | Missing `entity`/`uniqueCode` field, file > 5 MB, or invalid format | Include both form fields and use JPG/PNG/WebP/GIF under 5 MB. |
 | Voucher card shows no image | `CoverImageUrl` not set on the plan | Upload a cover image and set the display fields. |

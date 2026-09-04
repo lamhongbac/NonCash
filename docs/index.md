@@ -26,6 +26,8 @@ Welcome to the **NonCash** voucher platform documentation. This repository serve
 ### 3. Management & Strategy
 - [Project Scan Report](./project-scan-report.json) - Current state of the project.
 - [Implementation Plan (BMAD)](../_bmad-output/planning-artifacts/implementation_plan.md) - Strategic roadmap for development phases.
+- [Credit Pricing Strategy](./credit-pricing-strategy.md) - Credit price analysis, phased recommendation, and open questions for discussion.
+- [Customer Action Matrix](./customer-action-matrix.md) - Allowed/denied customer actions per state (grandfathering principle), enforcement points and gaps.
 
 ---
 

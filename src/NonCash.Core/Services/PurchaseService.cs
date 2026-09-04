@@ -13,6 +13,7 @@ public class PurchaseService : IPurchaseService
     private readonly IMemberAccountRepository _memberRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly ICreditService _creditService;
+    private readonly IBrandCustomerRepository _brandCustomerRepository;
 
     public PurchaseService(
         IVoucherPlanRepository planRepository,
@@ -22,7 +23,8 @@ public class PurchaseService : IPurchaseService
         IRepository<VoucherDistribution> distributionRepository,
         IMemberAccountRepository memberRepository,
         ICustomerRepository customerRepository,
-        ICreditService creditService)
+        ICreditService creditService,
+        IBrandCustomerRepository brandCustomerRepository)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -32,6 +34,7 @@ public class PurchaseService : IPurchaseService
         _memberRepository = memberRepository;
         _customerRepository = customerRepository;
         _creditService = creditService;
+        _brandCustomerRepository = brandCustomerRepository;
     }
 
     public async Task<IReadOnlyList<VoucherPlanHeader>> ListCatalogAsync(CancellationToken cancellationToken = default)
@@ -78,6 +81,10 @@ public class PurchaseService : IPurchaseService
             return new OrderResult(false, ErrorCode: "PlanNotApproved", ErrorMessage: "Plan is not available for sale.");
         if (plan.ExpiryDate <= DateTime.UtcNow)
             return new OrderResult(false, ErrorCode: "PlanExpired", ErrorMessage: "Plan has expired.");
+
+        // Matrix S1 (rows 3-4): a per-brand block only stops purchases of THAT brand's plans.
+        if (await _brandCustomerRepository.IsBlockedAsync(plan.BrandId, customer.Id, cancellationToken))
+            return new OrderResult(false, ErrorCode: "BrandBlocked", ErrorMessage: "This purchase is not allowed.");
 
         // Epic 9: block new orders when the selling brand has no credits left.
         if (!await _creditService.HasCreditAsync(plan.BrandId, cancellationToken))
@@ -192,6 +199,14 @@ public class PurchaseService : IPurchaseService
         // TryConsumeAsync and never fail the order (grace overdraft).
         foreach (var (chargeBrandId, voucherId) in chargedVouchers)
             await _creditService.TryConsumeAsync(chargeBrandId, voucherId, $"Sale order {order.Id}", cancellationToken);
+
+        // Auto-link: buying a brand's voucher makes the member's customer that brand's customer.
+        var buyerMember = await _memberRepository.GetByIdAsync(order.MemberId, cancellationToken);
+        if (buyerMember != null)
+        {
+            foreach (var boughtBrandId in chargedVouchers.Select(cv => cv.BrandId).Distinct())
+                await _brandCustomerRepository.EnsureAsync(boughtBrandId, buyerMember.CustomerId, BrandCustomerSource.SelfPurchase, null, cancellationToken);
+        }
 
         return new OrderResult(true, Order: order, AllocatedCount: totalAllocated);
     }

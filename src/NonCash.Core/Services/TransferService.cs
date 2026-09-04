@@ -11,6 +11,8 @@ public class TransferService : ITransferService
     private readonly IRepository<VoucherDistribution> _distributionRepository;
     private readonly INotificationService _notificationService;
     private readonly IVoucherEventPublisher _eventPublisher;
+    private readonly IBrandCustomerRepository _brandCustomerRepository;
+    private readonly IVoucherPlanRepository _planRepository;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
@@ -18,7 +20,9 @@ public class TransferService : ITransferService
         IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository,
         INotificationService notificationService,
-        IVoucherEventPublisher eventPublisher)
+        IVoucherEventPublisher eventPublisher,
+        IBrandCustomerRepository brandCustomerRepository,
+        IVoucherPlanRepository planRepository)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
@@ -26,6 +30,8 @@ public class TransferService : ITransferService
         _distributionRepository = distributionRepository;
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _eventPublisher = eventPublisher;
+        _brandCustomerRepository = brandCustomerRepository;
+        _planRepository = planRepository;
     }
 
     public async Task<TransferResult> TransferAsync(
@@ -46,6 +52,14 @@ public class TransferService : ITransferService
                 false,
                 ErrorCode: "MismatchedCounts",
                 ErrorMessage: $"Voucher count ({voucherIds.Count}) must equal recipient phone count ({recipientPhones.Count}).");
+
+        // Matrix row 8 (gap #3): a blacklisted sender cannot start transfers.
+        var senderMember = await _memberRepository.GetByIdAsync(fromMemberId, cancellationToken);
+        var senderCustomer = senderMember != null
+            ? await _customerRepository.GetByIdAsync(senderMember.CustomerId, cancellationToken)
+            : null;
+        if (senderMember != null && (senderCustomer == null || senderCustomer.Status == CustomerStatus.Blacklisted))
+            return new TransferResult(false, ErrorCode: "SenderBlacklisted", ErrorMessage: "Transfers are not allowed for this account.");
 
         // AC1 + NFR4: Load and validate ownership + status for each voucher
         var loaded = new List<VoucherPlanDetail>();
@@ -103,6 +117,11 @@ public class TransferService : ITransferService
                 continue;
             }
 
+            // Auto-link: receiving a transferred voucher of brand X makes them brand X's customer.
+            var voucherPlan = await _planRepository.GetByIdAsync(voucher.ParentId, cancellationToken);
+            if (voucherPlan != null)
+                await _brandCustomerRepository.EnsureAsync(voucherPlan.BrandId, customer.Id, BrandCustomerSource.Transfer, null, cancellationToken);
+
             transfers.Add((voucher, member.Id, phone));
         }
 
@@ -135,10 +154,6 @@ public class TransferService : ITransferService
         await _detailRepository.SaveChangesAsync(cancellationToken);
 
         // Send transfer notifications to eligible recipients
-        var senderMember = await _memberRepository.GetByIdAsync(fromMemberId, cancellationToken);
-        var senderCustomer = senderMember != null
-            ? await _customerRepository.GetByIdAsync(senderMember.CustomerId, cancellationToken)
-            : null;
         var senderName = senderCustomer?.FullName ?? senderMember?.FullName ?? "A member";
 
         foreach (var (detail, recipientMemberId, phone) in transfers)

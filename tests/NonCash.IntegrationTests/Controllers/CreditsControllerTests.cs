@@ -147,12 +147,16 @@ public class CreditsControllerTests : IDisposable
             TargetQuantity = voucherCount,
             Budget = 500000m,
             ApprovalStatus = ApprovalStatus.Approved,
-            VersionNumber = 1
+            VersionNumber = 1,
+            // Epic 3: applicability scope now stored as jsonb on the plan (was the plan_outlets join table).
+            Scope = new VoucherScope
+            {
+                Brands = new List<Guid> { brandId },
+                Outlets = new List<Guid> { _outletId }
+            }
         };
         _context.VoucherPlanHeaders.Add(plan);
         _context.SaveChanges();
-
-        _context.PlanOutlets.Add(new PlanOutlet { PlanId = plan.Id, OutletId = _outletId });
 
         for (var i = 1; i <= voucherCount; i++)
         {
@@ -303,7 +307,8 @@ public class CreditsControllerTests : IDisposable
         new Repository<VoucherDistribution>(_context),
         new MemberAccountRepository(_context),
         new CustomerRepository(_context),
-        _creditService);
+        _creditService,
+        new BrandCustomerRepository(_context));
 
     private PosService CreatePosService() => new(
         new Repository<VoucherPlanDetail>(_context),
@@ -314,7 +319,9 @@ public class CreditsControllerTests : IDisposable
         new VoucherLockRepository(_context),
         new SettlementService(_context),
         _creditService,
-        new VoucherEventPublisher(_context));
+        new VoucherEventPublisher(_context),
+        new MemberAccountRepository(_context),
+        new BrandCustomerRepository(_context));
 
     [Fact]
     public async Task ConfirmGiftPayment_ChargesOneCreditPerVoucher()

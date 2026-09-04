@@ -24,6 +24,12 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.Email)
             .HasMaxLength(255);
 
+        // Email is optional, but a used email cannot be shared by two customers.
+        // The migration upgrades this to a case-insensitive expression index on lower(email).
+        builder.HasIndex(c => c.Email)
+            .IsUnique()
+            .HasFilter("\"email\" IS NOT NULL");
+
         builder.Property(c => c.Status)
             .IsRequired()
             .HasConversion<string>()

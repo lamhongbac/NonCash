@@ -481,6 +481,15 @@ public class EmailNotificationService : INotificationService
 
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken, string templateName = "", string notificationType = "")
     {
+        if (IsDevMode())
+        {
+            // Hard kill-switch: dev mode never delivers real email, so test runs
+            // can never reach real customers. The attempt is still audited.
+            _logger.LogWarning("[DEV MODE] Email to {ToAddress} suppressed (subject: {Subject}). Set Environment:Name to 'production' to enable real delivery.", toAddress, subject);
+            await LogEmailAsync(toAddress, subject, templateName, notificationType, success: false, errorMessage: "Suppressed: dev mode (Environment:Name=dev)", retryCount: 0, cancellationToken);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromAddress))
         {
             _logger.LogWarning("SMTP is not configured. Skipping email to {ToAddress}.", toAddress);
@@ -543,6 +552,16 @@ public class EmailNotificationService : INotificationService
         statusCode is SmtpStatusCode.ServiceNotAvailable
             or SmtpStatusCode.ServiceClosingTransmissionChannel
             or SmtpStatusCode.GeneralFailure;
+
+    /// <summary>
+    /// Dev mode is a hard kill-switch for real email delivery.
+    /// Missing configuration fails safe and is treated as dev.
+    /// </summary>
+    private bool IsDevMode()
+    {
+        var name = _configuration["Environment:Name"];
+        return string.IsNullOrWhiteSpace(name) || name.Equals("dev", StringComparison.OrdinalIgnoreCase);
+    }
 
     private async Task LogEmailAsync(string toAddress, string subject, string templateName, string notificationType, bool success, string? errorMessage, int retryCount, CancellationToken cancellationToken)
     {

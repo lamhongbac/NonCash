@@ -15,8 +15,9 @@ public interface IDocumentStorageService
     /// <param name="stream">The file stream.</param>
     /// <param name="fileName">Original file name (used for extension validation).</param>
     /// <param name="contentType">MIME type of the file.</param>
-    /// <param name="entity">Business entity name (e.g., "signed_contracts"). Used by MSA to organize storage.</param>
-    /// <param name="uniqueCode">Unique record identifier (e.g., "{requestId}"). Used for deduplication.</param>
+    /// <param name="entity">Client table name (e.g., "business_registration_requests"). Used by MSA as the folder root.</param>
+    /// <param name="uniqueCode">Record id / unique key (e.g., "{requestId}"). Used by MSA as the per-record folder.</param>
+    /// <param name="fieldName">DB column that will store the returned URL (e.g., "contract_file_url"). Used by MSA in the file name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<DocumentStorageResult> StoreAsync(
         Stream stream,
@@ -24,6 +25,7 @@ public interface IDocumentStorageService
         string contentType,
         string entity,
         string uniqueCode,
+        string fieldName,
         CancellationToken cancellationToken = default);
 
     /// <summary>

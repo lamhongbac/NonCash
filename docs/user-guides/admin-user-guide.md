@@ -311,20 +311,63 @@ When a voucher sponsored by one Brand is redeemed at an outlet belonging to a di
 
 ---
 
-## 7. Credit & Billing Management
+## 7. Customer Oversight (Blacklist and Brand Blocks)
+
+Customers are global platform identities; each Brand sees only the customers mapped to it (see the Brand User Guide, §3). Admins have cross-brand visibility of all customers via the API and own two control levers: the platform blacklist and the per-brand block.
+
+### 7.1 Platform Blacklist (stop-until-clarified)
+
+Blacklisting is the platform-level emergency brake for a suspicious customer — use it to stop everything until the case is clarified:
+
+- `PUT /api/v1/customers/{id}/blacklist` — sets the customer's global status to `Blacklisted`.
+- `PUT /api/v1/customers/{id}/unblacklist` — restores the customer to `Active`; the effect is immediate.
+
+What a blacklist stops (all **new** actions from that moment):
+
+- **Member login** — refused with "Account is locked." (the member account itself is never modified, so un-blacklisting restores access instantly).
+- **Self-registration** of a member account for that phone number (403).
+- **Promotion distribution** — skipped with reason `Blacklisted`.
+- **Gift plan purchases** — the order is rejected (`MemberBlacklisted`).
+- **Transfers** — a blacklisted sender cannot initiate one, and a blacklisted recipient is skipped.
+
+What a blacklist does **not** do (decided O1):
+
+- **Redemption continues** — vouchers the customer already holds keep working at POS. Redemption is part of the purchase-and-use chain that was already granted; blocking it would destroy paid-for value.
+
+Only the `Admin` role can blacklist/unblacklist; these endpoints are Admin-only.
+
+### 7.2 Per-Brand Block (Brand Manager lever)
+
+Brand Managers can block a customer's relationship with **their own brand only** from the Customers page (Brand User Guide §3.2). The same endpoints are callable by Admins, who must pass an explicit brand:
+
+- `PUT /api/v1/customers/{id}/block?brandId={brandId}` — blocks the customer at that brand (404 when no brand-customer mapping exists; 400 when `brandId` is missing).
+- `PUT /api/v1/customers/{id}/unblock?brandId={brandId}` — clears the block.
+
+A per-brand block stops that brand's promotions, gift-plan sales, and voucher transfers/gifts to the customer — it never affects other brands or the redemption of vouchers already held.
+
+### 7.3 Customer Visibility and Mapping
+
+- `GET /api/v1/customers` — Admins see every customer across brands; Brand Managers only see customers mapped to their brand.
+- Mappings are created on import/manual create and auto-created on every brand-customer touchpoint (promotion, purchase, transfer, gifting, redemption). The mapping source is recorded (`Import`, `Manual`, `PromotionAuto`, `SelfPurchase`, `GiftingAuto`, `Transfer`, `Redemption`) and never overwritten by later re-links.
+
+> **Known gap:** there is no customer-management UI for Admins today — blacklist and block are API-only (Swagger UI at `/swagger`).
+
+---
+
+## 8. Credit & Billing Management
 
 Brands prepay **credits** to use the platform (usage-based fee). The billing rule is simple: **each voucher consumes exactly 1 credit, once in its lifetime, at its value moment** — a Gift voucher is charged when it is sold (payment confirmed), a Complimentary voucher is charged when it is redeemed at POS. Transfers and Gift redemptions consume nothing (the Gift voucher was already charged at sale).
 
-### 7.1 Welcome Credits (Free Period)
+### 8.1 Welcome Credits (Free Period)
 
 Every newly activated Brand — whether created directly by an Admin or activated through registration approval — automatically receives a **welcome grant** (default: 500 credits, configurable via `CreditConfig:WelcomeCredits` in `appsettings.json`). The grant appears in the ledger as an entry of type `Grant` with reference "Welcome credits".
 
-### 7.2 Check a Brand's Balance
+### 8.2 Check a Brand's Balance
 
 1. Call `GET /api/v1/credits/balance?brandId={brandId}` with your Admin token.
 2. The response returns the current balance (sum of all ledger entries). Admins can query any Brand; Brand users can only see their own balance.
 
-### 7.3 Top Up Credits (Manual Bank-Transfer Flow)
+### 8.3 Top Up Credits (Manual Bank-Transfer Flow)
 
 Payments are manual in v1: the Brand pays by bank transfer, and once the payment is confirmed, an Admin records the top-up.
 
@@ -345,13 +388,13 @@ Payments are manual in v1: the Brand pays by bank transfer, and once the payment
    - `Adjustment` — manual correction; **the only type that accepts a negative amount** (clawback).
 3. The response returns the created ledger entry. `Consumption` entries cannot be created manually — they are recorded automatically by the system.
 
-### 7.4 Review the Credit Ledger
+### 8.4 Review the Credit Ledger
 
 1. Call `GET /api/v1/credits/ledger` with your Admin token.
 2. Optional filters: `brandId`, `type` (`Grant`/`Purchase`/`Consumption`/`Adjustment`), `from`/`to` date range, `page`/`pageSize`.
 3. Consumption entries carry the `voucherDetailId` that was charged — each voucher can appear at most once (enforced by a unique database index), so a voucher is never double-charged.
 
-### 7.5 Grace Overdraft Policy
+### 8.5 Grace Overdraft Policy
 
 Redemption at POS **never fails because of credit balance** — customer-facing operations must not break. If a Complimentary voucher is redeemed while the Brand's balance is 0, the balance simply goes negative. Instead, the platform blocks *upstream* actions when a Brand's balance is ≤ 0:
 
@@ -361,27 +404,27 @@ Redemption at POS **never fails because of credit balance** — customer-facing 
 
 Once the Brand tops up, these operations resume automatically. Negative balances should be recovered through the next top-up.
 
-### 7.6 Admin Console for Credits
+### 8.6 Admin Console for Credits
 
 The **Credits** page shows credit batches and balances per Brand, and lets Admins record top-ups/adjustments and review the ledger without using the API.
 
-### 7.7 Credit Policies
+### 8.7 Credit Policies
 
 The **Credit Policies** page defines pricing and lifecycle rules (price per credit, expiry months, low-balance warning %, adjustment approval threshold) at global, brand-group, or brand scope. More specific scopes override broader ones.
 
-### 7.8 Credit Adjustments
+### 8.8 Credit Adjustments
 
 The **Credit Adjustments** page lists adjustment requests awaiting review. Approvers approve or reject them; approved adjustments post an `Adjustment` ledger entry.
 
-### 7.9 Welcome Policies
+### 8.9 Welcome Policies
 
 The **Welcome Policies** page shows the welcome-credit policy assigned to each Business after registration approval. The actual terms come from a **Welcome Policy Template**; this page is read-only and reflects which template was applied and when.
 
-### 7.10 Welcome Policy Templates
+### 8.10 Welcome Policy Templates
 
 **Welcome Policy Templates** are reusable onboarding terms created ahead of time. Admins select one when approving a business registration. One template must be marked as the platform **Default**; it is used automatically when no specific template is chosen.
 
-#### 7.10.1 Create a Template
+#### 8.10.1 Create a Template
 
 1. Go to **Welcome Policy Templates**.
 2. Click **New Template**.
@@ -392,7 +435,7 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
    - **Active** — inactive templates do not appear in the approval dropdown.
 4. Click **Save**.
 
-#### 7.10.2 Set the Default Template
+#### 8.10.2 Set the Default Template
 
 1. In the template list, click the **Check Circle** icon on the template you want as default.
 2. The system removes the default flag from the previous template and applies it to the selected one.
@@ -400,7 +443,7 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 
 > **Important:** There must always be exactly one active default template. If you deactivate the current default, set a new default before approving registrations.
 
-#### 7.10.3 Edit or Deactivate a Template
+#### 8.10.3 Edit or Deactivate a Template
 
 - Click **Edit** to change name, credits, expiry, or active status.
 - Click **Block** to deactivate a template. Deactivated templates are not available for new approvals.
@@ -408,7 +451,7 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 
 ---
 
-## 8. Security and Multi-Tenancy
+## 9. Security and Multi-Tenancy
 
 - **JWT tokens** carry `sub` (UserID), `brandId`, and `role` claims.
 - **Brand scoping** is enforced automatically. Non-Admin users can only access data belonging to their Brand.
@@ -417,7 +460,7 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 
 ---
 
-## 9. Common Tasks Quick Reference
+## 10. Common Tasks Quick Reference
 
 | Task | Path | Role |
 | --- | --- | --- |
@@ -442,10 +485,14 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 | Manage welcome policy templates | Welcome Policy Templates | Admin |
 | Manage welcome policies | Welcome Policies | Admin |
 | Manage integration partners (UI) | Integration Partners | Admin |
+| List all customers (cross-brand) | API: `GET /api/v1/customers` | Admin |
+| Blacklist a customer (platform) | API: `PUT /api/v1/customers/{id}/blacklist` | Admin |
+| Un-blacklist a customer | API: `PUT /api/v1/customers/{id}/unblacklist` | Admin |
+| Block a customer for a brand | API: `PUT /api/v1/customers/{id}/block?brandId={id}` | Admin |
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Issue | Cause | Resolution |
 | --- | --- | --- |
@@ -464,4 +511,6 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 | Approve button is disabled / approval fails | Contract status is not `Signed` | Send the contract, wait for the business to sign, then upload the signed copy. |
 | Send contract fails | Selected Welcome Policy Template is inactive or missing | Choose an active template or set a default template. |
 | Upload signed contract fails | Contract was never sent | Send the contract first before uploading the signed copy. |
+| Block endpoint returns 404 | No brand-customer mapping exists for that pair | The customer has never interacted with that brand — distribute/import (brand side) first. |
+| Blacklisted customer still redeems at POS | By design (O1) — held vouchers stay redeemable | Investigate the case; un-blacklist to restore, or keep blacklisted to stop all new actions. |
 

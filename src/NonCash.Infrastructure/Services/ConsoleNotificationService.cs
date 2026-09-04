@@ -1,9 +1,18 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NonCash.Core.Interfaces;
 
 namespace NonCash.Infrastructure.Services;
 
 public class ConsoleNotificationService : INotificationService
 {
+    private readonly ILogger _logger;
+
+    public ConsoleNotificationService(ILogger<ConsoleNotificationService>? logger = null)
+    {
+        _logger = logger ?? NullLogger<ConsoleNotificationService>.Instance;
+    }
+
     public Task NotifyAdminNewRegistrationAsync(Guid requestId, string companyName, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[NOTIFICATION] New registration request #{requestId} for '{companyName}' submitted. Awaiting admin review.");
@@ -26,6 +35,21 @@ public class ConsoleNotificationService : INotificationService
     {
         Console.WriteLine($"[NOTIFICATION] Voucher '{notification.VoucherName}' ({notification.FaceValue:N0}) delivered to {notification.PhoneNumber} " +
                           $"(email: {notification.Email ?? "n/a"}) via {notification.Channels}. Expires {notification.ExpiryDate:yyyy-MM-dd}.");
+
+        if (notification.Channels.HasFlag(NotificationChannel.Email))
+        {
+            if (string.IsNullOrWhiteSpace(notification.Email))
+            {
+                _logger.LogInformation("[EMAIL SIMULATED] No email on file - email step skipped for phone {Phone} (voucher {VoucherName}).",
+                    notification.PhoneNumber, notification.VoucherName);
+            }
+            else
+            {
+                _logger.LogInformation("[EMAIL SIMULATED] Email send executed (not delivered - console sink active): to {Email}, phone {Phone}, voucher {VoucherName} (face value {FaceValue:N0}).",
+                    notification.Email, notification.PhoneNumber, notification.VoucherName, notification.FaceValue);
+            }
+        }
+
         return Task.CompletedTask;
     }
 

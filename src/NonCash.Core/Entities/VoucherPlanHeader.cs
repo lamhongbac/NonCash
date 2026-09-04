@@ -62,14 +62,11 @@ public class VoucherPlanHeader : BaseEntity
     public Brand? Brand { get; set; }
     public Brand? SponsorBrand { get; set; }
     public VoucherPlanHeader? PreviousVersion { get; set; }
-    public ICollection<PlanOutlet> PlanOutlets { get; set; } = new List<PlanOutlet>();
-}
 
-public class PlanOutlet
-{
-    public Guid PlanId { get; set; }
-    public Guid OutletId { get; set; }
-
-    public VoucherPlanHeader? Plan { get; set; }
-    public Outlet? Outlet { get; set; }
+    /// <summary>
+    /// Epic 3: Hierarchical applicability scope (companies/brands/outlets).
+    /// An empty list at a level means "all under that level". Persisted as a single
+    /// jsonb column ("scope") via a provider-agnostic EF Core value converter.
+    /// </summary>
+    public VoucherScope Scope { get; set; } = new();
 }

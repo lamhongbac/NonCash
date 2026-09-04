@@ -15,6 +15,11 @@ public class PromotionService : IPromotionService
     private readonly IRepository<Outlet> _outletRepository;
     private readonly ICreditService _creditService;
     private readonly INotificationService _notificationService;
+    private readonly IBrandCustomerRepository _brandCustomerRepository;
+
+    private static readonly System.Text.RegularExpressions.Regex _emailRegex = new(
+        @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     public PromotionService(
         IVoucherPlanRepository planRepository,
@@ -26,7 +31,8 @@ public class PromotionService : IPromotionService
         IVoucherTransferRepository transferRepository,
         IRepository<Outlet> outletRepository,
         ICreditService creditService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IBrandCustomerRepository brandCustomerRepository)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -38,6 +44,7 @@ public class PromotionService : IPromotionService
         _outletRepository = outletRepository;
         _creditService = creditService;
         _notificationService = notificationService;
+        _brandCustomerRepository = brandCustomerRepository;
     }
 
     public async Task<PromotionResult> DistributeAsync(
@@ -67,11 +74,47 @@ public class PromotionService : IPromotionService
         if (!await _creditService.HasCreditAsync(brandId, cancellationToken))
             return new PromotionResult(false, ErrorCode: "InsufficientCredits", ErrorMessage: "Your credit balance is depleted. Please top up to continue.");
 
+        // Auto-detect email tokens: resolve them to the matching customer's phone so a
+        // mixed phone/email list works. Emails that don't match an active customer are skipped.
+        var incoming = new List<string>();
+        var emailSkips = new List<SkippedRecord>();
+        foreach (var raw in phoneNumbers)
+        {
+            var token = (raw ?? string.Empty).Trim();
+            if (IsEmailToken(token))
+            {
+                var byEmail = await _customerRepository.GetByEmailAsync(token, cancellationToken);
+                if (byEmail == null)
+                {
+                    emailSkips.Add(new SkippedRecord(token, "NoCustomerForEmail"));
+                }
+                else if (byEmail.Status == CustomerStatus.Blacklisted)
+                {
+                    emailSkips.Add(new SkippedRecord(token, "Blacklisted"));
+                }
+                else if (await _brandCustomerRepository.IsBlockedAsync(brandId, byEmail.Id, cancellationToken))
+                {
+                    emailSkips.Add(new SkippedRecord(token, "BrandBlocked"));
+                }
+                else if (string.IsNullOrWhiteSpace(byEmail.PhoneNumber))
+                {
+                    emailSkips.Add(new SkippedRecord(token, "NoPhoneForEmail"));
+                }
+                else
+                {
+                    incoming.Add(byEmail.PhoneNumber);
+                }
+                continue;
+            }
+
+            incoming.Add(token);
+        }
+
         // Normalize and dedupe phone numbers preserving order
         var normalized = new List<string>();
         var invalidPhones = new List<SkippedRecord>();
         var seen = new HashSet<string>();
-        foreach (var raw in phoneNumbers)
+        foreach (var raw in incoming)
         {
             var n = Customer.NormalizePhoneNumber(raw ?? string.Empty);
             if (string.IsNullOrEmpty(n))
@@ -84,25 +127,33 @@ public class PromotionService : IPromotionService
         }
 
         if (normalized.Count == 0)
-            return new PromotionResult(false, ErrorCode: "NoValidPhones", ErrorMessage: "No valid phone numbers in list.", SkippedRecords: invalidPhones);
+            return new PromotionResult(false, ErrorCode: "NoValidRecipients", ErrorMessage: "No valid recipients in list.", SkippedRecords: invalidPhones.Concat(emailSkips).ToList());
 
         // AC2 + AC5: Resolve customers and ensure each has a MemberAccount
-        var skipped = new List<SkippedRecord>(invalidPhones);
+        var skipped = new List<SkippedRecord>(invalidPhones.Concat(emailSkips));
         var eligibleMembers = new List<(string Phone, Guid MemberId, string? Email, string Name)>();
         foreach (var phone in normalized)
         {
             var existing = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
             if (existing == null)
             {
+                // Email is unique per customer: only adopt the supplied email if nobody owns it yet
+                var suppliedEmail = Customer.NormalizeEmail(ResolveEmail(phone, phoneToEmail));
+                if (suppliedEmail != null && await _customerRepository.EmailExistsAsync(suppliedEmail, cancellationToken: cancellationToken))
+                    suppliedEmail = null;
+
                 var newCustomer = new Customer
                 {
                     PhoneNumber = phone,
                     FullName = phone,
                     Status = CustomerStatus.Active,
-                    Email = ResolveEmail(phone, phoneToEmail)
+                    Email = suppliedEmail
                 };
                 await _customerRepository.AddAsync(newCustomer, cancellationToken);
                 await _customerRepository.SaveChangesAsync(cancellationToken);
+
+                // Auto-link: receiving this brand's promotion makes them this brand's customer.
+                await _brandCustomerRepository.EnsureAsync(brandId, newCustomer.Id, BrandCustomerSource.PromotionAuto, null, cancellationToken);
 
                 var newMember = await EnsureMemberAccountAsync(newCustomer, cancellationToken);
                 eligibleMembers.Add((phone, newMember.Id, newCustomer.Email, newCustomer.FullName));
@@ -111,15 +162,26 @@ public class PromotionService : IPromotionService
             {
                 skipped.Add(new SkippedRecord(phone, "Blacklisted"));
             }
+            else if (await _brandCustomerRepository.IsBlockedAsync(brandId, existing.Id, cancellationToken))
+            {
+                skipped.Add(new SkippedRecord(phone, "BrandBlocked"));
+            }
             else
             {
+                // Auto-link: receiving this brand's promotion makes them this brand's customer.
+                await _brandCustomerRepository.EnsureAsync(brandId, existing.Id, BrandCustomerSource.PromotionAuto, null, cancellationToken);
+
                 // Upsert email from integration payload if not already on file
-                var suppliedEmail = ResolveEmail(phone, phoneToEmail);
+                var suppliedEmail = Customer.NormalizeEmail(ResolveEmail(phone, phoneToEmail));
                 if (!string.IsNullOrEmpty(suppliedEmail) && string.IsNullOrEmpty(existing.Email))
                 {
-                    existing.Email = suppliedEmail;
-                    _customerRepository.Update(existing);
-                    await _customerRepository.SaveChangesAsync(cancellationToken);
+                    // Email is unique per customer: only adopt it if no other customer owns it
+                    if (!await _customerRepository.EmailExistsAsync(suppliedEmail, excludeCustomerId: existing.Id, cancellationToken: cancellationToken))
+                    {
+                        existing.Email = suppliedEmail;
+                        _customerRepository.Update(existing);
+                        await _customerRepository.SaveChangesAsync(cancellationToken);
+                    }
                 }
 
                 var member = await EnsureMemberAccountAsync(existing, cancellationToken);
@@ -389,6 +451,11 @@ public class PromotionService : IPromotionService
             rate,
             outletBreakdown);
     }
+
+    /// <summary>
+    /// True when a pasted token is an email address rather than a phone number.
+    /// </summary>
+    private static bool IsEmailToken(string token) => _emailRegex.IsMatch(token);
 
     /// <summary>
     /// Resolves email from the phoneToEmail mapping (normalized phone → email).

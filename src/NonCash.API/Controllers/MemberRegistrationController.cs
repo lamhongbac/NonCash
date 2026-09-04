@@ -68,6 +68,12 @@ public class MemberRegistrationController : ControllerBase
         {
             // Find or create customer profile
             var customer = await _customerRepository.GetByPhoneNumberAsync(normalizedPhone, cancellationToken);
+
+            // Matrix row 11 (gap #7): blacklisted customers cannot self-register a member
+            // account. Generic message — no blacklist detail leak.
+            if (customer?.Status == CustomerStatus.Blacklisted)
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = "This account cannot be registered." });
+
             if (customer == null)
             {
                 customer = await _customerService.CreateAsync(
@@ -78,9 +84,14 @@ public class MemberRegistrationController : ControllerBase
             }
             else
             {
-                // Update profile details if customer already exists (e.g. placeholder from transfer)
+                // Update profile details if customer already exists (e.g. placeholder from transfer).
+                // Email is unique per customer: reject if another customer already owns it.
+                var normalizedEmail = Customer.NormalizeEmail(email)!;
+                if (await _customerRepository.EmailExistsAsync(normalizedEmail, excludeCustomerId: customer.Id, cancellationToken))
+                    return Conflict(new { error = $"A customer with email '{normalizedEmail}' already exists." });
+
                 customer.FullName = request.FullName.Trim();
-                customer.Email = email;
+                customer.Email = normalizedEmail;
                 _customerRepository.Update(customer);
                 await _customerRepository.SaveChangesAsync(cancellationToken);
             }

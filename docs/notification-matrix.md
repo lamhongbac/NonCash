@@ -78,6 +78,23 @@ Email delivery can be disabled without changing SMTP config:
 
 When `EmailEnabled` is `false` OR `Smtp:Host` is empty, the system falls back to `ConsoleNotificationService` (logs to stdout).
 
+### Dev Mode Kill-Switch
+
+`Environment:Name` (in `appsettings.json`) is the master switch:
+
+```json
+"Environment": {
+  "Name": "dev"
+}
+```
+
+When the name is `dev` (or missing — fails safe), **no real email is ever sent**, regardless of SMTP config or `EmailEnabled`:
+
+- DI registers `ConsoleNotificationService` instead of `EmailNotificationService`.
+- `EmailNotificationService.SendAsync` double-checks the mode and suppresses delivery even if registered directly; the suppressed attempt is written to `email_logs` with `Success=false` and `ErrorMessage="Suppressed: dev mode (Environment:Name=dev)"` for audit.
+
+To enable real delivery (pilot/production), set `Environment:Name` to `pilot` or `production` (e.g. via the `Environment__Name` environment variable) and provide SMTP settings.
+
 ### Retry Policy
 
 - **Max retries**: 3

@@ -21,56 +21,77 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
             .FirstOrDefaultAsync(c => c.PhoneNumber == phoneNumber, cancellationToken);
     }
 
+    public async Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        var normalized = email.Trim();
+        return await _context.Customers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Email != null && EF.Functions.ILike(c.Email, normalized), cancellationToken);
+    }
+
     public async Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken cancellationToken = default)
     {
         return await _context.Customers
             .AnyAsync(c => c.PhoneNumber == phoneNumber, cancellationToken);
     }
 
-    public async Task<IEnumerable<Customer>> SearchAsync(string? phoneNumber, string? name, string? email, CustomerStatus? status, CancellationToken cancellationToken = default)
+    public async Task<bool> EmailExistsAsync(string email, Guid? excludeCustomerId = null, CancellationToken cancellationToken = default)
     {
-        var query = _context.Customers.AsNoTracking().AsQueryable();
+        if (string.IsNullOrWhiteSpace(email))
+            return false;
 
-        if (!string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            query = query.Where(c => c.PhoneNumber == phoneNumber);
-        }
+        var normalized = email.Trim();
+        var query = _context.Customers
+            .AsNoTracking()
+            .Where(c => c.Email != null && EF.Functions.ILike(c.Email, normalized));
 
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            query = query.Where(c => EF.Functions.Like(c.FullName, $"%{name}%"));
-        }
+        if (excludeCustomerId.HasValue)
+            query = query.Where(c => c.Id != excludeCustomerId.Value);
 
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            query = query.Where(c => EF.Functions.Like(c.Email ?? "", $"%{email}%"));
-        }
-
-        if (status.HasValue)
-        {
-            query = query.Where(c => c.Status == status.Value);
-        }
-
-        return await query.OrderBy(c => c.FullName).ToListAsync(cancellationToken);
+        return await query.AnyAsync(cancellationToken);
     }
 
-    public async Task<int> CountAsync(string? phoneNumber, string? name, string? email, CustomerStatus? status, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Customer>> SearchAsync(string? search, CustomerStatus? status, CancellationToken cancellationToken = default, Guid? brandId = null)
+    {
+        return await BuildSearchQuery(search, status, brandId)
+            .OrderBy(c => c.FullName)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountAsync(string? search, CustomerStatus? status, CancellationToken cancellationToken = default, Guid? brandId = null)
+    {
+        return await BuildSearchQuery(search, status, brandId).CountAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Shared filter for list/count: a single search term matched partially (contains)
+    /// against FullName and Email (case-insensitive) and against PhoneNumber on its
+    /// digits only (so formatted input like "090-123" still matches "090123"),
+    /// combined with an optional status filter. When <paramref name="brandId"/> is
+    /// set, only customers having a brand_customers mapping to that brand are returned.
+    /// </summary>
+    private IQueryable<Customer> BuildSearchQuery(string? search, CustomerStatus? status, Guid? brandId = null)
     {
         var query = _context.Customers.AsNoTracking().AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(phoneNumber))
+        if (brandId.HasValue)
         {
-            query = query.Where(c => c.PhoneNumber == phoneNumber);
+            var brand = brandId.Value;
+            query = query.Where(c => _context.BrandCustomers.Any(bc => bc.BrandId == brand && bc.CustomerId == c.Id));
         }
 
-        if (!string.IsNullOrWhiteSpace(name))
+        if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(c => EF.Functions.Like(c.FullName, $"%{name}%"));
-        }
+            var term = search.Trim().ToLowerInvariant();
+            var digits = new string(search.Where(char.IsDigit).ToArray());
 
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            query = query.Where(c => EF.Functions.Like(c.Email ?? "", $"%{email}%"));
+            query = query.Where(c =>
+                c.FullName.ToLower().Contains(term)
+                || (c.Email != null && c.Email.ToLower().Contains(term))
+                || (digits.Length > 0 && c.PhoneNumber.Contains(digits)));
         }
 
         if (status.HasValue)
@@ -78,6 +99,6 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
             query = query.Where(c => c.Status == status.Value);
         }
 
-        return await query.CountAsync(cancellationToken);
+        return query;
     }
 }

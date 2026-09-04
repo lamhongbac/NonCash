@@ -1,0 +1,215 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NonCash.Web.Services.ClientAuthService AuthState
+@using NonCash.Infrastructure.Services
+
+@*
+    Reusable "Batch Promotion" (Story 3.1) distribution card.
+    Embedded wherever vouchers of an approved plan can be sent to customers:
+      - after Generate Vouchers (PlanVouchers.razor)
+      - the standalone "Distribute Vouchers" menu page (Distribute.razor)
+      - (later) the read-only plan View
+    Set PlanId; optionally handle OnDistributed to refresh the host page.
+*@
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    @if (ShowHeader)
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">Batch Promotion (Story 3.1)</MudText>
+    }
+    <MudText Typo="Typo.body2" Class="mb-3">Distribute vouchers to a target customer list. Paste phone numbers and/or email addresses (comma/newline separated) or upload a file with them in the first column — <b>.xlsx</b> (recommended, use the template) or .csv/.txt. Emails are matched to an existing customer; unknown or blacklisted recipients are skipped automatically.</MudText>
+    <MudStack Spacing="2">
+        <MudTextField T="string" @bind-Value="_phoneList" Label="Phone numbers / email addresses" Lines="4" Variant="Variant.Outlined" Placeholder="0912345678, jane@example.com" />
+        <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2">Notify recipients via:</MudText>
+            <MudRadioGroup T="string" @bind-Value="_notifyChannel">
+                <MudRadio T="string" Value="@("Email")" Color="Color.Primary" Dense="true">Email</MudRadio>
+                <MudRadio T="string" Value="@("Zalo")" Color="Color.Primary" Dense="true">Zalo</MudRadio>
+                <MudRadio T="string" Value="@("Both")" Color="Color.Primary" Dense="true">Both</MudRadio>
+            </MudRadioGroup>
+        </MudStack>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudButton Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadRecipientTemplate">
+                Download template
+            </MudButton>
+            <InputFile OnChange="OnFileSelected" accept=".csv,.txt,.xlsx" />
+            @if (_selectedFile != null)
+            {
+                <MudText Typo="Typo.caption">Selected: @_selectedFile.Name</MudText>
+            }
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="PromoteVouchers" Disabled="@(_promoting || PlanId == Guid.Empty)" StartIcon="@Icons.Material.Filled.Campaign">
+                @if (_promoting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Distribute Now
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_lastPromoteResult != null)
+    {
+        <MudAlert Severity="@(_lastPromoteResult.SkippedCount > 0 ? Severity.Warning : Severity.Success)" Class="mt-3">
+            Distributed: <b>@_lastPromoteResult.DistributedCount</b> &nbsp;|&nbsp; Skipped: <b>@_lastPromoteResult.SkippedCount</b>
+        </MudAlert>
+        @if (_lastPromoteResult.SkippedPhones?.Any() == true)
+        {
+            <MudTable Items="_lastPromoteResult.SkippedPhones" Dense="true" Class="mt-2">
+                <HeaderContent>
+                    <MudTh>Phone</MudTh>
+                    <MudTh>Reason</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.PhoneNumber</MudTd>
+                    <MudTd>@context.Reason</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+</MudPaper>
+
+@code {
+    /// <summary>The approved plan whose vouchers are distributed.</summary>
+    [Parameter] public Guid PlanId { get; set; }
+
+    /// <summary>Raised after a successful distribution so the host page can refresh (e.g. reload voucher list).</summary>
+    [Parameter] public EventCallback OnDistributed { get; set; }
+
+    /// <summary>Shows the "Batch Promotion" title. Turn off when the host already provides a heading.</summary>
+    [Parameter] public bool ShowHeader { get; set; } = true;
+
+    private string _phoneList = string.Empty;
+    private string _notifyChannel = "Email";
+    private IBrowserFile? _selectedFile;
+    private bool _promoting = false;
+    private PromoteResultDto? _lastPromoteResult;
+    private Guid _lastPlanId;
+
+    protected override void OnParametersSet()
+    {
+        // Reset transient state when a different plan is selected (the standalone Distribute page reuses this component).
+        if (PlanId != _lastPlanId)
+        {
+            _lastPlanId = PlanId;
+            _phoneList = string.Empty;
+            _notifyChannel = "Email";
+            _selectedFile = null;
+            _promoting = false;
+            _lastPromoteResult = null;
+        }
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+    }
+
+    private async Task PromoteVouchers()
+    {
+        if (_selectedFile == null && string.IsNullOrWhiteSpace(_phoneList))
+        {
+            Snackbar.Add("Please paste phone numbers/email addresses or upload a CSV file.", Severity.Warning);
+            return;
+        }
+
+        _promoting = true;
+        _lastPromoteResult = null;
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            using var content = new MultipartFormDataContent();
+
+            if (_selectedFile != null)
+            {
+                var streamContent = new StreamContent(_selectedFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024));
+                var mediaType = _selectedFile.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
+                    ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    : "text/csv";
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
+                content.Add(streamContent, "file", _selectedFile.Name);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_phoneList))
+            {
+                content.Add(new StringContent(_phoneList), "phoneNumbersCsv");
+            }
+
+            content.Add(new StringContent(_notifyChannel), "notifyChannels");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/promote") { Content = content };
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _lastPromoteResult = await response.Content.ReadFromJsonAsync<PromoteResultDto>();
+                Snackbar.Add($"Distributed {_lastPromoteResult?.DistributedCount ?? 0} vouchers.", Severity.Success);
+                _phoneList = string.Empty;
+                _selectedFile = null;
+                await OnDistributed.InvokeAsync();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Promotion failed: {ExtractErrorMessage(body)}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _promoting = false;
+        }
+    }
+
+    private async Task DownloadRecipientTemplate()
+    {
+        try
+        {
+            var bytes = RecipientListTemplate.BuildXlsx();
+            await JS.InvokeVoidAsync("downloadFromBase64",
+                "recipient-list-template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not build the template: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string ExtractErrorMessage(string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("message", out var message) && message.ValueKind == System.Text.Json.JsonValueKind.String)
+                return message.GetString() ?? body;
+            if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == System.Text.Json.JsonValueKind.String)
+                return error.GetString() ?? body;
+        }
+        catch
+        {
+            // not JSON - show the raw body
+        }
+        return body;
+    }
+
+    public class PromoteResultDto
+    {
+        public int DistributedCount { get; set; }
+        public int SkippedCount { get; set; }
+        public List<SkippedPhoneDto>? SkippedPhones { get; set; }
+    }
+
+    public class SkippedPhoneDto
+    {
+        public string PhoneNumber { get; set; } = "";
+        public string Reason { get; set; } = "";
+    }
+}

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NonCash.Core.Interfaces;
+using NonCash.Core.Services;
+using NonCash.Infrastructure.Services;
 
 namespace NonCash.API.Controllers;
 
@@ -38,7 +40,16 @@ public class PromotionsController : ControllerBase
         if (string.IsNullOrEmpty(role) || !AllowedRoles.Contains(role))
             return Forbid();
 
-        var phones = await ResolvePhoneNumbersAsync(file, phoneNumbersCsv, cancellationToken);
+        List<string> phones;
+        try
+        {
+            phones = await ResolvePhoneNumbersAsync(file, phoneNumbersCsv, cancellationToken);
+        }
+        catch (CustomerImportParseException ex)
+        {
+            return BadRequest(new { error = "Validation", message = ex.Message });
+        }
+
         if (phones.Count == 0)
             return BadRequest(new { error = "EmptyList", message = "No phone numbers were provided." });
 
@@ -100,24 +111,7 @@ public class PromotionsController : ControllerBase
         if (file != null && file.Length > 0)
         {
             using var stream = file.OpenReadStream();
-            using var reader = new StreamReader(stream);
-            string? line;
-            var isFirstLine = true;
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-            {
-                // Skip header row if it does not look like a phone (contains letters)
-                if (isFirstLine)
-                {
-                    isFirstLine = false;
-                    if (line.Any(char.IsLetter))
-                        continue;
-                }
-
-                // Take the first column from CSV
-                var firstCol = line.Split(',', '\t', ';')[0].Trim().Trim('"');
-                if (!string.IsNullOrWhiteSpace(firstCol))
-                    result.Add(firstCol);
-            }
+            result.AddRange(await RecipientFileReader.ReadAsync(stream, cancellationToken));
         }
 
         if (!string.IsNullOrWhiteSpace(phoneNumbersCsv))

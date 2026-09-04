@@ -69,13 +69,16 @@ public class VoucherPlanService : IVoucherPlanService
 {
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IOutletRepository _outletRepository;
+    private readonly IBrandRepository _brandRepository;
 
     public VoucherPlanService(
         IVoucherPlanRepository planRepository,
-        IOutletRepository outletRepository)
+        IOutletRepository outletRepository,
+        IBrandRepository brandRepository)
     {
         _planRepository = planRepository;
         _outletRepository = outletRepository;
+        _brandRepository = brandRepository;
     }
 
     public async Task<PlanResult> CreateAsync(CreatePlanDto dto, Guid creatorId, Guid brandId, CancellationToken cancellationToken = default)
@@ -88,6 +91,9 @@ public class VoucherPlanService : IVoucherPlanService
         var outletError = await ValidateOutletOwnershipAsync(dto.OutletIds, brandId, cancellationToken);
         if (outletError != null)
             return new PlanResult(false, outletError);
+
+        // Epic 3: resolve the owning brand's company so scope records the full hierarchy path.
+        var brand = await _brandRepository.GetByIdAsync(brandId, cancellationToken);
 
         var plan = new VoucherPlanHeader
         {
@@ -115,17 +121,13 @@ public class VoucherPlanService : IVoucherPlanService
             ValidDaysOfWeek = dto.ValidDaysOfWeek,
             ApprovalStatus = ApprovalStatus.Pending,
             TargetDistributed = 0,
-            TargetUsed = 0
+            TargetUsed = 0,
+            // Epic 3: scope = 1 company (owning brand's business) + 1 brand + outlet list (nullable).
+            // Empty Outlets legitimately means "whole brand"; hierarchy resolution happens at redeem (deferred).
+            Scope = BuildScope(brand, brandId, dto.OutletIds)
         };
 
         await _planRepository.AddAsync(plan, cancellationToken);
-        await _planRepository.SaveChangesAsync(cancellationToken);
-
-        // Add outlet associations
-        foreach (var outletId in dto.OutletIds)
-        {
-            plan.PlanOutlets.Add(new PlanOutlet { PlanId = plan.Id, OutletId = outletId });
-        }
         await _planRepository.SaveChangesAsync(cancellationToken);
 
         return new PlanResult(true, Plan: plan);
@@ -173,12 +175,12 @@ public class VoucherPlanService : IVoucherPlanService
         plan.ShortDescription = dto.ShortDescription;
         plan.ValidDaysOfWeek = dto.ValidDaysOfWeek;
 
-        // Update outlet associations
-        plan.PlanOutlets.Clear();
-        foreach (var outletId in dto.OutletIds)
-        {
-            plan.PlanOutlets.Add(new PlanOutlet { PlanId = plan.Id, OutletId = outletId });
-        }
+        // Epic 3: refresh the applicability scope (owning company/brand stable; outlets may change).
+        var brand = await _brandRepository.GetByIdAsync(brandId, cancellationToken);
+        var scope = BuildScope(brand, brandId, dto.OutletIds);
+        plan.Scope.Companies = scope.Companies;
+        plan.Scope.Brands = scope.Brands;
+        plan.Scope.Outlets = scope.Outlets;
 
         _planRepository.Update(plan);
         await _planRepository.SaveChangesAsync(cancellationToken);
@@ -241,4 +243,15 @@ public class VoucherPlanService : IVoucherPlanService
 
         return null;
     }
+
+    /// <summary>
+    /// Epic 3: build the applicability scope for a plan — the owning company (from the brand's
+    /// BusinessId), the owning brand, and the selected outlets (may be empty = "whole brand").
+    /// </summary>
+    private static VoucherScope BuildScope(Brand? brand, Guid brandId, List<Guid> outletIds) => new()
+    {
+        Companies = brand != null ? new List<Guid> { brand.BusinessId } : new List<Guid>(),
+        Brands = new List<Guid> { brandId },
+        Outlets = outletIds?.ToList() ?? new List<Guid>()
+    };
 }

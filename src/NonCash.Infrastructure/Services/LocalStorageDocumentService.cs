@@ -37,6 +37,7 @@ public class LocalStorageDocumentService : IDocumentStorageService
         string contentType,
         string entity,
         string uniqueCode,
+        string fieldName,
         CancellationToken cancellationToken = default)
     {
         if (!AllowedContentTypes.Contains(contentType))

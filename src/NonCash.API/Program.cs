@@ -56,6 +56,7 @@ builder.Services.AddScoped<IBusinessRepository, BusinessRepository>();
 builder.Services.AddScoped<IBrandRepository, BrandRepository>();
 builder.Services.AddScoped<IOutletRepository, OutletRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IBrandCustomerRepository, BrandCustomerRepository>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 builder.Services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
 builder.Services.AddScoped<IBusinessRegistrationRequestRepository, BusinessRegistrationRequestRepository>();
@@ -123,14 +124,17 @@ builder.Services.AddScoped<IRegistrationService, RegistrationService>();
 // Notification services
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddScoped<IEmailTemplateRenderer, PlaceholderEmailTemplateRenderer>();
+var environmentConfig = builder.Configuration.GetSection(EnvironmentConfig.SectionName).Get<EnvironmentConfig>() ?? new EnvironmentConfig();
 var smtpHost = builder.Configuration["Smtp:Host"];
-var emailEnabled = builder.Configuration.GetValue<bool?>("Notifications:EmailEnabled") ?? true;
-if (!string.IsNullOrWhiteSpace(smtpHost) && emailEnabled)
+// Email toggle: explicit flag wins everywhere; when absent, dev defaults to suppressed and other environments to enabled.
+var emailEnabled = builder.Configuration.GetValue<bool?>("Notifications:EmailEnabled") ?? !environmentConfig.IsDev;
+if (emailEnabled && !string.IsNullOrWhiteSpace(smtpHost))
 {
     builder.Services.AddScoped<INotificationService, EmailNotificationService>();
 }
 else
 {
+    // Console sink: notifications are logged only (email delivery suppressed by Notifications:EmailEnabled or missing SMTP).
     builder.Services.AddScoped<INotificationService, ConsoleNotificationService>();
 }
 
@@ -216,7 +220,19 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 
-// Seed admin account
-await NonCash.Infrastructure.Data.DatabaseSeeder.SeedAdminAsync(app.Services);
+// Seed admin account (retry while the database is still coming up, e.g. right after a machine/service restart)
+for (var attempt = 1; ; attempt++)
+{
+    try
+    {
+        await NonCash.Infrastructure.Data.DatabaseSeeder.SeedAdminAsync(app.Services);
+        break;
+    }
+    catch (Exception ex) when (attempt < 5)
+    {
+        app.Logger.LogWarning(ex, "Database not ready for seeding (attempt {Attempt}/5); retrying in 3s...", attempt);
+        await Task.Delay(TimeSpan.FromSeconds(3));
+    }
+}
 
 app.Run();

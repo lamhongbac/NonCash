@@ -17,4 +17,13 @@ public class Customer : BaseEntity
     {
         return new string(phone.Where(char.IsDigit).ToArray());
     }
+
+    /// <summary>
+    /// Normalizes an email for storage: trimmed and lowercased so uniqueness
+    /// checks are case-insensitive. Returns null for blank input (email is optional).
+    /// </summary>
+    public static string? NormalizeEmail(string? email)
+    {
+        return string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
+    }
 }

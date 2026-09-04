@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-27T00:00:00
-last_updated: 2026-08-15T12:00:00
+last_updated: 2026-09-03T00:00:00
 project: NonCash
 project_key: NOKEY
 tracking_system: file-system
@@ -123,3 +123,17 @@ development_status:
   8-2-member-store-wallet-display: backlog
   8-3-loyalty-app-display-payload: backlog
   epic-8-retrospective: optional
+
+  # Pricing Analytics (2026-09-03)
+  # Admin-only analytics reports backing docs/credit-pricing-strategy.md:
+  # R1 voucher face-value distribution per brand (unblocks pricing Q2 flat vs Model C)
+  # R2 effective take rate per brand, R3 credit purchase & burn timeline
+  pricing-analytics: backlog
+
+  # Customer Model Redesign — Brand-Customer Mapping (2026-09-03)
+  # Option A: global customers + brand_customers mapping (docs/customer-action-matrix.md)
+  # Brand-scoped customer visibility for BrandManagers; per-brand block vs platform blacklist (S1/S2);
+  # auto-link on every brand-customer touchpoint (import/manual/promotion/purchase/transfer/gifting/redemption);
+  # all matrix §6 enforcement gaps closed (login O2, registration, transfer sender, gifting recipient);
+  # migration AddBrandCustomerMapping with D1 backfill; AllowAnonymous removed from customer GET endpoints
+  customer-brand-mapping: done
