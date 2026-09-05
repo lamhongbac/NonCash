@@ -77,5 +77,10 @@ public record PlanResponse(
     string? BrandColor = null,
     string? DisplayName = null,
     string? ShortDescription = null,
-    string? ValidDaysOfWeek = null
+    string? ValidDaysOfWeek = null,
+    // Voucher stock (derived from voucher_plan_details): feeds the Generate/Distribute UI.
+    int Generated = 0,
+    int AssignedUsed = 0,
+    int Available = 0,
+    int QuotaRemaining = 0
 );

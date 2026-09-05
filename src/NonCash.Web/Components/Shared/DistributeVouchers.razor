@@ -1,5 +1,5 @@
 @inject HttpClient Http
-@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject NonCash.Web.Services.ClientAuthService AuthState
 @using NonCash.Infrastructure.Services
@@ -18,7 +18,21 @@
     {
         <MudText Typo="Typo.h6" GutterBottom="true">Batch Promotion (Story 3.1)</MudText>
     }
-    <MudText Typo="Typo.body2" Class="mb-3">Distribute vouchers to a target customer list. Paste phone numbers and/or email addresses (comma/newline separated) or upload a file with them in the first column — <b>.xlsx</b> (recommended, use the template) or .csv/.txt. Emails are matched to an existing customer; unknown or blacklisted recipients are skipped automatically.</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3">Distribute vouchers to a target customer list. Paste phone numbers and/or email addresses (comma/newline separated) or upload a file with them in the first column — <b>.xlsx</b> (recommended, use the template) or .csv/.txt. Each recipient must match an <b>existing customer</b> (by phone or email) — unknown, blacklisted or blocked entries are skipped automatically, and duplicate entries receive only one voucher.</MudText>
+
+    @if (_stockLoaded)
+    {
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.body2"><b>Plan:</b> @(string.IsNullOrEmpty(_stockPlanName) ? "(this plan)" : _stockPlanName)</MudText>
+                <MudText Typo="Typo.body2"><b>Generated:</b> @_stockGenerated</MudText>
+                <MudText Typo="Typo.body2"><b>Assigned/Used:</b> @_stockAssignedUsed</MudText>
+                <MudText Typo="Typo.body2"><b>Available:</b> @_stockAvailable</MudText>
+                <MudText Typo="Typo.body2"><b>Quota remaining:</b> @_stockQuotaRemaining</MudText>
+            </MudStack>
+        </MudPaper>
+    }
+
     <MudStack Spacing="2">
         <MudTextField T="string" @bind-Value="_phoneList" Label="Phone numbers / email addresses" Lines="4" Variant="Variant.Outlined" Placeholder="0912345678, jane@example.com" />
         <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
@@ -47,6 +61,21 @@
                 Distribute Now
             </MudButton>
         </MudStack>
+
+        @if (_stockLoaded && ParsedRecipientCount > 0)
+        {
+            var after = _stockAvailable - ParsedRecipientCount;
+            <MudText Typo="Typo.body2"
+                     Color="@(ParsedRecipientCount > _stockAvailable ? Color.Error : Color.Default)"
+                     Class="@(ParsedRecipientCount > _stockAvailable ? "mt-1" : "mt-1")">
+                You will send to <b>@ParsedRecipientCount</b> recipient@(ParsedRecipientCount == 1 ? "" : "s");
+                <b>@_stockAvailable</b> available; after = <b>@after</b>.
+                @if (ParsedRecipientCount > _stockAvailable)
+                {
+                    <span>Not enough available vouchers — generate more or reduce the list.</span>
+                }
+            </MudText>
+        }
     </MudStack>
 
     @if (_lastPromoteResult != null)
@@ -87,7 +116,35 @@
     private PromoteResultDto? _lastPromoteResult;
     private Guid _lastPlanId;
 
-    protected override void OnParametersSet()
+    // Recipients parsed from the uploaded file (kept so we can show the count before submit).
+    private List<string> _fileRecipients = new();
+
+    // Stock snapshot for the selected plan (from GET api/v1/plans/{id}).
+    private bool _stockLoaded = false;
+    private string _stockPlanName = string.Empty;
+    private int _stockGenerated;
+    private int _stockAssignedUsed;
+    private int _stockAvailable;
+    private int _stockQuotaRemaining;
+
+    /// <summary>
+    /// Distinct valid recipient tokens across the uploaded file and the pasted list.
+    /// Used to show "you will send to R recipients" and to pre-block R &gt; available.
+    /// </summary>
+    private int ParsedRecipientCount
+    {
+        get
+        {
+            var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var t in _fileRecipients)
+                if (!string.IsNullOrWhiteSpace(t)) tokens.Add(t.Trim());
+            foreach (var t in _phoneList.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                if (!string.IsNullOrWhiteSpace(t)) tokens.Add(t.Trim());
+            return tokens.Count;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         // Reset transient state when a different plan is selected (the standalone Distribute page reuses this component).
         if (PlanId != _lastPlanId)
@@ -96,21 +153,83 @@
             _phoneList = string.Empty;
             _notifyChannel = "Email";
             _selectedFile = null;
+            _fileRecipients = new();
             _promoting = false;
             _lastPromoteResult = null;
+            await LoadStockAsync();
         }
     }
 
-    private void OnFileSelected(InputFileChangeEventArgs e)
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
         _selectedFile = e.File;
+        _fileRecipients = new();
+        if (_selectedFile == null) return;
+        try
+        {
+            using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            _fileRecipients = await RecipientFileReader.ReadAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            _fileRecipients = new();
+            await MessageDialog.ShowAsync(DialogService, "Could not read the file",
+                ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoadStockAsync()
+    {
+        _stockLoaded = false;
+        if (PlanId == Guid.Empty) return;
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, $"api/v1/plans/{PlanId}");
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return;
+            var info = await response.Content.ReadFromJsonAsync<PlanStockInfo>();
+            if (info == null) return;
+            _stockPlanName = string.IsNullOrWhiteSpace(info.DisplayName) ? info.VoucherType ?? string.Empty : info.DisplayName!;
+            _stockGenerated = info.Generated;
+            _stockAssignedUsed = info.AssignedUsed;
+            _stockAvailable = info.Available;
+            _stockQuotaRemaining = info.QuotaRemaining;
+            _stockLoaded = true;
+        }
+        catch
+        {
+            // Stock panel is informational; if it cannot load we still allow the server to validate authoritatively.
+            _stockLoaded = false;
+        }
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
     }
 
     private async Task PromoteVouchers()
     {
         if (_selectedFile == null && string.IsNullOrWhiteSpace(_phoneList))
         {
-            Snackbar.Add("Please paste phone numbers/email addresses or upload a CSV file.", Severity.Warning);
+            await MessageDialog.ShowAsync(DialogService, "Nothing to distribute",
+                "Please paste phone numbers/email addresses or upload a recipient file first.",
+                Severity.Warning);
+            return;
+        }
+
+        // Client-side pre-check (server re-checks authoritatively). Block before any request is sent.
+        var recipients = ParsedRecipientCount;
+        if (_stockLoaded && recipients > _stockAvailable)
+        {
+            await MessageDialog.ShowAsync(DialogService, "Nothing was distributed",
+                $"Required {recipients}, Available {_stockAvailable} ({_stockAssignedUsed} already assigned/used). " +
+                "Generate more vouchers for this plan or reduce the recipient list.",
+                Severity.Error);
             return;
         }
 
@@ -146,20 +265,26 @@
             if (response.IsSuccessStatusCode)
             {
                 _lastPromoteResult = await response.Content.ReadFromJsonAsync<PromoteResultDto>();
-                Snackbar.Add($"Distributed {_lastPromoteResult?.DistributedCount ?? 0} vouchers.", Severity.Success);
                 _phoneList = string.Empty;
                 _selectedFile = null;
+                _fileRecipients = new();
+                await LoadStockAsync();
                 await OnDistributed.InvokeAsync();
+                await MessageDialog.ShowAsync(DialogService, "Distribution complete",
+                    $"Distributed: {_lastPromoteResult?.DistributedCount ?? 0}\nSkipped: {_lastPromoteResult?.SkippedCount ?? 0}",
+                    Severity.Success);
             }
             else
             {
                 var body = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Promotion failed: {ExtractErrorMessage(body)}", Severity.Error);
+                await MessageDialog.ShowAsync(DialogService, "Distribution failed",
+                    ExtractErrorMessage(body), Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Distribution failed",
+                ex.Message, Severity.Error);
         }
         finally
         {
@@ -179,7 +304,8 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not build the template: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Could not build the template",
+                ex.Message, Severity.Error);
         }
     }
 
@@ -211,5 +337,17 @@
     {
         public string PhoneNumber { get; set; } = "";
         public string Reason { get; set; } = "";
+    }
+
+    /// <summary>Subset of the plan response used to render the stock panel.</summary>
+    public class PlanStockInfo
+    {
+        public string? DisplayName { get; set; }
+        public string? VoucherType { get; set; }
+        public int TargetQuantity { get; set; }
+        public int Generated { get; set; }
+        public int AssignedUsed { get; set; }
+        public int Available { get; set; }
+        public int QuotaRemaining { get; set; }
     }
 }

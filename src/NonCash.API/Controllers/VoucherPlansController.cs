@@ -15,11 +15,16 @@ public class VoucherPlansController : ControllerBase
 {
     private readonly IVoucherPlanService _planService;
     private readonly ICurrentUserService _currentUser;
+    private readonly IRepository<VoucherPlanDetail> _detailRepository;
 
-    public VoucherPlansController(IVoucherPlanService planService, ICurrentUserService currentUser)
+    public VoucherPlansController(
+        IVoucherPlanService planService,
+        ICurrentUserService currentUser,
+        IRepository<VoucherPlanDetail> detailRepository)
     {
         _planService = planService;
         _currentUser = currentUser;
+        _detailRepository = detailRepository;
     }
 
     [HttpPost]
@@ -58,7 +63,8 @@ public class VoucherPlansController : ControllerBase
         if (!result.Success)
             return BadRequest(new { error = "Validation", message = result.ErrorMessage });
 
-        return CreatedAtAction(nameof(GetById), new { id = result.Plan!.Id }, MapToResponse(result.Plan));
+        var createdStock = await GetStockAsync(result.Plan!.Id, result.Plan.TargetQuantity, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Plan!.Id }, MapToResponse(result.Plan, createdStock));
     }
 
     [HttpGet]
@@ -73,7 +79,13 @@ public class VoucherPlansController : ControllerBase
             statusFilter = s;
 
         var plans = await _planService.ListAsync(brandId.Value, statusFilter, cancellationToken);
-        return Ok(plans.Select(MapToResponse));
+        var responses = new List<PlanResponse>();
+        foreach (var p in plans)
+        {
+            var stock = await GetStockAsync(p.Id, p.TargetQuantity, cancellationToken);
+            responses.Add(MapToResponse(p, stock));
+        }
+        return Ok(responses);
     }
 
     [HttpGet("{id:guid}")]
@@ -87,7 +99,8 @@ public class VoucherPlansController : ControllerBase
         if (plan == null)
             return NotFound(new { error = "Plan not found." });
 
-        return Ok(MapToResponse(plan));
+        var stock = await GetStockAsync(plan.Id, plan.TargetQuantity, cancellationToken);
+        return Ok(MapToResponse(plan, stock));
     }
 
     [HttpPut("{id:guid}")]
@@ -124,10 +137,28 @@ public class VoucherPlansController : ControllerBase
         if (!result.Success)
             return BadRequest(new { error = "Validation", message = result.ErrorMessage });
 
-        return Ok(MapToResponse(result.Plan!));
+        var updatedStock = await GetStockAsync(result.Plan!.Id, result.Plan.TargetQuantity, cancellationToken);
+        return Ok(MapToResponse(result.Plan!, updatedStock));
     }
 
-    private static PlanResponse MapToResponse(VoucherPlanHeader p) => new(
+    /// <summary>
+    /// Derives voucher stock for a plan from its detail rows:
+    /// Generated = all rows; Available = Pending + unassigned; AssignedUsed = Generated − Available;
+    /// QuotaRemaining = TargetQuantity − Generated (never negative).
+    /// </summary>
+    private async Task<(int Generated, int AssignedUsed, int Available, int QuotaRemaining)> GetStockAsync(
+        Guid planId, int targetQuantity, CancellationToken cancellationToken)
+    {
+        var generated = await _detailRepository.CountAsync(d => d.ParentId == planId, cancellationToken);
+        var available = await _detailRepository.CountAsync(
+            d => d.ParentId == planId && d.MemberId == null && d.UsageStatus == UsageStatus.Pending,
+            cancellationToken);
+        return (generated, generated - available, available, Math.Max(0, targetQuantity - generated));
+    }
+
+    private static PlanResponse MapToResponse(
+        VoucherPlanHeader p,
+        (int Generated, int AssignedUsed, int Available, int QuotaRemaining) stock) => new(
         p.Id,
         p.PlanDate,
         p.VoucherType.ToString(),
@@ -155,6 +186,10 @@ public class VoucherPlansController : ControllerBase
         BrandColor: p.BrandColor,
         DisplayName: p.DisplayName,
         ShortDescription: p.ShortDescription,
-        ValidDaysOfWeek: p.ValidDaysOfWeek
+        ValidDaysOfWeek: p.ValidDaysOfWeek,
+        Generated: stock.Generated,
+        AssignedUsed: stock.AssignedUsed,
+        Available: stock.Available,
+        QuotaRemaining: stock.QuotaRemaining
     );
 }

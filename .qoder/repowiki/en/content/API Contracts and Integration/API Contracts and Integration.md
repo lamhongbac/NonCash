@@ -27,6 +27,7 @@
 - [CreditPoliciesController.cs](file://src/NonCash.API/Controllers/CreditPoliciesController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [MediaContentController.cs](file://src/NonCash.API/Controllers/MediaContentController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
@@ -42,15 +43,23 @@
 - [VoucherTransferInitiated.html](file://src/NonCash.Infrastructure/EmailTemplates/VoucherTransferInitiated.html)
 - [BrandCreated.html](file://src/NonCash.Infrastructure/EmailTemplates/BrandCreated.html)
 - [notification-matrix.md](file://docs/notification-matrix.md)
+- [IImageStorageService.cs](file://src/NonCash.Core/Interfaces/IImageStorageService.cs)
+- [IDocumentStorageService.cs](file://src/NonCash.Core/Interfaces/IDocumentStorageService.cs)
+- [LocalStorageImageService.cs](file://src/NonCash.Infrastructure\Services\LocalStorageImageService.cs)
+- [MsaImageStorageService.cs](file://src/NonCash.Infrastructure\Services\MsaImageStorageService.cs)
+- [MsaDocumentStorageService.cs](file://src/NonCash.Infrastructure\Services\MsaDocumentStorageService.cs)
+- [MsaMediaClient.cs](file://src/NonCash.Infrastructure\Services\MsaMediaClient.cs)
+- [media-service-integration.md](file://src/Libs/media-service-integration.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive BrandCreatedNotification type with complete business creation workflow automation
-- Enhanced integration endpoints with new Members parameter structure for improved member data handling
-- Updated member event history functionality with enhanced event tracking capabilities
-- Integrated email notification system with new BrandCreated template and automated business activation workflows
-- Enhanced distribution endpoint to support structured member data with phone-to-email mapping
+- Enhanced Image Upload API with comprehensive Media Management endpoints supporting multiple storage backends (Local Storage and Azure Storage via MSA) with CDN integration
+- Added MediaContentController for secure media proxying through HTTPS to avoid mixed content issues
+- Implemented dual storage backend architecture with configurable switching between Local Storage and MSA (Media Storage Agency)
+- Enhanced image validation, size limits, and file format support (jpg, png, webp, gif)
+- Added CDN URL composition at presentation layer with proper fallback mechanisms
+- Updated service registration with environment-based storage backend selection
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -78,7 +87,7 @@ This document provides comprehensive API contracts and integration guidance for 
 - **New**: Loyalty App Integration API: External partner integration for segment distribution, member wallet access, and campaign analytics
 - **New**: Cross-Tenant Settlement API: Financial settlement tracking between sponsoring and redeeming brands
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
-- **New**: Media Management API: Image upload and CDN integration for rich voucher displays
+- **Enhanced**: Media Management API: Comprehensive image upload and CDN integration with dual storage backend support (Local Storage and Azure Storage via MSA)
 - **New**: Business Management API: Administrative operations for business entities with automated email notifications
 - **New**: Customer Management API: Comprehensive customer record management with blacklist functionality and bulk import
 - **Enhanced**: Email Notification System: Complete audit trail for all outbound email communications with retry logic, error tracking, template rendering, and comprehensive business lifecycle notifications including BrandCreated, StaffAccountCreated, VoucherTransferInitiated, and PasswordReset
@@ -93,6 +102,7 @@ The repository organizes API-related knowledge across several documentation file
 - Data Models outline core entities and relationships
 - Index and scan report provide project metadata and current state
 - New controllers provide comprehensive business functionality including loyalty app integration, settlement processing, payment handling, enhanced credit management, customer management, and email logging with automated business lifecycle notifications
+- **Enhanced**: Media Management infrastructure with dual storage backend support and CDN integration
 
 ```mermaid
 graph TB
@@ -129,21 +139,29 @@ W["MemberTransfersController"]
 X["BusinessesController"]
 Y["IntegrationPartnersController"]
 Z["CustomersController"]
+AA["MediaContentController"]
+end
+subgraph "Media Management Services"
+BB["IImageStorageService"]
+CC["LocalStorageImageService"]
+DD["MsaImageStorageService"]
+EE["MsaMediaClient"]
+FF["CDN Integration"]
 end
 subgraph "Email & Notifications"
-AA["EmailNotificationService"]
-BB["EmailLog Entity"]
-CC["PasswordReset Template"]
-DD["StaffAccountCreated Template"]
-EE["VoucherTransferInitiated Template"]
-FF["BrandCreated Template"]
-GG["BrandCreatedNotification"]
+GG["EmailNotificationService"]
+HH["EmailLog Entity"]
+II["PasswordReset Template"]
+JJ["StaffAccountCreated Template"]
+KK["VoucherTransferInitiated Template"]
+LL["BrandCreated Template"]
+MM["BrandCreatedNotification"]
 end
 subgraph "Planning Artifacts"
-HH["_bmad-output/planning-artifacts/epics.md"]
+NN["_bmad-output/planning-artifacts/epics.md"]
 end
 subgraph "Business Rules"
-II["Key Functionalities.txt"]
+OO["Key Functionalities.txt"]
 end
 A --> B
 A --> C
@@ -151,8 +169,8 @@ A --> D
 A --> E
 C --> B
 D --> B
-HH --> B
-II --> B
+NN --> B
+OO --> B
 F --> B
 G --> B
 H --> B
@@ -181,6 +199,12 @@ DD --> B
 EE --> B
 FF --> B
 GG --> B
+HH --> B
+II --> B
+JJ --> B
+KK --> B
+LL --> B
+MM --> B
 ```
 
 **Diagram sources**
@@ -198,6 +222,7 @@ GG --> B
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [MediaContentController.cs](file://src/NonCash.API/Controllers/MediaContentController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
@@ -227,7 +252,7 @@ GG --> B
 - **New**: Loyalty App Integration API: External partner integration for segment distribution with enhanced member data structure, member wallet queries, event history, and campaign performance
 - **New**: Settlement API: Cross-tenant financial settlement tracking and netting reports
 - **New**: Payment Processing API: Integrated payment gateway support with ZaloPay
-- **New**: Media Management API: Image upload and CDN integration for rich voucher displays
+- **Enhanced**: Media Management API: Comprehensive image upload and CDN integration with dual storage backend support (Local Storage and Azure Storage via MSA), file validation, size limits, and secure media proxying
 - **New**: Business Management API: Administrative operations for business entities with automated email notifications
 - **New**: Customer Management API: Comprehensive customer record management with search, CRUD operations, blacklist functionality, and CSV import capabilities
 - **Enhanced**: Email Notification System: Complete audit trail for outbound email communications with retry logic, error tracking, template rendering, and comprehensive business lifecycle notifications including BrandCreated, StaffAccountCreated, VoucherTransferInitiated, and PasswordReset
@@ -266,6 +291,7 @@ Security highlights:
 - **New**: Customer data protection with role-based access controls
 - **Enhanced**: Email notification audit trail with comprehensive logging and retry mechanisms including automated business lifecycle notifications
 - **Enhanced**: Password reset security with time-limited tokens (30 minutes), secure token storage, and user enumeration prevention
+- **Enhanced**: Media storage security with dual backend support, file validation, and secure CDN proxying
 
 ```mermaid
 graph TB
@@ -284,6 +310,7 @@ CL["Customer Data Protection"]
 EL["Email Audit Trail"]
 PR["Password Reset Security"]
 BN["Business Lifecycle Notifications"]
+MS["Media Storage Security"]
 end
 BLL --> MT
 BLL --> DS
@@ -297,6 +324,7 @@ BLL --> CL
 BLL --> EL
 BLL --> PR
 BLL --> BN
+BLL --> MS
 ```
 
 **Diagram sources**
@@ -947,9 +975,9 @@ Webhook Payload:
 **Section sources**
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 
-### **New**: Image Upload API
+### **Enhanced**: Media Management API with Dual Storage Backend
 
-#### Media Management API
+#### Image Upload API
 Endpoints:
 - Upload Image: POST /api/v1/upload/image (Authenticated)
 
@@ -966,14 +994,38 @@ Response:
 }
 ```
 
+**Enhanced** Features:
+- **Dual Storage Backend**: Configurable switching between Local Storage and Azure Storage via MSA (Media Storage Agency)
+- **File Validation**: Strict format validation (jpg, png, webp, gif) and size limits (5 MB)
+- **CDN Integration**: Relative URLs stored in database, full CDN URLs composed at presentation layer
+- **Delete-before-upload**: Prevents orphaned files on remote storage
+- **Entity Organization**: Files organized by business entity type
+- **Secure Proxy**: HTTPS proxy for media content to avoid mixed content issues
+
+#### Media Content Proxy API
+Endpoints:
+- Get Media Content: GET /api/v1/media/content?path={relativeUrl} (Anonymous)
+
 Features:
-- 10MB request size limit
-- CDN integration for full URL composition
-- Deduplication via uniqueCode
-- Entity-based organization
+- **HTTPS Proxy**: Proxies media content through API's HTTPS endpoint
+- **Mixed Content Prevention**: Avoids browser security issues with HTTP CDN links
+- **Caching**: 1-hour response cache for improved performance
+- **Error Handling**: Proper error responses for missing or inaccessible media
+
+#### Storage Backend Configuration
+Configuration via `MediaServiceConfig:ImageStorage`:
+- **"Local"**: Stores files in wwwroot/uploads/ directory (development fallback)
+- **"MSA"**: Uses Media Storage Agency for cloud storage with CDN integration
+
+**Updated** Enhanced with comprehensive media management capabilities, dual storage backend support, and secure CDN integration
 
 **Section sources**
-- [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [ImageUploadController.cs:19-71](file://src/NonCash.API/Controllers/ImageUploadController.cs#L19-L71)
+- [MediaContentController.cs:25-55](file://src/NonCash.API/Controllers/MediaContentController.cs#L25-L55)
+- [IImageStorageService.cs:3-35](file://src/NonCash.Core/Interfaces/IImageStorageService.cs#L3-L35)
+- [LocalStorageImageService.cs:5-114](file://src/NonCash.Infrastructure\Services\LocalStorageImageService.cs#L5-L114)
+- [MsaImageStorageService.cs:6-107](file://src/NonCash.Infrastructure\Services\MsaImageStorageService.cs#L6-L107)
+- [Program.cs:144-158](file://src/NonCash.API/Program.cs#L144-L158)
 
 ### **New**: Customer Management API
 
@@ -1114,7 +1166,8 @@ VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed as"
 - **Enhanced**: Integration API depends on PromotionService, VoucherEventPublisher, and IntegrationPartnerService with enhanced member data handling
 - **New**: Settlement API depends on SettlementService for cross-tenant financial tracking
 - **New**: Payment API depends on PaymentService, PurchaseService, and ZaloPay integration
-- **New**: Image Upload API depends on ImageStorageService for CDN integration
+- **Enhanced**: Image Upload API depends on IImageStorageService with dual backend support (LocalStorageImageService and MsaImageStorageService) and MsaMediaClient for CDN integration
+- **New**: Media Content API depends on HttpClientFactory for secure media proxying
 - **New**: Business API depends on BusinessRepository and BrandRepository
 - **New**: Customer API depends on CustomerService and ICustomerImportService for bulk operations
 - **Enhanced**: Email Notification System depends on EmailNotificationService, IEmailTemplateRenderer, and EmailLog repository with enhanced notification types including BrandCreated
@@ -1142,7 +1195,11 @@ CREDITS --> CASVC["CreditAdjustmentService"]
 INTEGRATION["Enhanced Integration API"] --> PSVC2["PromotionService"]
 SETTLEMENT["Settlement API"] --> SSVC["SettlementService"]
 PAYMENTS["Payment API"] --> PSVC2["PaymentService"]
-UPLOAD["Image Upload API"] --> ISVC["ImageStorageService"]
+UPLOAD["Enhanced Image Upload API"] --> ISSVC["IImageStorageService"]
+ISSVC --> LSSVC["LocalStorageImageService"]
+ISSVC --> MSSVC["MsaImageStorageService"]
+MSSVC --> MMSC["MsaMediaClient"]
+MEDIA["Media Content API"] --> HCF["HttpClientFactory"]
 BUSINESS["Business API"] --> BR["BusinessRepository"]
 CUSTOMERS["Customer API"] --> CSVC2["CustomerService"]
 EMAIL["Enhanced Email System"] --> ENSVC2["EmailNotificationService"]
@@ -1162,7 +1219,7 @@ CPSVC --> DAL
 CASVC --> DAL
 PSVC2 --> DAL
 SSVC --> DAL
-ISVC --> DAL
+ISSVC --> DAL
 BR --> DAL
 CSVC2 --> DAL
 ENSVC2 --> DAL
@@ -1193,8 +1250,9 @@ DAL --> DB["PostgreSQL"]
 - **Enhanced**: Email notifications: Implement asynchronous email sending with retry logic to avoid blocking operations and enhanced notification types
 - **Enhanced**: Business creation workflow: Email notifications run asynchronously to avoid blocking business creation operations
 - **Enhanced**: Member event history: Optimize query performance with database indexes for phone number lookups and event aggregation
-- **New**: CDN integration: Leverage CDN for image delivery to reduce server load
-- **New**: Webhook handling: Implement idempotent webhook processing for payment confirmations
+- **Enhanced**: Media storage: Implement efficient file validation and storage operations with appropriate caching strategies
+- **Enhanced**: CDN integration: Leverage CDN for image delivery to reduce server load and improve global performance
+- **Enhanced**: Media proxying: Implement response caching for frequently accessed media content
 - **New**: Settlement computation: Optimize netting calculations with database indexes for date ranges and brand pairs
 - **New**: Customer search: Utilize database indexes for phone number, name, and email searches
 - **New**: Bulk imports: Process CSV imports in batches with transactional integrity and progress reporting
@@ -1242,9 +1300,12 @@ Common issues and strategies:
 - **New**: Payment processing issues:
   - Verify webhook signature validation for ZaloPay callbacks
   - Check order status before creating payment sessions
-- **New**: Image upload issues:
-  - Validate file format and size constraints
+- **Enhanced**: Image upload issues:
+  - Validate file format and size constraints (5 MB limit)
   - Ensure uniqueCode prevents duplicate uploads
+  - Check storage backend configuration (Local vs MSA)
+  - Verify CDN endpoint configuration for proper URL composition
+  - **Enhanced**: Debug storage backend selection via MediaServiceConfig:ImageStorage setting
 - **New**: Customer management issues:
   - Verify phone number normalization for consistent searching
   - Check blacklist status impacts on voucher distribution
@@ -1266,6 +1327,11 @@ Common issues and strategies:
   - Check email_logs table for BrandCreated notification delivery status
   - Ensure SMTP configuration is correct for business creation emails
   - Validate BrandCreated template rendering with business details
+- **Enhanced**: Media content proxy issues:
+  - Verify CDNEndpointURL configuration in MediaServiceConfig
+  - Check network connectivity to CDN endpoints
+  - Validate relative URL format from storage services
+  - **Enhanced**: Debug HTTPS proxy issues for mixed content prevention
 - Debugging:
   - Capture request IDs and timestamps; correlate with backend logs
   - Validate outletID against the sales range defined in the associated VoucherPlanHeader
@@ -1275,13 +1341,14 @@ Common issues and strategies:
   - Monitor customer search query performance with appropriate indexing
   - **Enhanced**: Check password reset token validity, expiry times, and security token generation
   - **Enhanced**: Monitor business creation workflow execution and email notification delivery
+  - **Enhanced**: Debug storage backend selection and file upload operations with detailed logging
 
 **Section sources**
 - [api-contracts.md](file://docs/api-contracts.md)
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 
 ## Conclusion
-NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, an enhanced email notification system with comprehensive audit trails and additional notification types including automated business creation workflows, and secure password reset functionality with enhanced security measures. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
+NonCash's comprehensive API suite enables secure, auditable, and efficient POS redemption, member-driven voucher transfers, and enterprise-grade business operations. The enhanced credit management system now provides complete lifecycle management from planning and approval to generation, distribution, and reporting, plus advanced features like loyalty app integration, cross-tenant settlement, prepaid billing with batch operations, payment processing, rich media management with dual storage backend support, comprehensive credit adjustment workflows with maker-checker controls, customer management with blacklist functionality, an enhanced email notification system with comprehensive audit trails and additional notification types including automated business creation workflows, and secure password reset functionality with enhanced security measures. By adhering to the documented endpoints, authentication methods, and transactional semantics, clients can integrate reliably with the platform while leveraging built-in security controls, role-based access, and performance best practices.
 
 ## Appendices
 
@@ -1404,8 +1471,9 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - GET /api/v1/payments/transactions/{transactionId}: Header: Authorization: Bearer <JWT> → PaymentTransactionResponse
 - GET /api/v1/payments/transactions/by-gateway/{gatewayTransactionId}: Header: Authorization: Bearer <JWT> → PaymentTransactionResponse
 
-**Image Upload API**:
-- POST /api/v1/upload/image: Header: Authorization: Bearer <JWT> → UploadResponse
+**Enhanced Image Upload API**:
+- POST /api/v1/upload/image: Header: Authorization: Bearer <JWT> → UploadResponse (with dual storage backend support)
+- GET /api/v1/media/content?path={relativeUrl}: → File content (HTTPS proxy for CDN)
 
 **Customer Management API**:
 - GET /api/v1/customers: Header: Authorization: Bearer <JWT> → PagedResult<CustomerResponse>
@@ -1425,6 +1493,7 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [MediaContentController.cs](file://src/NonCash.API/Controllers/MediaContentController.cs)
 - [MemberTransfersController.cs](file://src/NonCash.API/Controllers/MemberTransfersController.cs)
 - [BusinessesController.cs](file://src/NonCash.API/Controllers/BusinessesController.cs)
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
@@ -1445,12 +1514,14 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **Enhanced**: Policy-based authorization with approval thresholds and brand group scoping
 - **New**: Partner API Key Management: Secure key generation and rotation for external loyalty apps
 - **New**: Webhook Security: Signature validation for payment provider callbacks
-- **New**: File Upload Security: Format validation and size limits for image uploads
+- **Enhanced**: File Upload Security: Format validation, size limits, and secure storage backend selection for image uploads
+- **Enhanced**: Media Proxy Security: HTTPS-only media access to prevent mixed content issues
 - **New**: Customer Data Protection: Role-based access controls for customer management operations
 - **Enhanced**: Email Audit Trail: Comprehensive logging of all email communications with success/failure tracking and enhanced notification types including automated business lifecycle notifications
 - **New**: Blacklist Enforcement: Automatic exclusion of blacklisted customers from distributions and purchases
 - **Enhanced**: Password Reset Security: Time-limited tokens (30 minutes), secure cryptographic token generation, user enumeration prevention, and comprehensive token validation
 - **Enhanced**: Business Creation Security: Automated email notifications with error handling that doesn't block business operations
+- **Enhanced**: Storage Backend Security: Configurable storage backend selection with proper validation and error handling
 
 **Section sources**
 - [architecture.md](file://docs/architecture.md)
@@ -1461,6 +1532,7 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [IntegrationPartnersController.cs](file://src/NonCash.API/Controllers/IntegrationPartnersController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [MediaContentController.cs](file://src/NonCash.API/Controllers/MediaContentController.cs)
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
@@ -1486,7 +1558,8 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - **New**: Partner integration requires brand association and API key validation
 - **New**: Settlement tracking occurs automatically for cross-tenant redemptions
 - **New**: Payment processing integrates with ZaloPay for B2C purchases
-- **New**: Image uploads support rich voucher display with CDN integration
+- **Enhanced**: Media storage supports dual backend configuration with Local Storage and Azure Storage via MSA
+- **Enhanced**: File uploads include strict validation and secure storage backend selection
 - **New**: Customer blacklist status prevents participation in promotions and purchases
 - **Enhanced**: Email notifications provide audit trail for all outbound communications with retry logic and enhanced notification types including automated business creation workflows
 - **New**: Customer import supports upsert logic for duplicate phone numbers with error reporting
@@ -1503,6 +1576,7 @@ NonCash's comprehensive API suite enables secure, auditable, and efficient POS r
 - [SettlementsController.cs](file://src/NonCash.API/Controllers/SettlementsController.cs)
 - [PaymentsController.cs](file://src/NonCash.API/Controllers/PaymentsController.cs)
 - [ImageUploadController.cs](file://src/NonCash.API/Controllers/ImageUploadController.cs)
+- [MediaContentController.cs](file://src/NonCash.API/Controllers/MediaContentController.cs)
 - [CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [EmailNotificationService.cs](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs)
 - [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)

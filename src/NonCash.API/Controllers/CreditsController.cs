@@ -91,7 +91,7 @@ public class CreditsController : ControllerBase
         var result = await _creditService.GetConsumptionsAsync(scopedBrandId.Value, page, pageSize, cancellationToken);
 
         var consumptions = result.Consumptions.Select(c => new CreditConsumptionDto(
-            c.Id, c.BatchId, c.VoucherDetailId, c.Reference, c.CreatedAt)).ToList();
+            c.Id, c.BatchId, c.VoucherDetailId, c.PlanId, c.Quantity, c.Reference, c.CreatedAt)).ToList();
 
         return Ok(new CreditConsumptionListResponse(consumptions, result.TotalCount, result.Page, result.PageSize));
     }

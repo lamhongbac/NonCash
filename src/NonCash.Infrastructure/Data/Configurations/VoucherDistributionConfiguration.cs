@@ -20,6 +20,7 @@ public class VoucherDistributionConfiguration : IEntityTypeConfiguration<Voucher
 
         builder.HasIndex(d => d.VoucherId).HasDatabaseName("IX_voucher_distributions_voucher_id");
         builder.HasIndex(d => d.MemberId).HasDatabaseName("IX_voucher_distributions_member_id");
+        builder.HasIndex(d => d.BatchId).HasDatabaseName("IX_voucher_distributions_batch_id");
 
         builder.HasOne(d => d.Voucher)
             .WithMany()
@@ -29,6 +30,11 @@ public class VoucherDistributionConfiguration : IEntityTypeConfiguration<Voucher
         builder.HasOne(d => d.Member)
             .WithMany()
             .HasForeignKey(d => d.MemberId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(d => d.Batch)
+            .WithMany()
+            .HasForeignKey(d => d.BatchId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

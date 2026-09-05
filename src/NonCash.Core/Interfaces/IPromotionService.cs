@@ -10,7 +10,8 @@ public interface IPromotionService
         IReadOnlyList<string> phoneNumbers,
         NotificationChannel notifyChannels = NotificationChannel.Email,
         CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string>? phoneToEmail = null);
+        IReadOnlyDictionary<string, string>? phoneToEmail = null,
+        Guid? createdById = null);
 
     // Epic 6.3: Wallet & Event History for Integration API
     Task<IReadOnlyList<MemberWalletVoucher>> GetMemberVouchersByPhoneAsync(
@@ -31,7 +32,8 @@ public record PromotionResult(
     IReadOnlyList<SkippedRecord>? SkippedRecords = null,
     IReadOnlyList<PromotionError>? Errors = null,
     string? ErrorCode = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    Guid? BatchId = null);
 
 public record SkippedRecord(string PhoneNumber, string Reason);
 

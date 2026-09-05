@@ -31,9 +31,20 @@ public class CustomersControllerTests
     private CustomersController CreateController(ApplicationDbContext context, ICurrentUserService? currentUser = null)
     {
         var repository = new CustomerRepository(context);
-        var service = new CustomerService(repository, new BrandCustomerRepository(context));
+        var brandCustomers = new BrandCustomerRepository(context);
+        var service = new CustomerService(repository, brandCustomers);
         var importService = new CsvCustomerImportService(service);
-        return new CustomersController(service, importService, currentUser ?? new TestCurrentUserService("Admin"));
+        var batchService = new DistributionBatchService(
+            new VoucherPlanRepository(context),
+            new Repository<VoucherDistributionBatch>(context),
+            new Repository<VoucherDistribution>(context),
+            new Repository<VoucherPlanDetail>(context),
+            new MemberAccountRepository(context),
+            repository,
+            new UserAccountRepository(context),
+            brandCustomers);
+        return new CustomersController(
+            service, importService, currentUser ?? new TestCurrentUserService("Admin"), batchService, new VoucherCodeService());
     }
 
     private static async Task<CustomerResponse> CreateCustomerVia(
@@ -328,5 +339,92 @@ public class CustomersControllerTests
 
         blacklist.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Admin");
         unblacklist.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Admin");
+    }
+
+    // ----- Customer voucher history (brand-scoped) -----
+
+    [Fact]
+    public async Task GetCustomerVouchers_AsBrandManager_ReturnsHistory()
+    {
+        using var context = CreateContext();
+        var brandA = Guid.NewGuid();
+        var manager = CreateController(context, new TestCurrentUserService("BrandManager", brandA));
+        var customer = await CreateCustomerVia(manager, "0909777777", "History Customer");
+
+        var memberId = Guid.NewGuid();
+        context.MemberAccounts.Add(new MemberAccount
+        {
+            Id = memberId,
+            CustomerId = customer.Id,
+            Username = "history-customer",
+            PasswordHash = "x",
+            FullName = "History Customer",
+            Status = MemberAccountStatus.Active
+        });
+        var planId = Guid.NewGuid();
+        context.VoucherPlanHeaders.Add(new VoucherPlanHeader
+        {
+            Id = planId,
+            PlanDate = DateTime.UtcNow,
+            CreatorId = Guid.NewGuid(),
+            BrandId = brandA,
+            VoucherType = VoucherType.Complimentary,
+            ValueType = VoucherValueType.Value,
+            FaceValue = 50000m,
+            NetValue = 50000m,
+            ExpiryDate = DateTime.UtcNow.AddYears(1),
+            PublishDate = DateTime.UtcNow.AddDays(-1),
+            TargetQuantity = 5,
+            Budget = 250000m,
+            ApprovalStatus = ApprovalStatus.Approved,
+            DisplayName = "History Plan"
+        });
+        context.VoucherPlanDetails.Add(new VoucherPlanDetail
+        {
+            Id = Guid.NewGuid(),
+            ParentId = planId,
+            SerialNo = "HIST-0001",
+            VoucherCodeSecret = "secret",
+            MemberId = memberId,
+            UsageStatus = UsageStatus.Pending
+        });
+        await context.SaveChangesAsync();
+
+        var result = await manager.GetCustomerVouchers(customer.Id, null, CancellationToken.None);
+
+        var ok = result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>().Subject;
+        // The payload is an anonymous projection (dynamic code generated per row) — inspect via JSON.
+        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(ok.Value));
+        var row = doc.RootElement.EnumerateArray().Should().ContainSingle().Subject;
+        row.GetProperty("SerialNo").GetString().Should().Be("HIST-0001");
+        row.GetProperty("PlanName").GetString().Should().Be("History Plan");
+        row.GetProperty("Status").GetString().Should().Be("Distributed");
+        row.GetProperty("VoucherCode").GetString().Should().NotBeNullOrWhiteSpace();
+        row.TryGetProperty("VoucherCodeSecret", out _).Should().BeFalse("the code secret must never be exposed");
+    }
+
+    [Fact]
+    public async Task GetCustomerVouchers_AsAdmin_WithoutBrandId_ReturnsBadRequest()
+    {
+        using var context = CreateContext();
+        var admin = CreateController(context);
+        var customer = await CreateCustomerVia(admin, "0909888888", "Admin History Target");
+
+        var result = await admin.GetCustomerVouchers(customer.Id, null, CancellationToken.None);
+
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetCustomerVouchers_UnmappedCustomer_ReturnsNotFound()
+    {
+        using var context = CreateContext();
+        // Created by Admin -> no mapping to the querying brand.
+        var customer = await CreateCustomerVia(CreateController(context), "0909999999", "Unmapped History Target");
+        var manager = CreateController(context, new TestCurrentUserService("BrandManager", Guid.NewGuid()));
+
+        var result = await manager.GetCustomerVouchers(customer.Id, null, CancellationToken.None);
+
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.NotFoundResult>();
     }
 }

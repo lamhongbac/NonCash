@@ -26,7 +26,7 @@ public class ApprovalsController : ControllerBase
         if (approverId == null || brandId == null || role == null)
             return Unauthorized(new { error = "Invalid user context." });
 
-        var result = await _approvalService.ApproveAsync(planId, approverId.Value, brandId.Value, role, request.PublishDate, cancellationToken);
+        var result = await _approvalService.ApproveAsync(planId, approverId.Value, brandId.Value, role, request.PublishDate, request.GenerateVouchers, cancellationToken);
         return ToActionResult(result);
     }
 
@@ -64,6 +64,21 @@ public class ApprovalsController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>Approve-form pre-check (point 1): whether the plan's brand can fund the approved quantity.</summary>
+    [HttpGet("funding")]
+    public async Task<ActionResult> CheckFunding(Guid planId, CancellationToken cancellationToken)
+    {
+        var brandId = _currentUser.GetCurrentBrandId();
+        if (brandId == null)
+            return Unauthorized(new { error = "Invalid user context." });
+
+        var funding = await _approvalService.GetPlanFundingAsync(planId, brandId.Value, cancellationToken);
+        if (funding == null)
+            return NotFound(new { error = "NotFound", message = "Plan not found." });
+
+        return Ok(new { funding.Sufficient, funding.Balance, funding.Required });
+    }
+
     private (Guid? approverId, Guid? brandId, string? role) GetUserContext()
     {
         var userIdString = _currentUser.GetCurrentUserId();
@@ -86,7 +101,9 @@ public class ApprovalsController : ControllerBase
                 plan.Id,
                 plan.ApprovalStatus,
                 plan.ApproverId,
-                plan.PublishDate
+                plan.PublishDate,
+                result.GeneratedCount,
+                result.Warning
             });
         }
 
@@ -95,10 +112,11 @@ public class ApprovalsController : ControllerBase
             "Forbidden" => StatusCode(403, new { error = result.ErrorCode, message = result.ErrorMessage }),
             "NotFound" => NotFound(new { error = result.ErrorCode, message = result.ErrorMessage }),
             "Conflict" => Conflict(new { error = result.ErrorCode, message = result.ErrorMessage }),
+            "InsufficientCredits" => StatusCode(402, new { error = result.ErrorCode, message = result.ErrorMessage }),
             _ => BadRequest(new { error = result.ErrorCode ?? "BadRequest", message = result.ErrorMessage })
         };
     }
 }
 
-public record ApproveRequest(DateTime? PublishDate);
+public record ApproveRequest(DateTime? PublishDate, bool GenerateVouchers = false);
 public record RejectRequest(string ReviewNotes);

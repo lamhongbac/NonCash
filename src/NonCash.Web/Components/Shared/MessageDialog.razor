@@ -1,0 +1,72 @@
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icon" Color="@Color" />
+            <MudText Typo="Typo.h6">@Title</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Style="white-space: pre-line;">@Message</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="@Color" Variant="Variant.Filled" OnClick="Submit">@ButtonText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>
+    /// Shared, non-auto-dismissing message dialog (standing mandate): every result/error is shown
+    /// in a modal with an icon, a title, a detailed body and a single button the user must press
+    /// to close it. Call <see cref="ShowAsync"/> instead of building the parameters by hand.
+    /// </summary>
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Message";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ButtonText { get; set; } = "Close";
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Info;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(true));
+
+    /// <summary>
+    /// Shows the dialog and returns once the user closes it. Maps a <see cref="Severity"/> to a
+    /// matching icon and colour so callers only pass a title, a message and a severity.
+    /// </summary>
+    public static async Task ShowAsync(
+        IDialogService dialogService,
+        string title,
+        string message,
+        Severity severity = Severity.Info,
+        string buttonText = "Close")
+    {
+        var (icon, color) = severity switch
+        {
+            Severity.Success => (Icons.Material.Filled.CheckCircle, Color.Success),
+            Severity.Error => (Icons.Material.Filled.Error, Color.Error),
+            Severity.Warning => (Icons.Material.Filled.WarningAmber, Color.Warning),
+            Severity.Info => (Icons.Material.Filled.Info, Color.Info),
+            _ => (Icons.Material.Filled.Info, Color.Primary)
+        };
+
+        var parameters = new DialogParameters<MessageDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Message, message },
+            { x => x.ButtonText, buttonText },
+            { x => x.Color, color },
+            { x => x.Icon, icon }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await dialogService.ShowAsync<MessageDialog>(title, parameters, options);
+        // Block until the user presses the button so callers can safely navigate afterwards.
+        await dialog.Result;
+    }
+}

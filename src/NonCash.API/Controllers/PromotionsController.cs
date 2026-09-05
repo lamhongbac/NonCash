@@ -53,7 +53,8 @@ public class PromotionsController : ControllerBase
         if (phones.Count == 0)
             return BadRequest(new { error = "EmptyList", message = "No phone numbers were provided." });
 
-        var result = await _promotionService.DistributeAsync(planId, brandId.Value, phones, notifyChannels, cancellationToken);
+        Guid.TryParse(_currentUser.GetCurrentUserId(), out var staffId);
+        var result = await _promotionService.DistributeAsync(planId, brandId.Value, phones, notifyChannels, cancellationToken, createdById: staffId == Guid.Empty ? null : staffId);
         return MapResult(result);
     }
 
@@ -74,7 +75,8 @@ public class PromotionsController : ControllerBase
         if (request?.PhoneNumbers == null || request.PhoneNumbers.Count == 0)
             return BadRequest(new { error = "EmptyList", message = "phoneNumbers is required." });
 
-        var result = await _promotionService.DistributeAsync(planId, brandId.Value, request.PhoneNumbers, request.NotifyChannels, cancellationToken);
+        Guid.TryParse(_currentUser.GetCurrentUserId(), out var staffId);
+        var result = await _promotionService.DistributeAsync(planId, brandId.Value, request.PhoneNumbers, request.NotifyChannels, cancellationToken, createdById: staffId == Guid.Empty ? null : staffId);
         return MapResult(result);
     }
 

@@ -90,6 +90,7 @@ builder.Services.AddScoped<IPaymentService, ZaloPayPaymentService>();
 builder.Services.AddScoped<IPosService, PosService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IDistributionReportService, DistributionReportService>();
+builder.Services.AddScoped<IDistributionBatchService, DistributionBatchService>();
 builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 
 // Settlement (Epic 7.2)

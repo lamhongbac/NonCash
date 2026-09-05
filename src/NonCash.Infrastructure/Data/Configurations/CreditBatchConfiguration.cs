@@ -54,15 +54,22 @@ public class CreditConsumptionConfiguration : IEntityTypeConfiguration<CreditCon
     {
         builder.ToTable("credit_consumptions");
 
-        builder.Property(c => c.BatchId).IsRequired();
         builder.Property(c => c.BrandId).IsRequired();
-        builder.Property(c => c.VoucherDetailId).IsRequired();
         builder.Property(c => c.Reference).HasMaxLength(500);
+        // Quantity backs existing rows with 1 (per-voucher charge) via the DB default.
+        builder.Property(c => c.Quantity).IsRequired().HasDefaultValue(1);
 
-        // 1 voucher = max 1 credit, ever.
+        // Per-voucher charge: 1 voucher = max 1 credit, ever (unique where the voucher id is set).
         builder.HasIndex(c => c.VoucherDetailId)
             .IsUnique()
+            .HasFilter("\"voucher_detail_id\" IS NOT NULL")
             .HasDatabaseName("IX_credit_consumptions_voucher_detail_id");
+
+        // Plan-level approval charge: exactly one charge per plan (unique where the plan id is set).
+        builder.HasIndex(c => c.PlanId)
+            .IsUnique()
+            .HasFilter("\"plan_id\" IS NOT NULL")
+            .HasDatabaseName("IX_credit_consumptions_plan_id");
 
         builder.HasIndex(c => new { c.BrandId, c.CreatedAt })
             .HasDatabaseName("IX_credit_consumptions_brand_id_created_at");

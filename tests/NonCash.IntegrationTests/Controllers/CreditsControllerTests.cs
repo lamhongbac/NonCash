@@ -111,6 +111,17 @@ public class CreditsControllerTests : IDisposable
             Status = CustomerStatus.Active
         });
 
+        // Distribute recipients must pre-exist: unknown phones are skipped, never auto-created.
+        for (var i = 1; i <= 3; i++)
+        {
+            _context.Customers.Add(new Customer
+            {
+                PhoneNumber = $"091200000{i}",
+                FullName = $"Distribute Target {i}",
+                Status = CustomerStatus.Active
+            });
+        }
+
         _context.MemberAccounts.Add(new MemberAccount
         {
             Id = _memberId,
@@ -129,7 +140,7 @@ public class CreditsControllerTests : IDisposable
         return new CreditsController(_creditService, _policyStub, new FakeCurrentUserService(role, brandId));
     }
 
-    private VoucherPlanHeader SeedPlan(Guid brandId, VoucherType voucherType, int voucherCount, bool memberOwned = false)
+    private VoucherPlanHeader SeedPlan(Guid brandId, VoucherType voucherType, int voucherCount, bool memberOwned = false, ApprovalStatus approvalStatus = ApprovalStatus.Approved)
     {
         var plan = new VoucherPlanHeader
         {
@@ -146,7 +157,7 @@ public class CreditsControllerTests : IDisposable
             ValidTo = DateTime.UtcNow.AddYears(1),
             TargetQuantity = voucherCount,
             Budget = 500000m,
-            ApprovalStatus = ApprovalStatus.Approved,
+            ApprovalStatus = approvalStatus,
             VersionNumber = 1,
             // Epic 3: applicability scope now stored as jsonb on the plan (was the plan_outlets join table).
             Scope = new VoucherScope
@@ -307,7 +318,6 @@ public class CreditsControllerTests : IDisposable
         new Repository<VoucherDistribution>(_context),
         new MemberAccountRepository(_context),
         new CustomerRepository(_context),
-        _creditService,
         new BrandCustomerRepository(_context));
 
     private PosService CreatePosService() => new(
@@ -318,13 +328,36 @@ public class CreditsControllerTests : IDisposable
         new VoucherCodeService(),
         new VoucherLockRepository(_context),
         new SettlementService(_context),
-        _creditService,
         new VoucherEventPublisher(_context),
         new MemberAccountRepository(_context),
         new BrandCustomerRepository(_context));
 
+    private ApprovalService CreateApprovalService() => new(
+        new VoucherPlanRepository(_context),
+        new Repository<VoucherReview>(_context),
+        new UserAccountRepository(_context),
+        new StubNotificationService(),
+        _creditService,
+        new VoucherGenerationService(
+            new VoucherPlanRepository(_context),
+            new VoucherCodeService(),
+            new Repository<VoucherPlanDetail>(_context)));
+
+    private PromotionService CreatePromotionService() => new(
+        new VoucherPlanRepository(_context),
+        new Repository<VoucherPlanDetail>(_context),
+        new CustomerRepository(_context),
+        new MemberAccountRepository(_context),
+        new Repository<VoucherDistribution>(_context),
+        new Repository<VoucherUsage>(_context),
+        new VoucherTransferRepository(_context),
+        new Repository<Outlet>(_context),
+        new StubNotificationService(),
+        new BrandCustomerRepository(_context),
+        new Repository<VoucherDistributionBatch>(_context));
+
     [Fact]
-    public async Task ConfirmGiftPayment_ChargesOneCreditPerVoucher()
+    public async Task ConfirmGiftPayment_DoesNotChargeCredits()
     {
         await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 3);
@@ -336,18 +369,15 @@ public class CreditsControllerTests : IDisposable
 
         var payResult = await purchaseService.ConfirmPaymentAsync(orderResult.Order!.Id);
 
+        // Credits are charged once at plan approval, never at gift sale.
         payResult.Success.Should().BeTrue();
         payResult.AllocatedCount.Should().Be(2);
-        var consumptions = await _context.CreditConsumptions
-            .Where(c => c.BrandId == _brandAId)
-            .ToListAsync();
-        consumptions.Should().HaveCount(2);
-        consumptions.Select(c => c.VoucherDetailId).Distinct().Should().HaveCount(2);
-        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(8);
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(10);
     }
 
     [Fact]
-    public async Task ConfirmGiftPayment_ReplayedConfirm_DoesNotDoubleCharge()
+    public async Task ConfirmGiftPayment_ReplayedConfirm_DoesNotChargeCredits()
     {
         await _creditService.CreatePurchaseAsync(_brandAId, 10, null, null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 2);
@@ -358,11 +388,12 @@ public class CreditsControllerTests : IDisposable
         await purchaseService.ConfirmPaymentAsync(orderResult.Order!.Id);
         await purchaseService.ConfirmPaymentAsync(orderResult.Order!.Id); // idempotent replay
 
-        (await _context.CreditConsumptions.CountAsync()).Should().Be(1);
+        // Sale never charges credits (approval does), replayed or not.
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
     }
 
     [Fact]
-    public async Task PosCommit_Complimentary_ChargesOneCreditToIssuingBrand()
+    public async Task PosCommit_Complimentary_DoesNotChargeCredits()
     {
         await _creditService.CreatePurchaseAsync(_brandAId, 5, null, null, null);
         var plan = SeedPlan(_brandAId, VoucherType.Complimentary, voucherCount: 1, memberOwned: true);
@@ -383,12 +414,10 @@ public class CreditsControllerTests : IDisposable
 
         var commitResult = await posService.CommitAsync(lockResult.LockId!.Value, "TXN-COMP-1", 50000m, _outletId);
 
+        // Credits are charged once at plan approval, never at redemption.
         commitResult.Status.Should().Be("Success");
-        var consumptions = await _context.CreditConsumptions.ToListAsync();
-        consumptions.Should().ContainSingle();
-        consumptions[0].BrandId.Should().Be(_brandAId);
-        consumptions[0].VoucherDetailId.Should().Be(detail.Id);
-        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(4);
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(5);
     }
 
     [Fact]
@@ -410,40 +439,298 @@ public class CreditsControllerTests : IDisposable
 
         var commitResult = await posService.CommitAsync(lockResult.LockId!.Value, "TXN-GIFT-1", 50000m, _outletId);
 
-        // Gift was charged at sale, never at redemption.
+        // Neither sale nor redemption charges credits — approval does.
         commitResult.Status.Should().Be("Success");
         (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
     }
 
-    // ----- guards -----
+    // ----- approval-time charging (credit-at-approval model) -----
 
     [Fact]
-    public async Task GenerateBatch_BlockedAtZeroBalance()
+    public async Task Approve_ChargesTargetQuantity_AndRecordsPlanConsumption()
     {
-        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0);
-        var generationService = new VoucherGenerationService(
-            new VoucherPlanRepository(_context),
-            new VoucherCodeService(),
-            new Repository<VoucherPlanDetail>(_context),
-            _creditService);
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 4, approvalStatus: ApprovalStatus.Pending);
+        var approvalService = CreateApprovalService();
 
-        var result = await generationService.GenerateBatchAsync(plan.Id, 10, _brandAId);
+        var result = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null);
 
-        result.Success.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("InsufficientCredits");
+        result.Success.Should().BeTrue();
+        var consumptions = await _context.CreditConsumptions.ToListAsync();
+        consumptions.Should().ContainSingle();
+        consumptions[0].PlanId.Should().Be(plan.Id);
+        consumptions[0].Quantity.Should().Be(4);
+        consumptions[0].BatchId.Should().BeNull();
+        consumptions[0].VoucherDetailId.Should().BeNull();
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(6);
     }
 
     [Fact]
-    public async Task CreateOrder_BlockedAtZeroBalance()
+    public async Task Approve_InsufficientCredits_RejectedAndPlanStaysPending()
     {
+        await _creditService.CreatePurchaseAsync(_brandAId, 2, "welcome", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 5, approvalStatus: ApprovalStatus.Pending);
+        var approvalService = CreateApprovalService();
+
+        var result = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null);
+
+        // Point 2 of the reusable check: refuse + do nothing (no state change) when short.
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("InsufficientCredits");
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(2);
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _context.VoucherPlanHeaders.SingleAsync(p => p.Id == plan.Id);
+        reloaded.ApprovalStatus.Should().Be(ApprovalStatus.Pending);
+    }
+
+    [Fact]
+    public async Task Approve_ReplayedAfterSuccess_DoesNotDoubleCharge()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 4, approvalStatus: ApprovalStatus.Pending);
+        var approvalService = CreateApprovalService();
+
+        var first = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null);
+        var second = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null);
+
+        first.Success.Should().BeTrue();
+        second.Success.Should().BeFalse();     // already Approved → Conflict, before any charge
+        second.ErrorCode.Should().Be("Conflict");
+        (await _context.CreditConsumptions.CountAsync(c => c.PlanId == plan.Id)).Should().Be(1);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(6);
+    }
+
+    [Fact]
+    public async Task GetPlanFunding_ReusesCheck_ForOwnBrandPlan()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 7, null, null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 3, approvalStatus: ApprovalStatus.Pending);
+        var approvalService = CreateApprovalService();
+
+        // Point 1 of the reusable check: informational funding read for the approve form.
+        var funding = await approvalService.GetPlanFundingAsync(plan.Id, _brandAId);
+
+        funding.Should().NotBeNull();
+        funding!.Sufficient.Should().BeTrue();
+        funding.Balance.Should().Be(7);
+        funding.Required.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task TryConsumeForPlan_IsIdempotent_PerPlan()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, null, null, null);
+        var planId = Guid.NewGuid();
+
+        var first = await _creditService.TryConsumeForPlanAsync(_brandAId, planId, 4, "test");
+        var second = await _creditService.TryConsumeForPlanAsync(_brandAId, planId, 4, "test");
+
+        first.Should().BeTrue();
+        second.Should().BeTrue();
+        (await _context.CreditConsumptions.CountAsync(c => c.PlanId == planId)).Should().Be(1);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(6);
+    }
+
+    [Fact]
+    public async Task TryConsumeForPlan_InsufficientBalance_ReturnsFalseAndChargesNothing()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 3, null, null, null);
+
+        var ok = await _creditService.TryConsumeForPlanAsync(_brandAId, Guid.NewGuid(), 5, "test");
+
+        ok.Should().BeFalse();
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task TryConsumeForPlan_DrainsSoonestExpiringBatchFirst()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 3, null, null, null);   // created (and expires) first
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, null, null, null);  // created (and expires) later
+
+        var ok = await _creditService.TryConsumeForPlanAsync(_brandAId, Guid.NewGuid(), 5, "test");
+
+        ok.Should().BeTrue();
+        var batches = await _context.CreditBatches.ToListAsync();
+        batches.Single(b => b.OriginalAmount == 3).RemainingAmount.Should().Be(0);   // soonest-expiring drained first
+        batches.Single(b => b.OriginalAmount == 10).RemainingAmount.Should().Be(8);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(8);
+    }
+
+    [Fact]
+    public async Task EvaluatePlanFunding_ReportsSufficiencyAgainstBalance()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 5, null, null, null);
+
+        var enough = await _creditService.EvaluatePlanFundingAsync(_brandAId, 5);
+        var shortByOne = await _creditService.EvaluatePlanFundingAsync(_brandAId, 6);
+
+        enough.Sufficient.Should().BeTrue();
+        enough.Balance.Should().Be(5);
+        enough.Required.Should().Be(5);
+        shortByOne.Sufficient.Should().BeFalse();
+        shortByOne.Balance.Should().Be(5);
+        shortByOne.Required.Should().Be(6);
+    }
+
+    // ----- guards: generation & ordering are NOT credit-gated (approval is) -----
+
+    [Fact]
+    public async Task GenerateBatch_NotBlockedByCreditBalance()
+    {
+        // No credit batch for the brand: generation still succeeds because credits
+        // are charged at approval, not at generation.
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0);
+        plan.TargetQuantity = 10;
+        _context.SaveChanges();
+        var generationService = new VoucherGenerationService(
+            new VoucherPlanRepository(_context),
+            new VoucherCodeService(),
+            new Repository<VoucherPlanDetail>(_context));
+
+        var result = await generationService.GenerateBatchAsync(plan.Id, 10, _brandAId);
+
+        result.Success.Should().BeTrue();
+        result.GeneratedCount.Should().Be(10);
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CreateOrder_NotBlockedByCreditBalance()
+    {
+        // No credit batch for the brand: ordering still succeeds because credits
+        // are charged at approval, not at purchase.
         var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 2);
         var purchaseService = CreatePurchaseService();
 
         var result = await purchaseService.CreateOrderAsync(
             new CreateOrderInput(_memberId, plan.Id, 1, null, null));
 
+        result.Success.Should().BeTrue();
+        (await _context.CreditConsumptions.CountAsync()).Should().Be(0);
+    }
+
+    // ----- Phase 1: approve + optional generation -----
+
+    [Fact]
+    public async Task Approve_WithGenerateFlag_CreatesTargetQuantityDetails_AndOnePlanConsumption()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
+        // Approved quota of 4 but no detail rows yet — the checkbox materializes them at approval.
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0, approvalStatus: ApprovalStatus.Pending);
+        plan.TargetQuantity = 4;
+        _context.SaveChanges();
+        var approvalService = CreateApprovalService();
+
+        var result = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null, generateVouchers: true);
+
+        result.Success.Should().BeTrue();
+        result.GeneratedCount.Should().Be(4);
+        result.Warning.Should().BeNull();
+        (await _context.VoucherPlanDetails.CountAsync(d => d.ParentId == plan.Id)).Should().Be(4);
+        // Credits are still charged exactly once, at approval, for the full target quantity.
+        (await _context.CreditConsumptions.CountAsync(c => c.PlanId == plan.Id)).Should().Be(1);
+        (await _creditService.GetBalanceAsync(_brandAId)).Should().Be(6);
+    }
+
+    [Fact]
+    public async Task Approve_WithoutGenerateFlag_CreatesNoDetails()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0, approvalStatus: ApprovalStatus.Pending);
+        plan.TargetQuantity = 4;
+        _context.SaveChanges();
+        var approvalService = CreateApprovalService();
+
+        var result = await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null);
+
+        result.Success.Should().BeTrue();
+        result.GeneratedCount.Should().Be(0);
+        // Approval charges credits but does NOT create detail rows unless the checkbox is on.
+        (await _context.VoucherPlanDetails.CountAsync(d => d.ParentId == plan.Id)).Should().Be(0);
+        (await _context.CreditConsumptions.CountAsync(c => c.PlanId == plan.Id)).Should().Be(1);
+    }
+
+    // ----- Phase 2: generation is capped at Remaining and never touches TargetDistributed -----
+
+    [Fact]
+    public async Task Generate_OverRemaining_IsRejected_AndDoesNotIncrementTargetDistributed()
+    {
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0);
+        plan.TargetQuantity = 10;
+        _context.SaveChanges();
+        var generationService = new VoucherGenerationService(
+            new VoucherPlanRepository(_context),
+            new VoucherCodeService(),
+            new Repository<VoucherPlanDetail>(_context));
+
+        var first = await generationService.GenerateBatchAsync(plan.Id, 6, _brandAId);
+        var over = await generationService.GenerateBatchAsync(plan.Id, 5, _brandAId); // only 4 remain
+
+        first.Success.Should().BeTrue();
+        first.GeneratedCount.Should().Be(6);
+        over.Success.Should().BeFalse();
+        over.ErrorMessage.Should().Contain("QuantityExceedsRemaining");
+        (await _context.VoucherPlanDetails.CountAsync(d => d.ParentId == plan.Id)).Should().Be(6);
+
+        // Generation materializes the pool but is not a distribution: the header counter stays 0.
+        _context.ChangeTracker.Clear();
+        var reloaded = await _context.VoucherPlanHeaders.SingleAsync(p => p.Id == plan.Id);
+        reloaded.TargetDistributed.Should().Be(0);
+    }
+
+    // ----- Phase 3: distribute drains the pool, reconciles the counter, and has no silent side effects -----
+
+    [Fact]
+    public async Task Distribute_Success_DrainsPool_WritesDistributions_ReconcilesCounter()
+    {
+        var plan = SeedPlan(_brandAId, VoucherType.Complimentary, voucherCount: 5); // 5 pending, unassigned
+        var promotion = CreatePromotionService();
+
+        var result = await promotion.DistributeAsync(plan.Id, _brandAId,
+            new[] { "0912000001", "0912000002", "0912000003" });
+
+        result.Success.Should().BeTrue();
+        result.DistributedCount.Should().Be(3);
+        (await _context.VoucherDistributions.CountAsync()).Should().Be(3);
+        (await _context.VoucherPlanDetails.CountAsync(d => d.ParentId == plan.Id && d.MemberId != null)).Should().Be(3);
+
+        // target_distributed equals the real distribution-row count (fixes historical inflation).
+        _context.ChangeTracker.Clear();
+        var reloaded = await _context.VoucherPlanHeaders.SingleAsync(p => p.Id == plan.Id);
+        reloaded.TargetDistributed.Should().Be(3);
+        (await _context.VoucherDistributions.CountAsync()).Should().Be(reloaded.TargetDistributed);
+    }
+
+    [Fact]
+    public async Task Distribute_InsufficientStock_ReturnsError_AndCreatesNoCustomersOrAssignments()
+    {
+        var plan = SeedPlan(_brandAId, VoucherType.Complimentary, voucherCount: 2); // only 2 available
+        var promotion = CreatePromotionService();
+        var customersBefore = await _context.Customers.CountAsync();
+        var membersBefore = await _context.MemberAccounts.CountAsync();
+        var brandCustomersBefore = await _context.BrandCustomers.CountAsync();
+
+        var result = await promotion.DistributeAsync(plan.Id, _brandAId,
+            new[] { "0912000001", "0912000002", "0912000003" }); // 3 required > 2 available
+
         result.Success.Should().BeFalse();
-        result.ErrorCode.Should().Be("InsufficientCredits");
+        result.ErrorCode.Should().Be("InsufficientStock");
+        result.ErrorMessage.Should().Contain("Nothing was distributed");
+
+        // No silent side effects: nothing assigned, no distributions, no new customers/members/brand-customers.
+        (await _context.VoucherDistributions.CountAsync()).Should().Be(0);
+        (await _context.VoucherPlanDetails.CountAsync(d => d.ParentId == plan.Id && d.MemberId != null)).Should().Be(0);
+        (await _context.Customers.CountAsync()).Should().Be(customersBefore);
+        (await _context.MemberAccounts.CountAsync()).Should().Be(membersBefore);
+        (await _context.BrandCustomers.CountAsync()).Should().Be(brandCustomersBefore);
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _context.VoucherPlanHeaders.SingleAsync(p => p.Id == plan.Id);
+        reloaded.TargetDistributed.Should().Be(0);
     }
 
     public void Dispose()

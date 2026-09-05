@@ -31,8 +31,10 @@ public record CreditBatchListResponse(
 
 public record CreditConsumptionDto(
     Guid Id,
-    Guid BatchId,
-    Guid VoucherDetailId,
+    Guid? BatchId,
+    Guid? VoucherDetailId,
+    Guid? PlanId,
+    int Quantity,
     string? Reference,
     DateTime CreatedAt
 );

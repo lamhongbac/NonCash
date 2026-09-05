@@ -12,15 +12,18 @@ public class VoucherGenerationController : ControllerBase
 {
     private readonly IVoucherGenerationService _generationService;
     private readonly IVoucherCodeService _voucherCodeService;
+    private readonly IDistributionBatchService _batchService;
     private readonly ICurrentUserService _currentUser;
 
     public VoucherGenerationController(
         IVoucherGenerationService generationService,
         IVoucherCodeService voucherCodeService,
+        IDistributionBatchService batchService,
         ICurrentUserService currentUser)
     {
         _generationService = generationService;
         _voucherCodeService = voucherCodeService;
+        _batchService = batchService;
         _currentUser = currentUser;
     }
 
@@ -50,15 +53,22 @@ public class VoucherGenerationController : ControllerBase
         if (brandId == null)
             return Unauthorized(new { error = "Invalid user context." });
 
-        var details = await _generationService.ListByPlanAsync(planId, brandId.Value, cancellationToken);
-        var vouchers = details.Select(d => new
+        // Ledger rows carry recipient + lifecycle status so the brand manager can trace
+        // every voucher of the plan (who received it, via which run, and where it stands).
+        var rows = await _batchService.GetPlanVoucherLedgerAsync(planId, brandId.Value, cancellationToken);
+        var vouchers = rows.Select(r => new
         {
-            d.Id,
-            d.SerialNo,
-            UsageStatus = d.UsageStatus.ToString(),
-            d.UsedDate,
+            r.Id,
+            r.SerialNo,
+            r.Status,
+            r.UsedDate,
             // Generate current dynamic code (short-lived)
-            VoucherCode = _voucherCodeService.GenerateCode(d.Id, d.VoucherCodeSecret)
+            VoucherCode = _voucherCodeService.GenerateCode(r.Id, r.VoucherCodeSecret),
+            r.RecipientPhone,
+            r.RecipientName,
+            r.DistributionMethod,
+            r.DistributedAt,
+            r.BatchId
         });
 
         return Ok(vouchers);

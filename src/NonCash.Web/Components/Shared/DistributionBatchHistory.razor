@@ -1,0 +1,156 @@
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@*
+    Run history of batch (promotion) distributions for one plan: each row is one executed run
+    with its recipient/distributed/skipped counts. "View" opens BatchDetailDialog with the
+    per-recipient result. Host pages call RefreshAsync() after a new run completes.
+*@
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Distribution Run History</MudText>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="LoadAsync" Disabled="@_loading">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Class="mr-1" /> Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Class="ma-4" />
+    }
+    else if (!_batches.Any())
+    {
+        <MudAlert Severity="Severity.Info">No batch distribution runs recorded for this plan yet.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_batches" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Run At</MudTh>
+                <MudTh>Executed By</MudTh>
+                <MudTh>Channel</MudTh>
+                <MudTh Style="text-align:right">Recipients</MudTh>
+                <MudTh Style="text-align:right">Distributed</MudTh>
+                <MudTh Style="text-align:right">Skipped</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                <MudTd>@(context.CreatedByName ?? "Integration API")</MudTd>
+                <MudTd>@context.NotifyChannel</MudTd>
+                <MudTd Style="text-align:right">@context.RecipientCount</MudTd>
+                <MudTd Style="text-align:right">@context.DistributedCount</MudTd>
+                <MudTd Style="text-align:right">
+                    @if (context.SkippedCount > 0)
+                    {
+                        <MudText Color="Color.Warning"><b>@context.SkippedCount</b></MudText>
+                    }
+                    else
+                    {
+                        @context.SkippedCount
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                   OnClick="@(() => OpenDetail(context))" title="View run details" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>The plan whose batch runs are listed.</summary>
+    [Parameter] public Guid PlanId { get; set; }
+
+    private List<BatchSummaryItem> _batches = new();
+    private bool _loading = true;
+    private Guid _lastPlanId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (PlanId != _lastPlanId)
+        {
+            _lastPlanId = PlanId;
+            await LoadAsync();
+        }
+    }
+
+    /// <summary>Reloads the run list (called by the host page after a new run completes).</summary>
+    public async Task RefreshAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (PlanId == Guid.Empty)
+        {
+            _batches = new();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}/distribution-batches");
+            var token = await AuthState.GetTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _batches = await response.Content.ReadFromJsonAsync<List<BatchSummaryItem>>() ?? new();
+            }
+            else
+            {
+                _batches = new();
+                await MessageDialog.ShowAsync(DialogService, "Could not load run history",
+                    $"Failed to load distribution runs: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _batches = new();
+            await MessageDialog.ShowAsync(DialogService, "Could not load run history",
+                ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenDetail(BatchSummaryItem batch)
+    {
+        var parameters = new DialogParameters<BatchDetailDialog>
+        {
+            { x => x.BatchId, batch.Id }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<BatchDetailDialog>(
+            $"Distribution run — {batch.CreatedAt.ToLocalTime():dd/MM/yyyy HH:mm}", parameters, options);
+        // Block until the user closes it (consistent with MessageDialog behavior).
+        await dialog.Result;
+    }
+
+    public class BatchSummaryItem
+    {
+        public Guid Id { get; set; }
+        public Guid PlanId { get; set; }
+        public string PlanName { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public string? CreatedByName { get; set; }
+        public string NotifyChannel { get; set; } = "";
+        public int RecipientCount { get; set; }
+        public int DistributedCount { get; set; }
+        public int SkippedCount { get; set; }
+    }
+}

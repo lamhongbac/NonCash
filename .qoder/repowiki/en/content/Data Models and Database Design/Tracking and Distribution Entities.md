@@ -8,7 +8,18 @@
 - [epics.md](file://_bmad-output/planning-artifacts/epics.md)
 - [Key Functionalities.txt](file://Key Functionalities.txt)
 - [source-tree-analysis.md](file://docs/source-tree-analysis.md)
+- [VoucherDistribution.cs](file://src/NonCash.Core/Entities/VoucherDistribution.cs)
+- [VoucherUsage.cs](file://src/NonCash.Core/Entities/VoucherUsage.cs)
+- [DistributionReportService.cs](file://src/NonCash.Core/Services/DistributionReportService.cs)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced VoucherDistribution entity with comprehensive distribution tracking methods (Sale, Promotion, Transfer)
+- Added ExternalMemberId field for Loyalty App integration support
+- Updated distribution analytics and reporting capabilities
+- Enhanced audit trails for voucher distribution tracking
+- Improved method breakdown analytics for distribution performance monitoring
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -73,21 +84,25 @@ This section documents the two tracking entities and their roles in the system.
   - Audit trail: Captures POS redemption events with transaction linkage and amount.
 
 - VoucherDistribution
-  - Purpose: Tracks how vouchers were sent to customers.
-  - Key fields: ID, VoucherID, MemberID, Method (Sale, Promotion, Transfer), DistributionDate.
-  - Audit trail: Captures distribution events with method and timestamp.
+  - Purpose: Tracks how vouchers were sent to customers through multiple channels.
+  - Key fields: ID, VoucherID, MemberID, Method (Sale, Promotion, Transfer), DistributionDate, ExternalMemberId.
+  - Enhanced audit trail: Captures distribution events with method classification and timestamp for comprehensive analytics.
 
 Relationships to core business entities:
 - VoucherPlanDetail: Parent entity for both VoucherUsage and VoucherDistribution records.
 - Outlet: POS systems are configured via Outlets; POSID references Outlet identifiers.
 - Customer: MemberID identifies the recipient of distribution.
+- MemberAccount: Supports external member reference for Loyalty App integration.
+
+**Updated** Enhanced VoucherDistribution now supports three distinct distribution methods (Sale, Promotion, Transfer) with comprehensive audit trails and analytics capabilities.
 
 **Section sources**
 - [data-models.md:44-62](file://docs/data-models.md#L44-L62)
 - [epics.md:244-256](file://_bmad-output/planning-artifacts/epics.md#L244-L256)
+- [VoucherDistribution.cs:10-23](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L23)
 
 ## Architecture Overview
-The POS redemption workflow integrates with the Usage Service and logs redemptions into VoucherUsage. Distribution events are handled by the Distribution Service and logged into VoucherDistribution. Both services operate within the Business Logic Layer and persist data via the Data Access Layer.
+The POS redemption workflow integrates with the Usage Service and logs redemptions into VoucherUsage. Distribution events are handled by the Distribution Service and logged into VoucherDistribution with method-specific tracking. Both services operate within the Business Logic Layer and persist data via the Data Access Layer.
 
 ```mermaid
 sequenceDiagram
@@ -142,11 +157,13 @@ VoucherUsage captures redemption events with precise linkage to POS and transact
 classDiagram
 class VoucherUsage {
 +Guid ID
-+Guid VoucherID
-+string POSID
-+string TransactionID
++Guid VoucherId
++Guid PosId
++string TransactionId
 +DateTime UsageDate
 +decimal AmountUsed
++Guid? SponsorBrandId
++Guid? RedeemBrandId
 }
 class VoucherPlanDetail {
 +Guid ID
@@ -157,16 +174,18 @@ class VoucherPlanDetail {
 +Enum UsageStatus
 +DateTime UsedDate
 }
-VoucherUsage --> VoucherPlanDetail : "FK VoucherID"
+VoucherUsage --> VoucherPlanDetail : "FK VoucherId"
 ```
 
 - Data fields and semantics:
   - ID: Unique identifier for the usage record.
-  - VoucherID: Links to the specific VoucherPlanDetail.
-  - POSID: Identifier of the outlet/store where the redemption occurred.
-  - TransactionID: Link to the POS transaction for reconciliation.
+  - VoucherId: Links to the specific VoucherPlanDetail.
+  - PosId: Identifier of the outlet/store where the redemption occurred.
+  - TransactionId: Link to the POS transaction for reconciliation.
   - UsageDate: Timestamp of the redemption event.
   - AmountUsed: Monetary amount deducted from the voucher.
+  - SponsorBrandId: Cross-tenant settlement attribution (Epic 7.1).
+  - RedeemBrandId: Cross-tenant settlement attribution (Epic 7.1).
 
 - Business rules:
   - Redemptions occur only when the voucher is in a valid state and locked during the transaction.
@@ -182,18 +201,26 @@ VoucherUsage --> VoucherPlanDetail : "FK VoucherID"
 **Section sources**
 - [data-models.md:46-53](file://docs/data-models.md#L46-L53)
 - [epics.md:292-317](file://_bmad-output/planning-artifacts/epics.md#L292-L317)
+- [VoucherUsage.cs:3-19](file://src/NonCash.Core/Entities/VoucherUsage.cs#L3-L19)
 
 ### VoucherDistribution Analysis
-VoucherDistribution tracks how vouchers reached recipients across multiple channels.
+VoucherDistribution tracks how vouchers reached recipients across multiple channels with enhanced method classification and audit capabilities.
 
 ```mermaid
 classDiagram
 class VoucherDistribution {
 +Guid ID
-+Guid VoucherID
-+Guid MemberID
-+Enum Method
++Guid VoucherId
++Guid MemberId
++DistributionMethod Method
 +DateTime DistributionDate
++string? ExternalMemberId
+}
+class DistributionMethod {
+<<enumeration>>
+Sale
+Promotion
+Transfer
 }
 class VoucherPlanDetail {
 +Guid ID
@@ -204,22 +231,32 @@ class VoucherPlanDetail {
 +Enum UsageStatus
 +DateTime UsedDate
 }
-VoucherDistribution --> VoucherPlanDetail : "FK VoucherID"
+VoucherDistribution --> VoucherPlanDetail : "FK VoucherId"
+VoucherDistribution --> DistributionMethod : "Method"
 ```
 
 - Data fields and semantics:
   - ID: Unique identifier for the distribution event.
-  - VoucherID: Links to the VoucherPlanDetail record.
-  - MemberID: Recipient’s identifier (Customer).
+  - VoucherId: Links to the VoucherPlanDetail record.
+  - MemberId: Recipient's identifier (Customer or MemberAccount).
   - Method: Enumerated distribution channel (Sale, Promotion, Transfer).
   - DistributionDate: Timestamp of the distribution action.
+  - ExternalMemberId: External member reference for Loyalty App integration (Epic 6.2).
+
+- Enhanced Distribution Methods:
+  - **Sale**: Direct purchase transactions where customers buy vouchers.
+  - **Promotion**: Marketing campaigns and promotional distributions to customer segments.
+  - **Transfer**: Peer-to-peer transfers requiring recipient confirmation.
 
 - Business rules:
-  - Distribution events are recorded upon successful completion of the distribution process (e.g., sale, promotion, transfer).
+  - Distribution events are recorded upon successful completion of the distribution process.
   - Transfer requires confirmation from the recipient to finalize ownership.
+  - Each distribution method has distinct audit requirements and reporting capabilities.
 
-- Audit trail:
-  - Distribution logs enable dashboards and reporting on distribution velocity and channel effectiveness.
+- Enhanced Audit Trail:
+  - Distribution logs enable comprehensive dashboards and reporting on distribution velocity and channel effectiveness.
+  - Method-based analytics provide insights into distribution channel performance.
+  - Date-range filtering supports historical analysis and trend identification.
 
 **Diagram sources**
 - [data-models.md:55-61](file://docs/data-models.md#L55-L61)
@@ -227,6 +264,7 @@ VoucherDistribution --> VoucherPlanDetail : "FK VoucherID"
 **Section sources**
 - [data-models.md:55-61](file://docs/data-models.md#L55-L61)
 - [epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
+- [VoucherDistribution.cs:3-23](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L3-L23)
 
 ### POS Redemption Workflow
 The POS redemption workflow ensures transactional integrity and accurate audit logging.
@@ -254,31 +292,41 @@ Reject --> End
 - [epics.md:265-317](file://_bmad-output/planning-artifacts/epics.md#L265-L317)
 - [api-contracts.md:14-87](file://docs/api-contracts.md#L14-L87)
 
-### Distribution Channels and Ownership
-Distribution occurs through three primary methods, each with distinct ownership and confirmation requirements.
+### Enhanced Distribution Channels and Ownership
+Distribution occurs through three primary methods, each with distinct ownership and confirmation requirements, supported by comprehensive analytics.
 
 ```mermaid
 flowchart TD
 StartDist(["Start Distribution"]) --> Channel{"Channel"}
-Channel --> |Sale| SaleFlow["Sale Flow<br/>Record VoucherDistribution(Sale)"]
-Channel --> |Promotion| PromoFlow["Promotion Flow<br/>Record VoucherDistribution(Promotion)"]
+Channel --> |Sale| SaleFlow["Sale Flow<br/>Record VoucherDistribution(Sale)<br/>Track payment processing"]
+Channel --> |Promotion| PromoFlow["Promotion Flow<br/>Record VoucherDistribution(Promotion)<br/>Support batch distribution"]
 Channel --> |Transfer| TransferFlow["Transfer Flow<br/>Initiate transfer<br/>Require recipient confirmation"]
 TransferFlow --> Confirm{"Recipient Confirmed?"}
 Confirm --> |Yes| Finalize["Finalize Ownership<br/>Record VoucherDistribution(Transfer)"]
 Confirm --> |No| Pending["Pending Confirmation"]
-SaleFlow --> EndDist(["End"])
-PromoFlow --> EndDist
-Finalize --> EndDist
+SaleFlow --> Analytics["Distribution Analytics<br/>Method Breakdown"]
+PromoFlow --> Analytics
+Finalize --> Analytics
+Analytics --> Reports["Distribution Reports<br/>Performance Metrics"]
+Reports --> EndDist(["End"])
 Pending --> EndDist
 ```
+
+**Enhanced Features:**
+- **Method Breakdown Analytics**: Real-time tracking of distribution volumes by method (Sale, Promotion, Transfer).
+- **Performance Monitoring**: At-risk detection for plans approaching expiry with insufficient distribution.
+- **Date Range Filtering**: Historical analysis capabilities for distribution trends.
+- **External Integration Support**: ExternalMemberId field enables Loyalty App integration.
 
 **Diagram sources**
 - [epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
 - [Key Functionalities.txt:93-134](file://Key Functionalities.txt#L93-L134)
+- [DistributionReportService.cs:72-105](file://src/NonCash.Core/Services/DistributionReportService.cs#L72-L105)
 
 **Section sources**
 - [epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
 - [Key Functionalities.txt:93-134](file://Key Functionalities.txt#L93-L134)
+- [DistributionReportService.cs:25-106](file://src/NonCash.Core/Services/DistributionReportService.cs#L25-L106)
 
 ## Dependency Analysis
 Tracking entities depend on core business entities and are consumed by services and UI dashboards.
@@ -290,9 +338,13 @@ VU["VoucherUsage"]
 VD["VoucherDistribution"]
 OUT["Outlet"]
 CUST["Customer"]
+MEM["MemberAccount"]
+DM["DistributionMethod"]
 VU --> VPD
 VD --> VPD
 VD --> CUST
+VD --> MEM
+VD --> DM
 OUT --> VU
 ```
 
@@ -300,13 +352,20 @@ OUT --> VU
   - VoucherUsage and VoucherDistribution both reference VoucherPlanDetail, ensuring traceability from distribution to usage.
   - POSID in VoucherUsage ties redemption events to Outlet configuration.
   - MemberID in VoucherDistribution ties distribution events to Customer profiles.
+  - DistributionMethod enum provides structured categorization for analytics.
+
+- Enhanced Dependencies:
+  - ExternalMemberId supports Loyalty App integration patterns.
+  - DistributionReportService aggregates method-specific analytics.
+  - Navigation properties enable efficient querying across related entities.
 
 - Cohesion:
   - Each entity encapsulates a single responsibility: usage logging and distribution tracking respectively.
+  - Distribution methods provide clear separation of concerns for different distribution channels.
 
 - External dependencies:
   - POS Integration API enforces authentication and transactional integrity for redemption.
-  - Management UI consumes distribution and usage data for dashboards.
+  - Management UI consumes distribution and usage data for enhanced dashboards.
 
 **Diagram sources**
 - [data-models.md:44-62](file://docs/data-models.md#L44-L62)
@@ -318,15 +377,22 @@ OUT --> VU
 
 ## Performance Considerations
 - Indexing:
-  - Index VoucherUsage.VoucherID and VoucherUsage.POSID for fast redemption reporting.
-  - Index VoucherDistribution.VoucherID and VoucherDistribution.DistributionDate for distribution analytics.
+  - Index VoucherUsage.VoucherId and VoucherUsage.PosId for fast redemption reporting.
+  - Index VoucherDistribution.VoucherId and VoucherDistribution.DistributionDate for distribution analytics.
+  - Index VoucherDistribution.Method for method-based filtering and aggregation.
+
 - Transactions:
   - Redemption operations use transaction begin/commit/rollback to ensure atomicity and consistency.
+  - Distribution operations maintain referential integrity with plan targets.
+
 - Scalability:
   - Microservices architecture allows independent scaling of Distribution and Usage services.
+  - Distributed report service supports efficient aggregation across large datasets.
+
 - Reporting:
-  - Aggregate distribution counts by Method and Outlet for distribution dashboards.
+  - Aggregate distribution counts by Method and Outlet for enhanced distribution dashboards.
   - Aggregate usage totals by POSID and date ranges for redemption analytics.
+  - Method breakdown analytics provide real-time performance insights.
 
 [No sources needed since this section provides general guidance]
 
@@ -335,19 +401,29 @@ Common issues and resolutions:
 - Redemption without usage record:
   - Cause: Rollback was invoked or transaction did not commit.
   - Resolution: Verify POS rollback calls and confirm commit flow.
+
 - Duplicate usage entries:
   - Cause: Commit called multiple times for the same lock.
-  - Resolution: Enforce idempotency at the Usage Service level using TransactionID.
+  - Resolution: Enforce idempotency at the Usage Service level using TransactionId.
+
 - Distribution not reflected:
   - Cause: Transfer not confirmed by recipient or promotion import errors.
   - Resolution: Validate confirmation flows and import logs.
+
+- Method classification issues:
+  - Cause: Incorrect DistributionMethod assignment during distribution.
+  - Resolution: Verify distribution source and ensure proper method tagging.
+
+- External member reference problems:
+  - Cause: Missing or invalid ExternalMemberId for Loyalty App integration.
+  - Resolution: Validate external member mapping and integration partner configuration.
 
 **Section sources**
 - [epics.md:305-317](file://_bmad-output/planning-artifacts/epics.md#L305-L317)
 - [Key Functionalities.txt:127-134](file://Key Functionalities.txt#L127-L134)
 
 ## Conclusion
-VoucherUsage and VoucherDistribution form the backbone of NonCash’s tracking and distribution capabilities. They provide precise audit trails, enforce business rules around POS redemption and distribution ownership, and enable actionable reporting. Their relationships to VoucherPlanDetail, Outlet, and Customer ensure end-to-end visibility from creation to redemption and from issuance to utilization.
+VoucherUsage and VoucherDistribution form the backbone of NonCash's tracking and distribution capabilities. With enhanced distribution methods (Sale, Promotion, Transfer) and comprehensive audit trails, they provide precise tracking, enforce business rules around POS redemption and distribution ownership, and enable actionable reporting. Their relationships to VoucherPlanDetail, Outlet, and Customer ensure end-to-end visibility from creation to redemption and from issuance to utilization. The enhanced analytics capabilities support data-driven decision making for distribution strategies and campaign optimization.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -357,10 +433,11 @@ VoucherUsage and VoucherDistribution form the backbone of NonCash’s tracking a
 ```mermaid
 flowchart TD
 Plan["Voucher Plan Approved"] --> Generate["Generate VoucherPlanDetail"]
-Generate --> Distribute["VoucherDistribution Events"]
-Distribute --> Redeem["POS Redemption"]
+Generate --> Distribute["VoucherDistribution Events<br/>(Sale/Promotion/Transfer)"]
+Distribute --> Track["Method-Based Tracking<br/>and Analytics"]
+Track --> Redeem["POS Redemption"]
 Redeem --> Usage["VoucherUsage Records"]
-Usage --> Reports["Distribution & Usage Dashboards"]
+Usage --> Reports["Enhanced Distribution & Usage Dashboards"]
 ```
 
 **Diagram sources**
@@ -368,13 +445,36 @@ Usage --> Reports["Distribution & Usage Dashboards"]
 - [epics.md:265-317](file://_bmad-output/planning-artifacts/epics.md#L265-L317)
 
 ### Typical Tracking Scenarios and Query Patterns
-- Scenario 1: Monthly distribution analytics
+- Scenario 1: Monthly distribution analytics by method
   - Query pattern: Group VoucherDistribution by Method and DistributionDate to compute distribution volumes per channel.
+  - Enhanced: Include method breakdown analytics for Sale, Promotion, and Transfer channels.
+
 - Scenario 2: Redemption performance by POS
   - Query pattern: Filter VoucherUsage by POSID and date range to compute total AmountUsed and count of redemptions.
+
 - Scenario 3: Transfer ownership tracking
   - Query pattern: Filter VoucherDistribution where Method = Transfer and join with confirmation status to track pending vs finalized transfers.
+
 - Scenario 4: Redemption reconciliation
-  - Query pattern: Join VoucherUsage with POS transaction logs using TransactionID to reconcile POS and backend systems.
+  - Query pattern: Join VoucherUsage with POS transaction logs using TransactionId to reconcile POS and backend systems.
+
+- Scenario 5: Distribution performance monitoring
+  - Query pattern: Use DistributionReportService to get method breakdown and at-risk plan detection for distribution goals.
+
+- Scenario 6: External member integration
+  - Query pattern: Filter VoucherDistribution by ExternalMemberId for Loyalty App integration scenarios.
 
 [No sources needed since this section provides general guidance]
+
+### Enhanced Distribution Analytics Capabilities
+The enhanced VoucherDistribution entity supports comprehensive analytics through:
+
+- **Method Breakdown**: Real-time tracking of distribution volumes by Sale, Promotion, and Transfer methods.
+- **Performance Metrics**: At-risk detection for plans approaching expiry with insufficient distribution.
+- **Date Range Filtering**: Historical analysis capabilities for distribution trends and campaign performance.
+- **External Integration**: Support for Loyalty App integration through ExternalMemberId field.
+- **Audit Trail**: Comprehensive logging of all distribution events with method classification and timestamps.
+
+**Section sources**
+- [DistributionReportService.cs:25-106](file://src/NonCash.Core/Services/DistributionReportService.cs#L25-L106)
+- [VoucherDistribution.cs:10-23](file://src/NonCash.Core/Entities/VoucherDistribution.cs#L10-L23)

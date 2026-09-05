@@ -150,16 +150,18 @@
                 <MudTable Items="_consumptions" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
                     <HeaderContent>
                         <MudTh>Date</MudTh>
-                        <MudTh>Voucher</MudTh>
+                        <MudTh>Source</MudTh>
+                        <MudTh Style="text-align:right">Qty</MudTh>
                         <MudTh>Reference</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Date">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
-                        <MudTd DataLabel="Voucher">@(context.VoucherDetailId.ToString()[..8])…</MudTd>
+                        <MudTd DataLabel="Source">@SourceLabel(context)</MudTd>
+                        <MudTd DataLabel="Qty" Style="text-align:right">@context.Quantity</MudTd>
                         <MudTd DataLabel="Reference">@(context.Reference ?? "—")</MudTd>
                     </RowTemplate>
                     <FooterContent>
-                        <MudTd colspan="3">
+                        <MudTd colspan="4">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption">@_consumptionTotal vouchers billed total</MudText>
                                 <MudStack Row="true" Spacing="1">
@@ -384,10 +386,19 @@
     private class CreditConsumptionDto
     {
         public Guid Id { get; set; }
-        public Guid BatchId { get; set; }
-        public Guid VoucherDetailId { get; set; }
+        public Guid? BatchId { get; set; }
+        public Guid? VoucherDetailId { get; set; }
+        public Guid? PlanId { get; set; }
+        public int Quantity { get; set; } = 1;
         public string? Reference { get; set; }
         public DateTime CreatedAt { get; set; }
+    }
+
+    private static string SourceLabel(CreditConsumptionDto c)
+    {
+        if (c.VoucherDetailId.HasValue) return c.VoucherDetailId.Value.ToString()[..8] + "…";
+        if (c.PlanId.HasValue) return "Plan " + c.PlanId.Value.ToString()[..8] + "…";
+        return "—";
     }
 
     private class CreditConsumptionListDto

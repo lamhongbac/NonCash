@@ -14,7 +14,6 @@ public class PosService : IPosService
     private readonly IVoucherCodeService _codeService;
     private readonly IVoucherLockRepository _lockRepository;
     private readonly ISettlementService _settlementService;
-    private readonly ICreditService _creditService;
     private readonly IVoucherEventPublisher _eventPublisher;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
@@ -27,7 +26,6 @@ public class PosService : IPosService
         IVoucherCodeService codeService,
         IVoucherLockRepository lockRepository,
         ISettlementService settlementService,
-        ICreditService creditService,
         IVoucherEventPublisher eventPublisher,
         IMemberAccountRepository memberRepository,
         IBrandCustomerRepository brandCustomerRepository)
@@ -39,7 +37,6 @@ public class PosService : IPosService
         _codeService = codeService;
         _lockRepository = lockRepository;
         _settlementService = settlementService;
-        _creditService = creditService;
         _eventPublisher = eventPublisher;
         _memberRepository = memberRepository;
         _brandCustomerRepository = brandCustomerRepository;
@@ -136,7 +133,6 @@ public class PosService : IPosService
         Guid? redeemBrandId = null;
         Guid issuingBrandId = Guid.Empty;
         decimal faceValue = 0;
-        VoucherType? voucherType = null;
         var lockedDetail = await _lockRepository.FindByLockIdAsync(lockId, cancellationToken);
         if (lockedDetail != null)
         {
@@ -144,7 +140,6 @@ public class PosService : IPosService
             sponsorBrandId = plan?.SponsorBrandId;
             issuingBrandId = plan?.BrandId ?? Guid.Empty;
             faceValue = plan?.FaceValue ?? 0;
-            voucherType = plan?.VoucherType;
 
             var outlet = await _outletRepository.GetByIdAsync(outletId, cancellationToken);
             redeemBrandId = outlet?.BrandId;
@@ -182,21 +177,6 @@ public class PosService : IPosService
             {
                 await _brandCustomerRepository.EnsureAsync(
                     issuingBrandId, redeemingMember.CustomerId, BrandCustomerSource.Redemption, null, cancellationToken);
-            }
-        }
-
-        // Epic 9: Complimentary vouchers consume 1 credit at redemption (value moment).
-        // Charged to the sponsor brand (campaign owner), falling back to the issuing brand.
-        // Gift vouchers were already charged at sale — no charge here.
-        if (outcome == CommitOutcome.Success
-            && voucherType == VoucherType.Complimentary
-            && lockedDetail != null)
-        {
-            var chargeBrandId = sponsorBrandId ?? issuingBrandId;
-            if (chargeBrandId != Guid.Empty)
-            {
-                await _creditService.TryConsumeAsync(
-                    chargeBrandId, lockedDetail.Id, $"Redemption {transactionId}", cancellationToken);
             }
         }
 

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NonCash.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,14 +12,16 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NonCash.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905042430_AddCreditConsumptionPlanCharge")]
+    partial class AddCreditConsumptionPlanCharge
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("public")
-                .HasAnnotation("ProductVersion", "9.0.4")
+                .HasAnnotation("ProductVersion", "9.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1633,10 +1636,6 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid?>("BatchId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("batch_id");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1670,9 +1669,6 @@ namespace NonCash.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BatchId")
-                        .HasDatabaseName("IX_voucher_distributions_batch_id");
-
                     b.HasIndex("MemberId")
                         .HasDatabaseName("IX_voucher_distributions_member_id");
 
@@ -1680,69 +1676,6 @@ namespace NonCash.Infrastructure.Migrations
                         .HasDatabaseName("IX_voucher_distributions_voucher_id");
 
                     b.ToTable("voucher_distributions", "public");
-                });
-
-            modelBuilder.Entity("NonCash.Core.Entities.VoucherDistributionBatch", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("BrandId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("brand_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedById")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by_id");
-
-                    b.Property<int>("DistributedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("distributed_count");
-
-                    b.Property<string>("NotifyChannel")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("notify_channel");
-
-                    b.Property<Guid>("PlanId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("plan_id");
-
-                    b.Property<int>("RecipientCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("recipient_count");
-
-                    b.Property<int>("SkippedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("skipped_count");
-
-                    b.Property<string>("SkippedRecords")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("skipped_records");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BrandId")
-                        .HasDatabaseName("IX_voucher_distribution_batches_brand_id");
-
-                    b.HasIndex("CreatedById");
-
-                    b.HasIndex("PlanId")
-                        .HasDatabaseName("IX_voucher_distribution_batches_plan_id");
-
-                    b.ToTable("voucher_distribution_batches", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>
@@ -2791,11 +2724,6 @@ namespace NonCash.Infrastructure.Migrations
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherDistribution", b =>
                 {
-                    b.HasOne("NonCash.Core.Entities.VoucherDistributionBatch", "Batch")
-                        .WithMany()
-                        .HasForeignKey("BatchId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("NonCash.Core.Entities.MemberAccount", "Member")
                         .WithMany()
                         .HasForeignKey("MemberId")
@@ -2808,29 +2736,9 @@ namespace NonCash.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Batch");
-
                     b.Navigation("Member");
 
                     b.Navigation("Voucher");
-                });
-
-            modelBuilder.Entity("NonCash.Core.Entities.VoucherDistributionBatch", b =>
-                {
-                    b.HasOne("NonCash.Core.Entities.UserAccount", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedById")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("NonCash.Core.Entities.VoucherPlanHeader", "Plan")
-                        .WithMany()
-                        .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CreatedBy");
-
-                    b.Navigation("Plan");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherEvent", b =>

@@ -1,7 +1,7 @@
 @page "/brandmanager/plans/{PlanId:guid}/review"
 @attribute [Authorize(Roles = "BrandManager")]
 @inject HttpClient Http
-@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject NavigationManager Navigation
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
@@ -52,6 +52,32 @@ else
     {
         <MudPaper Class="pa-4 mb-4" Elevation="2">
             <MudText Typo="Typo.h6" GutterBottom="true">Approval Decision</MudText>
+
+            <MudStack Spacing="1" Class="mb-3">
+                <MudText Typo="Typo.body2"><b>Voucher quantity:</b> @_plan.TargetQuantity voucher(s) will be approved.</MudText>
+                @if (_funding != null)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.body2"><b>Credit required:</b> @_funding.Required</MudText>
+                        <MudText Typo="Typo.body2"><b>Current balance:</b> @_funding.Balance</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@(_funding.Sufficient ? Color.Success : Color.Error)">
+                            @(_funding.Sufficient ? "Sufficient" : "Insufficient")
+                        </MudChip>
+                    </MudStack>
+                }
+            </MudStack>
+
+            @if (_funding != null && !_funding.Sufficient)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-3">
+                    Not enough credit, please top up to continue. Approval requires @_funding.Required credit(s); current balance is @_funding.Balance.
+                </MudAlert>
+            }
+
+            <MudCheckBox T="bool" @bind-Value="_generateVouchers" Label="Generate vouchers now" Color="Color.Primary" />
+            <MudText Typo="Typo.caption" Class="mb-3 d-block">
+                Also create @_plan.TargetQuantity voucher row(s) immediately after approval (optional — you can still generate them later from the plan's Vouchers page). Credits are charged once at approval either way.
+            </MudText>
 
             <MudDatePicker @bind-Date="_publishDateOverride" Label="Adjust Publish Date (optional)" Class="mb-3" />
 
@@ -160,6 +186,8 @@ else
     private bool _processing = false;
     private string _reviewNotes = "";
     private DateTime? _publishDateOverride;
+    private FundingInfo? _funding;
+    private bool _generateVouchers = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -171,7 +199,7 @@ else
         _loading = true;
         try
         {
-            await Task.WhenAll(LoadPlan(), LoadReviews(), LoadVersions());
+            await Task.WhenAll(LoadPlan(), LoadReviews(), LoadVersions(), LoadFunding());
         }
         finally
         {
@@ -223,6 +251,18 @@ else
         }
     }
 
+    private async Task LoadFunding()
+    {
+        var token = await AuthState.GetTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/plans/{PlanId}/funding");
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+            _funding = await response.Content.ReadFromJsonAsync<FundingInfo>();
+    }
+
     private async Task ClonePlan()
     {
         _processing = true;
@@ -237,19 +277,18 @@ else
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CloneResponse>();
-                Snackbar.Add($"New version v{result?.VersionNumber} created. You can now edit and resubmit.", Severity.Success);
                 if (result != null)
                     Navigation.NavigateTo($"/brandmanager/plans/{result.NewPlanId}/edit");
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Clone failed: {error}", Severity.Error);
+                await MessageDialog.ShowAsync(DialogService, "Clone failed", error, Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Clone failed", ex.Message, Severity.Error);
         }
         finally
         {
@@ -265,7 +304,7 @@ else
             var token = await AuthState.GetTokenAsync();
             var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/plans/{PlanId}/approve")
             {
-                Content = JsonContent.Create(new { PublishDate = _publishDateOverride })
+                Content = JsonContent.Create(new { PublishDate = _publishDateOverride, GenerateVouchers = _generateVouchers })
             };
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -273,18 +312,40 @@ else
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Plan approved successfully!", Severity.Success);
+                var result = await response.Content.ReadFromJsonAsync<ApproveResponse>();
+                var generated = result?.GeneratedCount ?? 0;
+                var charged = _plan?.TargetQuantity ?? 0;
+
+                string message;
+                Severity severity;
+                if (!string.IsNullOrEmpty(result?.Warning))
+                {
+                    message = $"Plan approved and {charged} credit(s) charged.\n\n{result.Warning}";
+                    severity = Severity.Warning;
+                }
+                else if (generated > 0)
+                {
+                    message = $"Plan approved.\n\nCredits charged: {charged}.\nVouchers generated: {generated}.\nThey are now ready to distribute.";
+                    severity = Severity.Success;
+                }
+                else
+                {
+                    message = $"Plan approved.\n\nCredits charged: {charged}.\nNo vouchers were generated yet — open the plan's Vouchers page and run Generate Vouchers when you are ready to distribute.";
+                    severity = Severity.Success;
+                }
+
+                await MessageDialog.ShowAsync(DialogService, "Plan approved", message, severity);
                 await LoadAll();
             }
             else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Approval failed: {error}", Severity.Error);
+                var message = await TryReadErrorMessageAsync(response);
+                await MessageDialog.ShowAsync(DialogService, "Approval failed", message ?? "Approval failed.", Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Approval failed", ex.Message, Severity.Error);
         }
         finally
         {
@@ -296,7 +357,8 @@ else
     {
         if (string.IsNullOrWhiteSpace(_reviewNotes) || _reviewNotes.Trim().Length < 10)
         {
-            Snackbar.Add("Review notes (min 10 characters) are required when rejecting.", Severity.Warning);
+            await MessageDialog.ShowAsync(DialogService, "Review notes required",
+                "Review notes (min 10 characters) are required when rejecting a plan.", Severity.Warning);
             return;
         }
 
@@ -314,19 +376,20 @@ else
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Plan rejected.", Severity.Success);
+                await MessageDialog.ShowAsync(DialogService, "Plan rejected",
+                    "The plan was rejected and the creator has been notified. No credits were charged.", Severity.Success);
                 _reviewNotes = "";
                 await LoadAll();
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Rejection failed: {error}", Severity.Error);
+                await MessageDialog.ShowAsync(DialogService, "Rejection failed", error, Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Rejection failed", ex.Message, Severity.Error);
         }
         finally
         {
@@ -371,6 +434,14 @@ else
         public int VersionNumber { get; set; }
     }
 
+    public class ApproveResponse
+    {
+        public Guid Id { get; set; }
+        public string ApprovalStatus { get; set; } = "";
+        public int GeneratedCount { get; set; }
+        public string? Warning { get; set; }
+    }
+
     public class ReviewItem
     {
         public Guid Id { get; set; }
@@ -381,5 +452,33 @@ else
         public string? ReviewNotes { get; set; }
         public string Decision { get; set; } = "";
         public DateTime? PublishDate { get; set; }
+    }
+
+    public class FundingInfo
+    {
+        public bool Sufficient { get; set; }
+        public int Balance { get; set; }
+        public int Required { get; set; }
+    }
+
+    private class ApiError
+    {
+        public string? error { get; set; }
+        public string? message { get; set; }
+    }
+
+    private static async Task<string?> TryReadErrorMessageAsync(HttpResponseMessage response)
+    {
+        var raw = await response.Content.ReadAsStringAsync();
+        try
+        {
+            var err = System.Text.Json.JsonSerializer.Deserialize<ApiError>(
+                raw, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return string.IsNullOrWhiteSpace(err?.message) ? raw : err!.message;
+        }
+        catch
+        {
+            return raw;
+        }
     }
 }

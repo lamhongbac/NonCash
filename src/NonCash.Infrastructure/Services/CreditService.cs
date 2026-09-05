@@ -120,6 +120,75 @@ public class CreditService : ICreditService
         }
     }
 
+    public async Task<CreditFundingResult> EvaluatePlanFundingAsync(Guid brandId, int requiredQuantity, CancellationToken cancellationToken = default)
+    {
+        var balance = await GetBalanceAsync(brandId, cancellationToken);
+        return new CreditFundingResult(balance >= requiredQuantity, balance, requiredQuantity);
+    }
+
+    public async Task<bool> TryConsumeForPlanAsync(Guid brandId, Guid planId, int quantity, string? reference = null, CancellationToken cancellationToken = default)
+    {
+        if (quantity <= 0) return true;
+
+        try
+        {
+            // Idempotent per plan: a plan is charged once at approval.
+            var alreadyCharged = await _context.CreditConsumptions.AnyAsync(c => c.PlanId == planId, cancellationToken);
+            if (alreadyCharged) return true;
+
+            // Hard check: refuse to charge when the brand cannot fund the full approved quantity.
+            var funding = await EvaluatePlanFundingAsync(brandId, quantity, cancellationToken);
+            if (!funding.Sufficient)
+            {
+                _logger.LogInformation(
+                    "Plan approval charge refused for BrandId={BrandId} PlanId={PlanId}: balance {Balance} < required {Required}",
+                    brandId, planId, funding.Balance, funding.Required);
+                return false;
+            }
+
+            // Drain FIFO (soonest-expiring first) across non-expired batches; record one aggregate plan row.
+            var remaining = quantity;
+            var now = DateTime.UtcNow;
+            var batches = await _context.CreditBatches
+                .Where(b => b.BrandId == brandId && b.RemainingAmount > 0 && (b.ExpiresAt == null || b.ExpiresAt > now))
+                .OrderBy(b => b.ExpiresAt ?? DateTime.MaxValue)
+                .ThenBy(b => b.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            foreach (var batch in batches)
+            {
+                if (remaining == 0) break;
+                var take = Math.Min(remaining, batch.RemainingAmount);
+                batch.RemainingAmount -= take;
+                remaining -= take;
+            }
+
+            _context.CreditConsumptions.Add(new CreditConsumption
+            {
+                BatchId = null,
+                BrandId = brandId,
+                PlanId = planId,
+                Quantity = quantity,
+                Reference = reference ?? "plan-approval"
+            });
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            // Concurrent double-approve hit the unique plan index → treat as already charged (idempotent).
+            _logger.LogInformation(ex, "Plan approval charge already recorded for PlanId={PlanId}", planId);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Fail-closed: if the charge errors, approval must not proceed.
+            _logger.LogError(ex, "TryConsumeForPlan failed for BrandId={BrandId} PlanId={PlanId}", brandId, planId);
+            return false;
+        }
+    }
+
     public async Task<CreditBatch> CreatePurchaseAsync(
         Guid brandId,
         int amount,

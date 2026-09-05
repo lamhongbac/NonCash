@@ -21,12 +21,17 @@
 - [src/NonCash.Core/Services/RegistrationService.cs](file://src/NonCash.Core/Services/RegistrationService.cs)
 - [src/NonCash.Core/Entities/UserAccount.cs](file://src/NonCash.Core/Entities/UserAccount.cs)
 - [src/NonCash.Core/Entities/BrandRegistrationRequest.cs](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs)
+- [src/NonCash.Core/Entities/BrandCustomer.cs](file://src/NonCash.Core/Entities/BrandCustomer.cs)
 - [src/NonCash.Core/Interfaces/IBrandScoped.cs](file://src/NonCash.Core/Interfaces/IBrandScoped.cs)
+- [src/NonCash.Core/Interfaces/IBrandCustomerRepository.cs](file://src/NonCash.Core/Interfaces/IBrandCustomerRepository.cs)
 - [src/NonCash.API/Middleware/BrandScopeMiddleware.cs](file://src/NonCash.API/Middleware/BrandScopeMiddleware.cs)
 - [src/NonCash.API/Controllers/PublicRegistrationController.cs](file://src/NonCash.API/Controllers/PublicRegistrationController.cs)
 - [src/NonCash.API/Controllers/RegistrationReviewController.cs](file://src/NonCash.API/Controllers/RegistrationReviewController.cs)
+- [src/NonCash.API/Controllers/CustomersController.cs](file://src/NonCash.API/Controllers/CustomersController.cs)
 - [src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs](file://src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs)
-- [src/NonCash.Core/Interfaces/ICustomerImportService.cs](file://src/NonCash.Core/Interfaces/ICustomerImportService.cs)
+- [src/NonCash.Infrastructure/Interfaces/ICustomerImportService.cs](file://src/NonCash.Infrastructure/Interfaces/ICustomerImportService.cs)
+- [src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs](file://src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs)
+- [tests/NonCash.IntegrationTests/CustomerActions/BrandCustomerEnforcementTests.cs](file://tests/NonCash.IntegrationTests/CustomerActions/BrandCustomerEnforcementTests.cs)
 </cite>
 
 ## Update Summary
@@ -37,6 +42,7 @@
 - Added new user account management capabilities with role-based access control
 - Integrated new BrandRegistrationRequest entity and related services
 - Enhanced customer service with improved import and validation logic
+- **New**: Comprehensive BrandCustomer entity and brand-customer mapping system with source tracking, per-brand blocking capabilities, and marketing consent management
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -60,6 +66,7 @@ This document explains the customer and business management functionality for th
 - **New**: Enhanced customer import functionality with CSV processing capabilities
 - **New**: Advanced multi-tenant architecture support with brand scoping middleware
 - **New**: Comprehensive user account management with role-based access control
+- **New**: BrandCustomer entity and comprehensive brand-customer mapping system with source tracking, per-brand blocking capabilities, and marketing consent management
 - Privacy and data protection considerations integrated with the multi-tenant architecture
 - The relationship between customer profiles and voucher ownership tracking, including transfer and redemption history
 
@@ -125,6 +132,7 @@ This section summarizes the core components relevant to customer and business ma
 - Customer Management
   - Customer entity, creation, search, import, and blacklist controls
   - **Enhanced**: CSV-based customer import with validation and upsert logic
+  - **New**: BrandCustomer mapping system with source tracking and per-brand blocking
 - Voucher Ownership and Distribution
   - VoucherPlanDetail ownership tracking via MemberID
   - Distribution logs for sales, promotions, and transfers
@@ -143,6 +151,7 @@ The NonCash platform is a SaaS system with:
 - POS integration via API keys scoped to approved ranges
 - **New**: Brand registration approval workflow with admin oversight
 - **New**: Enhanced user account management with role-based permissions
+- **New**: BrandCustomer mapping system for granular customer-brand relationships
 
 ```mermaid
 graph TB
@@ -157,6 +166,7 @@ DIST["VoucherDistribution"]
 CUSTOMER["Customer"]
 USER["UserAccount"]
 REG_REQUEST["BrandRegistrationRequest"]
+BRAND_CUSTOMER["BrandCustomer Mapping"]
 END
 END
 POS["POS System"] --> |"API Key"| DETAIL
@@ -172,6 +182,8 @@ CUSTOMER --> DETAIL
 BRAND --> OUTLET
 BRAND --> PLAN
 BRAND --> REG_REQUEST
+BRAND --> BRAND_CUSTOMER
+BRAND_CUSTOMER --> CUSTOMER
 ```
 
 **Diagram sources**
@@ -185,7 +197,7 @@ BRAND --> REG_REQUEST
 ## Detailed Component Analysis
 
 ### Customer Management System
-Customer management encompasses profile lifecycle, blacklist controls, and enhanced bulk import capabilities.
+Customer management encompasses profile lifecycle, blacklist controls, enhanced bulk import capabilities, and comprehensive brand-customer relationship management.
 
 - Profile Management
   - Unique phone number requirement and normalization
@@ -200,13 +212,20 @@ Customer management encompasses profile lifecycle, blacklist controls, and enhan
   - **New**: Transactional processing to avoid partial commits
   - **New**: UI with progress indication for large files
   - **New**: CSV helper integration for structured data processing
+- **New**: Brand-Customer Relationship Management
+  - BrandCustomer entity tracks which brands know about each customer
+  - Source tracking records how the relationship was established (Import, Manual, PromotionAuto, SelfPurchase, GiftingAuto, Transfer, Redemption)
+  - Per-brand blocking allows granular control over customer interactions
+  - Marketing consent management with opt-out capabilities
+  - Idempotent relationship creation prevents duplicate mappings
 
 ```mermaid
 flowchart TD
 Start(["Upload CSV"]) --> Parse["Parse File Rows"]
 Parse --> Validate["Validate Fields<br/>Normalize Phone Numbers"]
 Validate --> Upsert["Upsert Customer Records<br/>by Phone Number"]
-Upsert --> Txn["Transactional Batch Commit"]
+Upsert --> CreateMapping["Create BrandCustomer Mapping<br/>with Source Tracking"]
+CreateMapping --> Txn["Transactional Batch Commit"]
 Txn --> Done(["Import Complete"])
 Validate --> |Errors| Skip["Skip Malformed Rows<br/>or Rollback"]
 Skip --> Done
@@ -222,8 +241,56 @@ Skip --> Done
 - [docs/data-models.md:91-98](file://docs/data-models.md#L91-L98)
 - [src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs:18-37](file://src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs#L18-L37)
 
+### Brand-Customer Mapping System
+**New** comprehensive brand-customer relationship management system enabling granular control over customer interactions per brand.
+
+- BrandCustomer Entity
+  - Tracks the relationship between brands and customers
+  - Source enumeration captures how relationships were established
+  - Per-brand blocking capability with audit trail
+  - Marketing consent management with opt-out support
+  - Navigation properties to Brand and Customer entities
+- Relationship Lifecycle
+  - Idempotent relationship creation prevents duplicates
+  - Source never upgraded on re-link maintains historical accuracy
+  - CreatedBy tracking for manual vs automatic relationships
+  - BlockedAt timestamp for block/unblock operations
+- Enforcement Mechanisms
+  - Per-brand blocking stops distribution/sale/transfer-in from specific brand
+  - Platform blacklist remains separate from brand-specific blocks
+  - Grandfathering ensures existing vouchers remain valid after blocking
+  - Prospective-only enforcement prevents retroactive changes
+
+```mermaid
+sequenceDiagram
+participant Admin as "Brand Manager"
+participant API as "CustomersController"
+participant Service as "CustomerService"
+participant Repo as "BrandCustomerRepository"
+participant DB as "PostgreSQL"
+Admin->>API : "PUT /customers/{id}/block?brandId={brandId}"
+API->>Service : "BlockAsync(brandId, customerId)"
+Service->>Repo : "SetBlockedAsync(true)"
+Repo->>DB : "UPDATE brand_customers SET is_blocked = true"
+DB-->>Repo : "OK"
+Repo-->>Service : "Updated"
+Service-->>API : "Success"
+API-->>Admin : "200 OK with updated mapping"
+```
+
+**Diagram sources**
+- [src/NonCash.API/Controllers/CustomersController.cs:231-278](file://src/NonCash.API/Controllers/CustomersController.cs#L231-L278)
+- [src/NonCash.Core/Services/CustomerService.cs:132-142](file://src/NonCash.Core/Services/CustomerService.cs#L132-L142)
+- [src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs:64-80](file://src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs#L64-L80)
+
+**Section sources**
+- [src/NonCash.Core/Entities/BrandCustomer.cs:1-41](file://src/NonCash.Core/Entities/BrandCustomer.cs#L1-L41)
+- [src/NonCash.Core/Interfaces/IBrandCustomerRepository.cs:1-24](file://src/NonCash.Core/Interfaces/IBrandCustomerRepository.cs#L1-L24)
+- [src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs:1-82](file://src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs#L1-L82)
+- [src/NonCash.API/Controllers/CustomersController.cs:226-278](file://src/NonCash.API/Controllers/CustomersController.cs#L226-L278)
+
 ### Business Registration and Approval Workflow
-**New** comprehensive business registration system enabling self-service tenant onboarding with admin approval.
+Comprehensive business registration system enabling self-service tenant onboarding with admin approval.
 
 - Registration Process
   - Public self-registration with company details and representative information
@@ -277,7 +344,7 @@ API-->>Admin : "Success Response"
 - [src/NonCash.Core/Services/RegistrationService.cs:188-228](file://src/NonCash.Core/Services/RegistrationService.cs#L188-L228)
 
 ### Enhanced Multi-Tenant Architecture Support
-**New** advanced multi-tenant isolation with brand scoping middleware and enhanced tenant management.
+Advanced multi-tenant isolation with brand scoping middleware and enhanced tenant management.
 
 - Brand Scoping Middleware
   - Validates JWT claims for proper tenant assignment
@@ -323,7 +390,7 @@ Controller-->>Client : "HTTP Response"
 - [src/NonCash.Core/Services/BrandService.cs:62-98](file://src/NonCash.Core/Services/BrandService.cs#L62-L98)
 
 ### User Account Management and RBAC
-**New** comprehensive user account management system with role-based access control and enhanced security.
+Comprehensive user account management system with role-based access control and enhanced security.
 
 - User Account Lifecycle
   - Create, lock, unlock, and list operations for user accounts
@@ -444,26 +511,31 @@ API-->>Member : "202 Accepted"
 - [docs/data-models.md:34-62](file://docs/data-models.md#L34-L62)
 
 ### Blacklist Management and Voucher Activities
-Blacklist controls participation in voucher activities.
+Blacklist controls participation in voucher activities with enhanced brand-specific blocking.
 
 - Promotion Exclusion
   - Batch promotions exclude Blacklisted customers
   - Skipped records reported with warnings
+  - **New**: Per-brand blocking integrates with promotion distribution
 - Transfer Controls
   - Recipients linked to Blacklisted customers are skipped during transfer
   - Warning returned for skipped mappings
+  - **New**: BrandCustomer mapping affects transfer eligibility per brand
 - Purchase Controls
   - Blacklisted customers excluded from self-purchases
+  - **New**: Per-brand blocking prevents purchases from specific brands only
 
 ```mermaid
 flowchart TD
 Start(["Promote/Transfer Request"]) --> Load["Load Customer List"]
-Load --> Filter["Filter Blacklisted Customers"]
+Load --> CheckBrandBlock["Check BrandCustomer Mapping<br/>for per-brand blocks"]
+CheckBrandBlock --> Filter["Filter Blacklisted Customers"]
 Filter --> Count{"Sufficient Stock?"}
 Count --> |No| Abort["Abort with Insufficient Stock"]
 Count --> |Yes| Map["Map Vouchers to Phones"]
 Map --> Upsert["Upsert New Customers (Promo)"]
-Upsert --> Txn["Atomic Batch Commit"]
+Upsert --> CreateMapping["Create BrandCustomer Mapping<br/>with appropriate Source"]
+CreateMapping --> Txn["Atomic Batch Commit"]
 Txn --> Done(["Complete"])
 Filter --> |Skips| Warn["Return Warning List"]
 Warn --> Txn
@@ -483,8 +555,10 @@ Ownership tracking and history maintenance tie customer profiles to voucher life
 - Ownership Tracking
   - VoucherPlanDetail.MemberID links ownership to MemberID
   - VoucherDistribution records method (Sale, Promotion, Transfer) and timestamps
+  - **New**: BrandCustomer.Source tracks how customer-brand relationships were established
 - Redemption History
   - VoucherUsage captures POS redemptions with POSID, TransactionID, and AmountUsed
+  - **New**: Redemption source type recorded in BrandCustomer mapping
 - Member App Integration
   - GET /member/vouchers lists owned vouchers
   - Transfer endpoint initiates ownership reassignment
@@ -497,6 +571,8 @@ BRAND ||--o{ VOUCHER_PLAN_HEADER : "creates"
 VOUCHER_PLAN_HEADER ||--o{ VOUCHER_PLAN_DETAIL : "generates"
 VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_USAGE : "redeemed_by"
 VOUCHER_PLAN_DETAIL ||--o{ VOUCHER_DISTRIBUTION : "distributed_as"
+BRAND ||--o{ BRAND_CUSTOMER : "knows"
+BRAND_CUSTOMER ||--|| CUSTOMER : "maps_to"
 ```
 
 **Diagram sources**
@@ -515,6 +591,7 @@ graph LR
 AUTH["Auth Service"] --> USER["UserAccount"]
 BRAND["Brand Service"] --> BRAND_TBL["brands"]
 CUSTOMER["Customer Service"] --> CUSTOMER_TBL["customers"]
+CUSTOMER --> BRAND_CUSTOMER_TBL["brand_customers"]
 USER_SERVICE["User Service"] --> USER_TBL["user_accounts"]
 REG_SERVICE["Registration Service"] --> REG_REQUEST_TBL["brand_registration_requests"]
 REG_SERVICE --> BRAND_TBL
@@ -524,10 +601,11 @@ TRANSFER --> DIST["VoucherDistribution"]
 PROMO["Promotion Service"] --> DETAIL
 PROMO --> DIST
 DETAIL --> USAGE["VoucherUsage"]
+BRAND_CUSTOMER_REPO["BrandCustomerRepository"] --> BRAND_CUSTOMER_TBL
 ```
 
 **Diagram sources**
-- [_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md:47-64](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L47-L64)
+- [_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md:47-64](file://_bmad-output/implementation-artifacts/1-4-staff-accounts-rbac.md#L47-64)
 - [_bmad-output/implementation-artifacts/1-1-brand-setup.md:40-54](file://_bmad-output/implementation-artifacts/1-1-brand-setup.md#L40-L54)
 - [_bmad-output/implementation-artifacts/1-3-customer-record-management.md:48-60](file://_bmad-output/implementation-artifacts/1-3-customer-record-management.md#L48-L60)
 - [_bmad-output/implementation-artifacts/3-3-gifting-batch-transfer.md:44-54](file://_bmad-output/implementation-artifacts/3-3-gifting-batch-transfer.md#L44-L54)
@@ -545,11 +623,14 @@ DETAIL --> USAGE["VoucherUsage"]
 ## Performance Considerations
 - Use pagination and indexing for customer search and listing
 - Normalize phone numbers to reduce duplicate entries and improve lookup performance
-- **New**: Batch process large CSV imports with chunked transactions to avoid long-running sessions
+- Batch process large CSV imports with chunked transactions to avoid long-running sessions
 - Enforce tenant filters at the repository level to prevent accidental cross-tenant scans
-- **New**: Implement brand scoping middleware for efficient tenant isolation
+- Implement brand scoping middleware for efficient tenant isolation
 - Keep blacklist checks short-circuiting to minimize overhead during transfer and promotion flows
-- **New**: Optimize registration workflow with asynchronous processing for better scalability
+- Optimize registration workflow with asynchronous processing for better scalability
+- **New**: Leverage unique indexes on brand_customer mappings for fast lookups
+- **New**: Use idempotent relationship creation to prevent duplicate mapping queries
+- **New**: Cache brand-block status checks to reduce database load during high-volume operations
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -561,19 +642,24 @@ Common issues and resolutions:
   - Return explicit warnings for skipped recipients or customers
 - Cross-Tenant Access
   - Verify BrandID in JWT and enforce repository-level tenant filters
-  - **New**: Check brand scoping middleware configuration for proper tenant isolation
+  - Check brand scoping middleware configuration for proper tenant isolation
   - Reject attempts to access data outside the user's Brand scope
 - Transaction Failures
   - Wrap transfer and promotion operations in atomic transactions
   - Roll back on errors to maintain consistency
-- **New**: Registration Workflow Issues
+- Registration Workflow Issues
   - Verify tax code uniqueness against existing brands
   - Check username availability for representative accounts
   - Ensure proper role assignment for user accounts
-- **New**: User Account Management Problems
+- User Account Management Problems
   - Validate brand assignment for non-admin users
   - Check password complexity requirements
   - Verify username uniqueness across all brands
+- **New**: Brand-Customer Mapping Issues
+  - Verify migration has been applied for brand_customers table
+  - Check that brand-scoped endpoints include proper brand context
+  - Ensure BrandCustomerSource is correctly set based on operation type
+  - Validate per-brand blocking doesn't conflict with platform blacklist
 
 **Section sources**
 - [_bmad-output/implementation-artifacts/1-3-customer-record-management.md:70-76](file://_bmad-output/implementation-artifacts/1-3-customer-record-management.md#L70-L76)
@@ -588,28 +674,34 @@ The NonCash platform provides a robust foundation for customer and business mana
 - Comprehensive customer lifecycle management with blacklist controls and enhanced import capabilities
 - **New**: Complete business registration and approval workflow with self-service onboarding
 - **New**: Advanced user account management with role-based access control and security enforcement
+- **New**: BrandCustomer mapping system enabling granular per-brand customer relationship management
 - Clear ownership tracking via MemberID and VoucherPlanDetail
 - Audit trails for promotions, transfers, and redemptions
 - Secure authentication and authorization for staff and POS integrations
-- **New**: Scalable registration processing with asynchronous workflows and comprehensive validation
+- Scalable registration processing with asynchronous workflows and comprehensive validation
+- **New**: Sophisticated enforcement mechanisms with grandfathering, prospective-only application, and reversibility principles
 
-These capabilities enable brands to manage customer participation, enforce compliance, maintain data integrity across a SaaS environment, and support efficient tenant onboarding with proper governance controls.
+These capabilities enable brands to manage customer participation, enforce compliance, maintain data integrity across a SaaS environment, support efficient tenant onboarding with proper governance controls, and implement sophisticated customer relationship management with brand-specific controls.
 
 ## Appendices
 - Data Privacy and Protection
   - Enforce RBAC and tenant scoping to limit data exposure
   - Use JWT for session-bound access and API keys for POS systems
   - Normalize sensitive identifiers (e.g., phone numbers) to support deduplication without exposing PII unnecessarily
-  - **New**: Implement comprehensive audit trails for all registration and approval activities
+  - Implement comprehensive audit trails for all registration and approval activities
+  - **New**: Track marketing consent preferences per brand-customer relationship
 - Integration Notes
   - Member App endpoints for listing vouchers and initiating transfers are defined in the API contracts
   - POS endpoints for verification, locking, and redemption are documented separately
-  - **New**: Public registration endpoints for self-service business onboarding
-  - **New**: Admin registration review endpoints for governance and approval workflows
-- **New**: Technical Specifications
+  - Public registration endpoints for self-service business onboarding
+  - Admin registration review endpoints for governance and approval workflows
+  - **New**: BrandCustomer mapping endpoints for granular customer-brand relationship management
+- Technical Specifications
   - BrandRegistrationRequest entity supports complete registration lifecycle tracking
   - CSV import service handles large-scale customer data processing efficiently
   - Brand scoping middleware ensures automatic tenant isolation at the application layer
+  - **New**: BrandCustomer entity with comprehensive source tracking and per-brand blocking capabilities
+  - **New**: Migration strategy includes automatic backfill of existing customers to first active brand
 
 **Section sources**
 - [docs/architecture.md:36-41](file://docs/architecture.md#L36-L41)
@@ -617,3 +709,5 @@ These capabilities enable brands to manage customer participation, enforce compl
 - [Key Functionalities.txt:158-166](file://Key Functionalities.txt#L158-L166)
 - [src/NonCash.Core/Entities/BrandRegistrationRequest.cs:11-24](file://src/NonCash.Core/Entities/BrandRegistrationRequest.cs#L11-L24)
 - [src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs:18-37](file://src/NonCash.Infrastructure/Services/CsvCustomerImportService.cs#L18-L37)
+- [src/NonCash.Core/Entities/BrandCustomer.cs:1-41](file://src/NonCash.Core/Entities/BrandCustomer.cs#L1-L41)
+- [src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs:1-82](file://src/NonCash.Infrastructure/Repositories/BrandCustomerRepository.cs#L1-L82)

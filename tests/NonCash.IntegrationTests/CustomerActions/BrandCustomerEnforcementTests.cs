@@ -54,13 +54,6 @@ public class BrandCustomerEnforcementTests : IDisposable
         _context.Database.EnsureCreated();
 
         var notificationService = new ConsoleNotificationService();
-        var creditConfig = new CreditConfig();
-        var creditService = new CreditService(
-            _context,
-            new CreditPolicyService(_context, creditConfig),
-            new WelcomePolicyService(_context, creditConfig),
-            notificationService,
-            NullLogger<CreditService>.Instance);
         var brandCustomerRepository = new BrandCustomerRepository(_context);
 
         _promotionService = new PromotionService(
@@ -72,9 +65,9 @@ public class BrandCustomerEnforcementTests : IDisposable
             new Repository<VoucherUsage>(_context),
             new VoucherTransferRepository(_context),
             new Repository<Outlet>(_context),
-            creditService,
             notificationService,
-            brandCustomerRepository);
+            brandCustomerRepository,
+            new Repository<VoucherDistributionBatch>(_context));
 
         _purchaseService = new PurchaseService(
             new VoucherPlanRepository(_context),
@@ -84,7 +77,6 @@ public class BrandCustomerEnforcementTests : IDisposable
             new Repository<VoucherDistribution>(_context),
             new MemberAccountRepository(_context),
             new CustomerRepository(_context),
-            creditService,
             brandCustomerRepository);
 
         _transferService = new TransferService(
@@ -148,8 +140,8 @@ public class BrandCustomerEnforcementTests : IDisposable
             BlockedAt = DateTime.UtcNow
         });
 
-        // Credits for both brands so the paths reach the block checks instead of
-        // stopping at InsufficientCredits.
+        // Incidental credit balances for both brands. Purchase/promotion are no longer
+        // credit-gated (charging happens at plan approval), so these are not asserted on.
         _context.CreditBatches.AddRange(
             SeedBatch(BrandAId),
             SeedBatch(BrandBId));

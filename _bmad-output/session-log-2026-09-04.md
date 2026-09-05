@@ -77,3 +77,27 @@
 - Applied to remote dev DB (`dotnet ef` needs `NONCASH_CONNECTION_STRING` env var — the design-time factory defaults to localhost, and `migrations remove`/`database update` DO connect to check history). Verified via psql: 2 plans backfilled `{Companies:[brand.business_id], Brands:[brand_id], Outlets:[]}` (plan_outlets had 0 rows), column jsonb NOT NULL no default, plan_outlets table gone.
 - Verified: Infrastructure + API build 0 errors/0 warnings; Unit 88/88 (+3 NEW `VoucherPlanServiceTests`: create-with-outlets, create-empty-outlets, update-refreshes-scope); Integration 91/91. `dotnet ef` built the model against Npgsql OK = the string+jsonb+converter mapping is valid on Postgres.
 - STATE: ALL Epic 3 changes UNCOMMITTED in working tree; migration IS applied to remote dev DB (schema ahead of git history is fine). NOT committed (user hasn't asked). Deferred: hierarchy-aware POS redeem + View scope display (A4) + cascading company->brand->outlet create/edit UI.
+
+## Follow-up (same day, wrap-up): committed everything + Direction A proposed (PENDING approval)
+
+### Commit — first since `43031be` (21 Aug)
+- `ea3f4d2` "Work since Aug 21: voucher scope jsonb (Epic 3), brand-customer mapping, email kill-switch, Distribute component, media upload, pricing docs; untrack build-output dirs". Working tree CLEAN. NOT pushed (user hasn't asked).
+- Same commit did housekeeping: `.gitignore` += `tmp_build_*/`, `build_tmp_*/`; `git rm -r --cached tmp_build_api tmp_build_web` (untracked the previously-committed build binaries; files kept on disk). This SUPERSEDES the "ALL UNCOMMITTED" notes above (L29, L79): task-d8b, email kill-switch, Distribute, Epic 3 scope + migrations 20260822/20260903/20260904 + the cumulative snapshot are all committed together (the 3 migrations share ONE `ApplicationDbContextModelSnapshot.cs`, so they could NOT be split into separate commits).
+- GOTCHA (verified): git WRITE ops (`rm`/`add`/`commit`) are DENIED inside the sandbox ("Access is denied"); git READS (`status`/`log`) work. Commits must run OUTSIDE the sandbox (required_permissions=all).
+
+### Direction A — hierarchy-aware POS redeem: INVESTIGATED, proposal PENDING approval (NOT implemented)
+- BUG at `src/NonCash.Core/Services/PosService.cs` `ValidateCoreAsync` (~L319-325): `if (!plan.Scope.Outlets.Contains(outletId)) -> "OutletNotAuthorized"`. `BuildScope` gives whole-brand plans EMPTY `Outlets`, so such plans are currently redeemable NOWHERE. Check #1 just above (`outlet.BrandId != plan.BrandId -> reject`) already pins redemption to the plan's OWN brand.
+- Invariants: `VoucherPlanService.BuildScope` always sets `Companies=[brand.BusinessId]`, `Brands=[brandId]`, `Outlets=dto.OutletIds(may be empty)` -> Brands/Companies are always the owner, so their cascade levels are redundant WHILE check #1 stays. `VoucherPlanRepository.GetByIdWithOutletsAsync` loads the header incl. `Scope` (legacy misnomer, functionally fine). STALE doc: `VoucherScope.cs` L9 still says "owned entity mapped with ToJson" (should be ValueConverter).
+- Test gap: only redeem tests live in `tests/NonCash.IntegrationTests/Controllers/CreditsControllerTests.cs` (`SeedPlan` sets `Outlets=[_outletId]`, NON-empty) -> pass today, won't break, but the EMPTY-Outlets (whole-brand) path is UNCOVERED. No dedicated POS test file exists.
+- PROPOSED CHANGE (await user go — DO NOT implement until approved):
+  1. `Core/Entities/VoucherScope.cs`: add pure `bool CoversOutlet(outletId, outletBrandId, companyBusinessId)` = cascade Outlets->Brands->Companies (empty level = all under it); fix the stale ToJson doc.
+  2. `Core/Services/PosService.cs`: move the EXISTING brand load above the scope check (reuse, no extra query); replace the buggy line with `if (!plan.Scope.CoversOutlet(outletId, outlet.BrandId, brand.BusinessId)) reject`; drop the now-duplicate brand load below; KEEP check #1.
+  3. NEW `tests/NonCash.UnitTests/Entities/VoucherScopeTests.cs`: 7 cases (membership per level + fall-through when empty + all-empty).
+  4. NEW `tests/NonCash.IntegrationTests/Controllers/PosRedeemScopeTests.cs`: empty-Outlets plan -> LockAsync succeeds; Outlets=[other] -> mismatch rejected; other-brand outlet -> rejected by check #1.
+  - NO DB migration (pure logic + tests). Then build + run Unit & Integration (expect green).
+- DECISIONS recommended (pending confirm): D1 KEEP check #1 (same-brand only) — relaxing is inert until Direction B authoring UI and drags in cross-tenant settlement; D2 extracted `CoversOutlet` helper (A2) over one-line inline fix (A1). Assumptions: all-empty scope => whole owning brand (still gated by check #1); dedicated `PosRedeemScopeTests.cs` over bloating CreditsControllerTests.
+
+### Resume tomorrow
+1. Get approval on the Direction A proposal (or adjustments) -> implement rows 1-4 -> build -> run Unit + Integration.
+2. This log update + Direction A code will be UNCOMMITTED -> commit when the user asks (remember: git writes run OUTSIDE the sandbox).
+3. Other directions still open: B (scope-authoring UI + View display + relax check #1 for true multi-brand), C ("approve with policy" business activation), D (backlog epics: 7 settlement/sponsorship, 8 display, pricing analytics).

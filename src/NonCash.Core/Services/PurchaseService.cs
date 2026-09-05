@@ -12,7 +12,6 @@ public class PurchaseService : IPurchaseService
     private readonly IRepository<VoucherDistribution> _distributionRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly ICustomerRepository _customerRepository;
-    private readonly ICreditService _creditService;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
 
     public PurchaseService(
@@ -23,7 +22,6 @@ public class PurchaseService : IPurchaseService
         IRepository<VoucherDistribution> distributionRepository,
         IMemberAccountRepository memberRepository,
         ICustomerRepository customerRepository,
-        ICreditService creditService,
         IBrandCustomerRepository brandCustomerRepository)
     {
         _planRepository = planRepository;
@@ -33,7 +31,6 @@ public class PurchaseService : IPurchaseService
         _distributionRepository = distributionRepository;
         _memberRepository = memberRepository;
         _customerRepository = customerRepository;
-        _creditService = creditService;
         _brandCustomerRepository = brandCustomerRepository;
     }
 
@@ -85,10 +82,6 @@ public class PurchaseService : IPurchaseService
         // Matrix S1 (rows 3-4): a per-brand block only stops purchases of THAT brand's plans.
         if (await _brandCustomerRepository.IsBlockedAsync(plan.BrandId, customer.Id, cancellationToken))
             return new OrderResult(false, ErrorCode: "BrandBlocked", ErrorMessage: "This purchase is not allowed.");
-
-        // Epic 9: block new orders when the selling brand has no credits left.
-        if (!await _creditService.HasCreditAsync(plan.BrandId, cancellationToken))
-            return new OrderResult(false, ErrorCode: "InsufficientCredits", ErrorMessage: "This voucher is temporarily unavailable.");
 
         // AC6: Check stock at order creation (advisory; final check happens at payment)
         var available = (await _detailRepository.FindAsync(
@@ -142,8 +135,8 @@ public class PurchaseService : IPurchaseService
         var totalAllocated = 0;
         var now = DateTime.UtcNow;
 
-        // Epic 9: Gift vouchers consume 1 credit each at sale (charged to the plan's brand).
-        var chargedVouchers = new List<(Guid BrandId, Guid VoucherId)>();
+        // Track the bought vouchers' brands for the brand-customer auto-link below.
+        var boughtVouchers = new List<(Guid BrandId, Guid VoucherId)>();
 
         foreach (var od in orderDetails)
         {
@@ -185,7 +178,7 @@ public class PurchaseService : IPurchaseService
                 _planRepository.Update(plan);
 
                 foreach (var v in available.Take(od.Quantity))
-                    chargedVouchers.Add((plan.BrandId, v.Id));
+                    boughtVouchers.Add((plan.BrandId, v.Id));
             }
         }
 
@@ -195,16 +188,11 @@ public class PurchaseService : IPurchaseService
 
         await _orderRepository.SaveChangesAsync(cancellationToken);
 
-        // Epic 9: charge credits after the order is committed; failures are logged inside
-        // TryConsumeAsync and never fail the order (grace overdraft).
-        foreach (var (chargeBrandId, voucherId) in chargedVouchers)
-            await _creditService.TryConsumeAsync(chargeBrandId, voucherId, $"Sale order {order.Id}", cancellationToken);
-
         // Auto-link: buying a brand's voucher makes the member's customer that brand's customer.
         var buyerMember = await _memberRepository.GetByIdAsync(order.MemberId, cancellationToken);
         if (buyerMember != null)
         {
-            foreach (var boughtBrandId in chargedVouchers.Select(cv => cv.BrandId).Distinct())
+            foreach (var boughtBrandId in boughtVouchers.Select(cv => cv.BrandId).Distinct())
                 await _brandCustomerRepository.EnsureAsync(boughtBrandId, buyerMember.CustomerId, BrandCustomerSource.SelfPurchase, null, cancellationToken);
         }
 

@@ -11,7 +11,6 @@ public class VoucherGenerationServiceTests
     private readonly IVoucherPlanRepository _planRepository = Substitute.For<IVoucherPlanRepository>();
     private readonly IVoucherCodeService _voucherCodeService = Substitute.For<IVoucherCodeService>();
     private readonly IRepository<VoucherPlanDetail> _detailRepository = Substitute.For<IRepository<VoucherPlanDetail>>();
-    private readonly ICreditService _creditService = Substitute.For<ICreditService>();
     private readonly VoucherGenerationService _sut;
 
     private readonly Guid _planId = Guid.NewGuid();
@@ -19,7 +18,7 @@ public class VoucherGenerationServiceTests
 
     public VoucherGenerationServiceTests()
     {
-        _sut = new VoucherGenerationService(_planRepository, _voucherCodeService, _detailRepository, _creditService);
+        _sut = new VoucherGenerationService(_planRepository, _voucherCodeService, _detailRepository);
     }
 
     private VoucherPlanHeader ApprovedPlan(int targetQuantity) => new()
@@ -34,7 +33,6 @@ public class VoucherGenerationServiceTests
     private void ArrangePlan(VoucherPlanHeader plan, int existingDetails)
     {
         _planRepository.GetByIdWithOutletsAsync(_planId, Arg.Any<CancellationToken>()).Returns(plan);
-        _creditService.HasCreditAsync(_brandId, Arg.Any<CancellationToken>()).Returns(true);
         _voucherCodeService.GenerateSecretKey().Returns("SECRET");
         var existing = Enumerable.Range(1, existingDetails)
             .Select(i => new VoucherPlanDetail { Id = Guid.NewGuid(), ParentId = _planId, SerialNo = $"VC-X-{i:D8}" })

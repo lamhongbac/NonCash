@@ -16,18 +16,15 @@ public class VoucherGenerationService : IVoucherGenerationService
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IVoucherCodeService _voucherCodeService;
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
-    private readonly ICreditService _creditService;
 
     public VoucherGenerationService(
         IVoucherPlanRepository planRepository,
         IVoucherCodeService voucherCodeService,
-        IRepository<VoucherPlanDetail> detailRepository,
-        ICreditService creditService)
+        IRepository<VoucherPlanDetail> detailRepository)
     {
         _planRepository = planRepository;
         _voucherCodeService = voucherCodeService;
         _detailRepository = detailRepository;
-        _creditService = creditService;
     }
 
     public async Task<GenerationResult> GenerateBatchAsync(Guid planId, int quantity, Guid brandId, CancellationToken cancellationToken = default)
@@ -48,10 +45,6 @@ public class VoucherGenerationService : IVoucherGenerationService
         // AC1: Approval Gate
         if (plan.ApprovalStatus != ApprovalStatus.Approved)
             return new GenerationResult(false, ErrorMessage: "PlanNotApproved: Vouchers can only be generated for approved plans.");
-
-        // Epic 9: block generation when the brand has no credits left.
-        if (!await _creditService.HasCreditAsync(brandId, cancellationToken))
-            return new GenerationResult(false, ErrorMessage: "InsufficientCredits: Your credit balance is depleted. Please top up to continue.");
 
         // Generate voucher details
         var brandCode = plan.Brand?.TaxCode ?? plan.BrandId.ToString()[..8].ToUpperInvariant();
@@ -87,11 +80,9 @@ public class VoucherGenerationService : IVoucherGenerationService
 
         await _detailRepository.SaveChangesAsync(cancellationToken);
 
-        // Update the plan's distributed count
-        plan.TargetDistributed += quantity;
-        _planRepository.Update(plan);
-        await _planRepository.SaveChangesAsync(cancellationToken);
-
+        // Generation only materializes the paid quota as voucher rows (the distributable pool).
+        // It is NOT a distribution, so the plan header (TargetDistributed) is intentionally left
+        // untouched here — that counter is reconciled when vouchers are actually handed out.
         return new GenerationResult(true, GeneratedCount: quantity);
     }
 

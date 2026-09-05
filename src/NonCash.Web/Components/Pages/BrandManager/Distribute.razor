@@ -1,7 +1,7 @@
 @page "/brandmanager/distribute"
 @attribute [Authorize(Roles = "BrandManager")]
 @inject HttpClient Http
-@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject NonCash.Web.Services.ClientAuthService AuthState
 
 <PageTitle>Distribute Vouchers</PageTitle>
@@ -35,13 +35,22 @@
 
 @if (_selectedPlanId != Guid.Empty)
 {
-    <DistributeVouchers PlanId="@_selectedPlanId" ShowHeader="false" />
+    <DistributeVouchers PlanId="@_selectedPlanId" ShowHeader="false" OnDistributed="OnDistributed" />
+    <DistributionBatchHistory @ref="_history" PlanId="@_selectedPlanId" @key="_selectedPlanId" />
 }
 
 @code {
     private List<PlanOption> _plans = new();
     private Guid _selectedPlanId;
     private bool _loading = true;
+    private DistributionBatchHistory? _history;
+
+    /// <summary>After a successful run, reload the run history so the new batch shows up immediately.</summary>
+    private async Task OnDistributed()
+    {
+        if (_history != null)
+            await _history.RefreshAsync();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -66,12 +75,14 @@
             }
             else
             {
-                Snackbar.Add($"Failed to load plans: {response.StatusCode}", Severity.Error);
+                await MessageDialog.ShowAsync(DialogService, "Could not load plans",
+                    $"Failed to load plans: {response.StatusCode}", Severity.Error);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            await MessageDialog.ShowAsync(DialogService, "Could not load plans",
+                ex.Message, Severity.Error);
         }
         finally
         {
@@ -83,15 +94,18 @@
     {
         var p = _plans.FirstOrDefault(x => x.Id == id);
         if (p == null) return string.Empty;
-        return $"{p.VoucherType} Voucher - Qty {p.TargetQuantity}, {p.FaceValue:N0} VND, pub {p.PublishDate.ToLocalTime():dd/MM/yyyy}";
+        var name = string.IsNullOrWhiteSpace(p.DisplayName) ? $"{p.VoucherType} Voucher" : p.DisplayName!;
+        return $"{name} — available {p.Available}";
     }
 
     public class PlanOption
     {
         public Guid Id { get; set; }
         public string VoucherType { get; set; } = "";
+        public string? DisplayName { get; set; }
         public int TargetQuantity { get; set; }
         public decimal FaceValue { get; set; }
         public DateTime PublishDate { get; set; }
+        public int Available { get; set; }
     }
 }

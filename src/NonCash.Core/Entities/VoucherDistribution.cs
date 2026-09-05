@@ -17,7 +17,12 @@ public class VoucherDistribution : BaseEntity
     // Epic 6.2: External member reference for Loyalty App integration
     public string? ExternalMemberId { get; set; }
 
+    /// <summary>The batch run this distribution belongs to (promotion runs only; NULL for sale/transfer
+    /// and for distributions recorded before batch tracking existed).</summary>
+    public Guid? BatchId { get; set; }
+
     // Navigation properties
     public VoucherPlanDetail? Voucher { get; set; }
     public MemberAccount? Member { get; set; }
+    public VoucherDistributionBatch? Batch { get; set; }
 }

@@ -26,10 +26,10 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
         if (string.IsNullOrWhiteSpace(email))
             return null;
 
-        var normalized = email.Trim();
+        var normalized = email.Trim().ToLowerInvariant();
         return await _context.Customers
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Email != null && EF.Functions.ILike(c.Email, normalized), cancellationToken);
+            .FirstOrDefaultAsync(c => c.Email != null && c.Email.ToLower() == normalized, cancellationToken);
     }
 
     public async Task<bool> PhoneNumberExistsAsync(string phoneNumber, CancellationToken cancellationToken = default)
@@ -43,10 +43,10 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
         if (string.IsNullOrWhiteSpace(email))
             return false;
 
-        var normalized = email.Trim();
+        var normalized = email.Trim().ToLowerInvariant();
         var query = _context.Customers
             .AsNoTracking()
-            .Where(c => c.Email != null && EF.Functions.ILike(c.Email, normalized));
+            .Where(c => c.Email != null && c.Email.ToLower() == normalized);
 
         if (excludeCustomerId.HasValue)
             query = query.Where(c => c.Id != excludeCustomerId.Value);

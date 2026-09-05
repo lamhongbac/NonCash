@@ -1,0 +1,126 @@
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@*
+    Read-only brand-scoped voucher history of one customer: every voucher the customer
+    received from the current brand with its lifecycle status (Distributed / Redeeming /
+    Redeemed / Expired), how it was delivered and when it was used. Opened from the
+    Customers page ("Vouchers" action).
+*@
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Voucher History — @CustomerName</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="ma-4" />
+        }
+        else if (!_vouchers.Any())
+        {
+            <MudAlert Severity="Severity.Info">This customer has not received any vouchers from your brand yet.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_vouchers" Dense="true" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Serial No</MudTh>
+                    <MudTh>Plan</MudTh>
+                    <MudTh Style="text-align:right">Value</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Method</MudTh>
+                    <MudTh>Distributed At</MudTh>
+                    <MudTh>Used Date</MudTh>
+                    <MudTh>Expiry</MudTh>
+                    <MudTh>Dynamic Code</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.SerialNo</MudTd>
+                    <MudTd>@context.PlanName</MudTd>
+                    <MudTd Style="text-align:right">@context.FaceValue.ToString("N0")</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Color="@VoucherStatusDisplay.ChipColor(context.Status)" Size="Size.Small">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>@(context.DistributionMethod ?? "-")</MudTd>
+                    <MudTd>@(context.DistributedAt.HasValue ? context.DistributedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "-")</MudTd>
+                    <MudTd>@(context.UsedDate.HasValue ? context.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "-")</MudTd>
+                    <MudTd>@context.ExpiryDate.ToLocalTime().ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd><MudText Typo="Typo.body2" Style="font-family:monospace; font-size:0.75rem; word-break:break-all;">@context.VoucherCode</MudText></MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The customer whose voucher history is shown.</summary>
+    [Parameter] public Guid CustomerId { get; set; }
+
+    /// <summary>Display name for the dialog title.</summary>
+    [Parameter] public string CustomerName { get; set; } = "";
+
+    private List<CustomerVoucherItem> _vouchers = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/customers/{CustomerId}/vouchers");
+            var token = await AuthState.GetTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _vouchers = await response.Content.ReadFromJsonAsync<List<CustomerVoucherItem>>() ?? new();
+            }
+            else
+            {
+                await MessageDialog.ShowAsync(DialogService, "Could not load voucher history",
+                    $"Failed to load the customer's vouchers: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "Could not load voucher history",
+                ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+
+    public class CustomerVoucherItem
+    {
+        public Guid Id { get; set; }
+        public string SerialNo { get; set; } = "";
+        public Guid PlanId { get; set; }
+        public string PlanName { get; set; } = "";
+        public string VoucherType { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime? DistributedAt { get; set; }
+        public string? DistributionMethod { get; set; }
+        public DateTime? UsedDate { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public string VoucherCode { get; set; } = "";
+    }
+}

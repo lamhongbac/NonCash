@@ -66,6 +66,8 @@ else if (_customers is not null)
             </MudTd>
             <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Info"
+                               OnClick="() => OpenVoucherHistory(context)" title="Voucher history" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="() => OpenEditDialog(context)" />
                 @if (context.IsBrandBlocked == true)
                 {
@@ -265,6 +267,26 @@ else if (_customers is not null)
         _importFileName = null;
         _importResult = null;
         _showImportDialog = true;
+    }
+
+    /// <summary>Opens the read-only voucher history of this customer (brand-scoped, server-side).</summary>
+    private async Task OpenVoucherHistory(CustomerDto customer)
+    {
+        var parameters = new DialogParameters<CustomerVouchersDialog>
+        {
+            { x => x.CustomerId, customer.Id },
+            { x => x.CustomerName, customer.FullName }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.ExtraLarge,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CustomerVouchersDialog>(
+            $"Voucher History — {customer.FullName}", parameters, options);
+        await dialog.Result;
     }
 
     private void LoadFiles(InputFileChangeEventArgs e)

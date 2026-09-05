@@ -16,12 +16,21 @@ public class CustomersController : ControllerBase
     private readonly CustomerService _customerService;
     private readonly ICustomerImportService _importService;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDistributionBatchService _distributionBatchService;
+    private readonly IVoucherCodeService _voucherCodeService;
 
-    public CustomersController(CustomerService customerService, ICustomerImportService importService, ICurrentUserService currentUser)
+    public CustomersController(
+        CustomerService customerService,
+        ICustomerImportService importService,
+        ICurrentUserService currentUser,
+        IDistributionBatchService distributionBatchService,
+        IVoucherCodeService voucherCodeService)
     {
         _customerService = customerService ?? throw new ArgumentNullException(nameof(customerService));
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
+        _distributionBatchService = distributionBatchService ?? throw new ArgumentNullException(nameof(distributionBatchService));
+        _voucherCodeService = voucherCodeService ?? throw new ArgumentNullException(nameof(voucherCodeService));
     }
 
     /// <summary>
@@ -275,6 +284,51 @@ public class CustomersController : ControllerBase
 
         var mapping = await _customerService.GetBrandMappingAsync(brandId, id, cancellationToken);
         return Ok(MapToResponse(customer, mapping));
+    }
+
+    /// <summary>
+    /// Brand-scoped voucher history of one customer (every voucher the customer received
+    /// from this brand with its lifecycle status). BrandManager → own brand;
+    /// Admin → must pass ?brandId= (same rule as block/unblock).
+    /// </summary>
+    [HttpGet("{id:guid}/vouchers")]
+    public async Task<ActionResult> GetCustomerVouchers(Guid id, [FromQuery] Guid? brandId, CancellationToken cancellationToken)
+    {
+        Guid scopedBrandId;
+        if (_currentUser.IsInRole("BrandManager"))
+        {
+            var ownBrandId = _currentUser.GetCurrentBrandId();
+            if (ownBrandId == null)
+                return Unauthorized(new { error = "Invalid user context." });
+            scopedBrandId = ownBrandId.Value;
+        }
+        else // Admin must name the brand explicitly
+        {
+            if (brandId == null || brandId == Guid.Empty)
+                return BadRequest(new { error = "The brandId query parameter is required." });
+            scopedBrandId = brandId.Value;
+        }
+
+        var rows = await _distributionBatchService.GetCustomerVouchersAsync(id, scopedBrandId, cancellationToken);
+        if (rows == null)
+            return NotFound(); // Unknown customer OR not mapped to this brand
+
+        return Ok(rows.Select(r => new
+        {
+            r.Id,
+            r.SerialNo,
+            r.PlanId,
+            r.PlanName,
+            r.VoucherType,
+            r.FaceValue,
+            r.Status,
+            r.DistributedAt,
+            r.DistributionMethod,
+            r.UsedDate,
+            r.ExpiryDate,
+            // Generate current dynamic code (short-lived)
+            VoucherCode = _voucherCodeService.GenerateCode(r.Id, r.VoucherCodeSecret)
+        }));
     }
 
     [HttpPost("import")]

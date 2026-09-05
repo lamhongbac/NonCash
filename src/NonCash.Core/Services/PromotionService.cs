@@ -13,9 +13,9 @@ public class PromotionService : IPromotionService
     private readonly IRepository<VoucherUsage> _usageRepository;
     private readonly IVoucherTransferRepository _transferRepository;
     private readonly IRepository<Outlet> _outletRepository;
-    private readonly ICreditService _creditService;
     private readonly INotificationService _notificationService;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
+    private readonly IRepository<VoucherDistributionBatch> _batchRepository;
 
     private static readonly System.Text.RegularExpressions.Regex _emailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
@@ -30,9 +30,9 @@ public class PromotionService : IPromotionService
         IRepository<VoucherUsage> usageRepository,
         IVoucherTransferRepository transferRepository,
         IRepository<Outlet> outletRepository,
-        ICreditService creditService,
         INotificationService notificationService,
-        IBrandCustomerRepository brandCustomerRepository)
+        IBrandCustomerRepository brandCustomerRepository,
+        IRepository<VoucherDistributionBatch> batchRepository)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -42,9 +42,9 @@ public class PromotionService : IPromotionService
         _usageRepository = usageRepository;
         _transferRepository = transferRepository;
         _outletRepository = outletRepository;
-        _creditService = creditService;
         _notificationService = notificationService;
         _brandCustomerRepository = brandCustomerRepository;
+        _batchRepository = batchRepository;
     }
 
     public async Task<PromotionResult> DistributeAsync(
@@ -53,7 +53,8 @@ public class PromotionService : IPromotionService
         IReadOnlyList<string> phoneNumbers,
         NotificationChannel notifyChannels = NotificationChannel.Email,
         CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string>? phoneToEmail = null)
+        IReadOnlyDictionary<string, string>? phoneToEmail = null,
+        Guid? createdById = null)
     {
         if (phoneNumbers == null || phoneNumbers.Count == 0)
             return new PromotionResult(false, ErrorCode: "EmptyList", ErrorMessage: "Phone number list is empty.");
@@ -70,17 +71,25 @@ public class PromotionService : IPromotionService
         if (plan.ApprovalStatus != ApprovalStatus.Approved)
             return new PromotionResult(false, ErrorCode: "PlanNotApproved", ErrorMessage: "Only approved plans can be promoted.");
 
-        // Epic 9: block distribution when the brand has no credits left.
-        if (!await _creditService.HasCreditAsync(brandId, cancellationToken))
-            return new PromotionResult(false, ErrorCode: "InsufficientCredits", ErrorMessage: "Your credit balance is depleted. Please top up to continue.");
-
-        // Auto-detect email tokens: resolve them to the matching customer's phone so a
-        // mixed phone/email list works. Emails that don't match an active customer are skipped.
-        var incoming = new List<string>();
+        // Recipient rules (strict): every token must resolve to an existing customer —
+        // recipients are NEVER auto-created from this list. Email tokens resolve to the
+        // matching customer's phone so a mixed phone/email list works. Duplicates are
+        // reported and skipped: a customer receives exactly one voucher no matter how
+        // many times they appear in the list.
+        var incoming = new List<(string Token, string PhoneOrRaw)>();
         var emailSkips = new List<SkippedRecord>();
+        var duplicateSkips = new List<SkippedRecord>();
+        var seenTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var raw in phoneNumbers)
         {
             var token = (raw ?? string.Empty).Trim();
+            if (token.Length == 0)
+                continue;
+            if (!seenTokens.Add(token))
+            {
+                duplicateSkips.Add(new SkippedRecord(token, "Duplicate"));
+                continue;
+            }
             if (IsEmailToken(token))
             {
                 var byEmail = await _customerRepository.GetByEmailAsync(token, cancellationToken);
@@ -102,61 +111,52 @@ public class PromotionService : IPromotionService
                 }
                 else
                 {
-                    incoming.Add(byEmail.PhoneNumber);
+                    incoming.Add((token, byEmail.PhoneNumber));
                 }
                 continue;
             }
 
-            incoming.Add(token);
+            incoming.Add((token, token));
         }
 
-        // Normalize and dedupe phone numbers preserving order
+        // Normalize and dedupe by customer (normalized phone) preserving order. The same
+        // customer appearing under different spellings — or once as email and once as
+        // phone — is only sent to once; the later occurrences are reported as duplicates.
         var normalized = new List<string>();
         var invalidPhones = new List<SkippedRecord>();
-        var seen = new HashSet<string>();
-        foreach (var raw in incoming)
+        var seenPhones = new HashSet<string>();
+        foreach (var (token, phoneOrRaw) in incoming)
         {
-            var n = Customer.NormalizePhoneNumber(raw ?? string.Empty);
+            var n = Customer.NormalizePhoneNumber(phoneOrRaw);
             if (string.IsNullOrEmpty(n))
             {
-                invalidPhones.Add(new SkippedRecord(raw ?? string.Empty, "InvalidPhoneNumber"));
+                invalidPhones.Add(new SkippedRecord(token, "InvalidPhoneNumber"));
                 continue;
             }
-            if (seen.Add(n))
-                normalized.Add(n);
+            if (!seenPhones.Add(n))
+            {
+                duplicateSkips.Add(new SkippedRecord(token, "Duplicate"));
+                continue;
+            }
+            normalized.Add(n);
         }
 
+        var preSkips = invalidPhones.Concat(emailSkips).Concat(duplicateSkips).ToList();
         if (normalized.Count == 0)
-            return new PromotionResult(false, ErrorCode: "NoValidRecipients", ErrorMessage: "No valid recipients in list.", SkippedRecords: invalidPhones.Concat(emailSkips).ToList());
+            return new PromotionResult(false, ErrorCode: "NoValidRecipients", ErrorMessage: "No valid recipients in list.", SkippedRecords: preSkips);
 
-        // AC2 + AC5: Resolve customers and ensure each has a MemberAccount
-        var skipped = new List<SkippedRecord>(invalidPhones.Concat(emailSkips));
-        var eligibleMembers = new List<(string Phone, Guid MemberId, string? Email, string Name)>();
+        // AC2 + AC5: Classify recipients WITHOUT mutating anything yet. The stock pre-check must
+        // run before anything is written, so an insufficient-stock request leaves the database
+        // completely untouched (no silent side effects). Unknown phones are skipped here —
+        // a recipient only qualifies when the customer record already exists.
+        var skipped = new List<SkippedRecord>(preSkips);
+        var eligible = new List<(string Phone, Customer Customer)>();
         foreach (var phone in normalized)
         {
             var existing = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
             if (existing == null)
             {
-                // Email is unique per customer: only adopt the supplied email if nobody owns it yet
-                var suppliedEmail = Customer.NormalizeEmail(ResolveEmail(phone, phoneToEmail));
-                if (suppliedEmail != null && await _customerRepository.EmailExistsAsync(suppliedEmail, cancellationToken: cancellationToken))
-                    suppliedEmail = null;
-
-                var newCustomer = new Customer
-                {
-                    PhoneNumber = phone,
-                    FullName = phone,
-                    Status = CustomerStatus.Active,
-                    Email = suppliedEmail
-                };
-                await _customerRepository.AddAsync(newCustomer, cancellationToken);
-                await _customerRepository.SaveChangesAsync(cancellationToken);
-
-                // Auto-link: receiving this brand's promotion makes them this brand's customer.
-                await _brandCustomerRepository.EnsureAsync(brandId, newCustomer.Id, BrandCustomerSource.PromotionAuto, null, cancellationToken);
-
-                var newMember = await EnsureMemberAccountAsync(newCustomer, cancellationToken);
-                eligibleMembers.Add((phone, newMember.Id, newCustomer.Email, newCustomer.FullName));
+                skipped.Add(new SkippedRecord(phone, "CustomerNotFound"));
             }
             else if (existing.Status == CustomerStatus.Blacklisted)
             {
@@ -168,48 +168,79 @@ public class PromotionService : IPromotionService
             }
             else
             {
-                // Auto-link: receiving this brand's promotion makes them this brand's customer.
-                await _brandCustomerRepository.EnsureAsync(brandId, existing.Id, BrandCustomerSource.PromotionAuto, null, cancellationToken);
-
-                // Upsert email from integration payload if not already on file
-                var suppliedEmail = Customer.NormalizeEmail(ResolveEmail(phone, phoneToEmail));
-                if (!string.IsNullOrEmpty(suppliedEmail) && string.IsNullOrEmpty(existing.Email))
-                {
-                    // Email is unique per customer: only adopt it if no other customer owns it
-                    if (!await _customerRepository.EmailExistsAsync(suppliedEmail, excludeCustomerId: existing.Id, cancellationToken: cancellationToken))
-                    {
-                        existing.Email = suppliedEmail;
-                        _customerRepository.Update(existing);
-                        await _customerRepository.SaveChangesAsync(cancellationToken);
-                    }
-                }
-
-                var member = await EnsureMemberAccountAsync(existing, cancellationToken);
-                eligibleMembers.Add((phone, member.Id, existing.Email, existing.FullName));
+                eligible.Add((phone, existing));
             }
         }
 
-        if (eligibleMembers.Count == 0)
+        if (eligible.Count == 0)
         {
-            return new PromotionResult(false, ErrorCode: "NoEligibleCustomers", ErrorMessage: "All provided customers are blacklisted or invalid.", SkippedRecords: skipped);
+            return new PromotionResult(false, ErrorCode: "NoEligibleCustomers", ErrorMessage: "No valid existing customers in the recipient list.", SkippedRecords: skipped);
         }
 
-        // AC1 + AC4: Stock check (Pending and unassigned)
-        var available = (await _detailRepository.FindAsync(
-            d => d.ParentId == planId && d.MemberId == null && d.UsageStatus == UsageStatus.Pending,
-            cancellationToken)).OrderBy(d => d.SerialNo).ToList();
+        // AC1 + AC4: Stock pre-check (Pending and unassigned) — runs BEFORE any mutation.
+        var allDetails = (await _detailRepository.FindAsync(d => d.ParentId == planId, cancellationToken)).ToList();
+        var available = allDetails
+            .Where(d => d.MemberId == null && d.UsageStatus == UsageStatus.Pending)
+            .OrderBy(d => d.SerialNo)
+            .ToList();
+        var assignedBefore = allDetails.Count(d => d.MemberId != null);
+        var assignedUsed = allDetails.Count - available.Count;
 
-        if (available.Count < eligibleMembers.Count)
+        if (available.Count < eligible.Count)
         {
             return new PromotionResult(
                 false,
                 ErrorCode: "InsufficientStock",
-                ErrorMessage: $"Insufficient voucher stock. Required: {eligibleMembers.Count}, Available: {available.Count}.",
+                ErrorMessage: $"Nothing was distributed. Required {eligible.Count}, Available {available.Count} ({assignedUsed} already assigned/used). Generate more vouchers for this plan or reduce the recipient list.",
                 SkippedRecords: skipped);
+        }
+
+        // Stock is sufficient — now resolve member accounts for the verified existing recipients.
+        var eligibleMembers = new List<(string Phone, Guid MemberId, string? Email, string Name)>();
+        foreach (var (phone, customer) in eligible)
+        {
+            // Auto-link: receiving this brand's promotion makes them this brand's customer.
+            await _brandCustomerRepository.EnsureAsync(brandId, customer.Id, BrandCustomerSource.PromotionAuto, null, cancellationToken);
+
+            // Upsert email from integration payload if not already on file
+            var suppliedEmail = Customer.NormalizeEmail(ResolveEmail(phone, phoneToEmail));
+            if (!string.IsNullOrEmpty(suppliedEmail) && string.IsNullOrEmpty(customer.Email))
+            {
+                // Email is unique per customer: only adopt it if no other customer owns it
+                if (!await _customerRepository.EmailExistsAsync(suppliedEmail, excludeCustomerId: customer.Id, cancellationToken: cancellationToken))
+                {
+                    customer.Email = suppliedEmail;
+                    _customerRepository.Update(customer);
+                    await _customerRepository.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            var member = await EnsureMemberAccountAsync(customer, cancellationToken);
+            eligibleMembers.Add((phone, member.Id, customer.Email, customer.FullName));
         }
 
         // AC3: Allocate one voucher per member; AC4: all-or-nothing handled by single SaveChangesAsync
         var now = DateTime.UtcNow;
+
+        // Every batch promotion run is persisted as a traceable batch record; each distribution
+        // row links back to it. Id is assigned up-front so the detail rows can reference it
+        // within the same atomic SaveChanges (BaseEntity ids are otherwise set at save time).
+        var batch = new VoucherDistributionBatch
+        {
+            Id = Guid.NewGuid(),
+            PlanId = planId,
+            BrandId = brandId,
+            CreatedById = createdById,
+            NotifyChannel = notifyChannels,
+            RecipientCount = eligibleMembers.Count,
+            DistributedCount = eligibleMembers.Count,
+            SkippedCount = skipped.Count,
+            SkippedRecords = skipped
+                .Select(s => new BatchSkippedRecipient { PhoneNumber = s.PhoneNumber, Reason = s.Reason })
+                .ToList()
+        };
+        await _batchRepository.AddAsync(batch, cancellationToken);
+
         for (var i = 0; i < eligibleMembers.Count; i++)
         {
             var (_, memberId, _, _) = eligibleMembers[i];
@@ -233,13 +264,16 @@ public class PromotionService : IPromotionService
                 VoucherId = trackedDetail.Id,
                 MemberId = memberId,
                 Method = DistributionMethod.Promotion,
-                DistributionDate = now
+                DistributionDate = now,
+                BatchId = batch.Id
             };
             await _distributionRepository.AddAsync(distribution, cancellationToken);
         }
 
-        // AC6: Update plan distribution counter
-        plan.TargetDistributed += eligibleMembers.Count;
+        // AC6: Reconcile the plan's distributed counter to the real number of vouchers handed out
+        // (assigned detail rows) instead of blindly incrementing. This keeps target_distributed
+        // equal to the actual distribution count and self-heals any historical inflation.
+        plan.TargetDistributed = assignedBefore + eligibleMembers.Count;
         _planRepository.Update(plan);
 
         // Single atomic save (EF Core wraps in implicit transaction)
@@ -274,7 +308,8 @@ public class PromotionService : IPromotionService
             Success: true,
             DistributedCount: eligibleMembers.Count,
             SkippedCount: skipped.Count,
-            SkippedRecords: skipped);
+            SkippedRecords: skipped,
+            BatchId: batch.Id);
     }
 
     private async Task<MemberAccount> EnsureMemberAccountAsync(Customer customer, CancellationToken cancellationToken)

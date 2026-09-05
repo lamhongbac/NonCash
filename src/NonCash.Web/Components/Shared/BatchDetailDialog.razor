@@ -1,0 +1,187 @@
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@*
+    Read-only detail of one batch distribution run: summary (who/when/channel/counts),
+    the delivered recipients with each voucher's current lifecycle status, and the
+    skipped recipients with their reason. Opened from DistributionBatchHistory.
+*@
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Distribution Run Detail</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="ma-4" />
+        }
+        else if (_detail == null)
+        {
+            <MudAlert Severity="Severity.Warning">This distribution run could not be found.</MudAlert>
+        }
+        else
+        {
+            var s = _detail.Summary;
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3">
+                    <MudText Typo="Typo.body2"><b>Plan:</b> @s.PlanName</MudText>
+                    <MudText Typo="Typo.body2"><b>Run at:</b> @s.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</MudText>
+                    <MudText Typo="Typo.body2"><b>Executed by:</b> @(s.CreatedByName ?? "Integration API")</MudText>
+                    <MudText Typo="Typo.body2"><b>Channel:</b> @s.NotifyChannel</MudText>
+                    <MudText Typo="Typo.body2"><b>Recipients:</b> @s.RecipientCount</MudText>
+                    <MudText Typo="Typo.body2"><b>Distributed:</b> @s.DistributedCount</MudText>
+                    <MudText Typo="Typo.body2"><b>Skipped:</b> @s.SkippedCount</MudText>
+                </MudStack>
+            </MudPaper>
+
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Delivered vouchers (@_detail.Recipients.Count)</MudText>
+            @if (_detail.Recipients.Any())
+            {
+                <MudTable Items="_detail.Recipients" Dense="true" Hover="true" Elevation="0" Class="mb-4">
+                    <HeaderContent>
+                        <MudTh>Serial No</MudTh>
+                        <MudTh>Recipient</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Method</MudTh>
+                        <MudTh>Distributed At</MudTh>
+                        <MudTh>Used Date</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.SerialNo</MudTd>
+                        <MudTd>@RecipientLabel(context)</MudTd>
+                        <MudTd>
+                            <MudChip T="string" Color="@VoucherStatusDisplay.ChipColor(context.Status)" Size="Size.Small">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd>@context.Method</MudTd>
+                        <MudTd>@context.DistributedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                        <MudTd>@(context.UsedDate.HasValue ? context.UsedDate.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "-")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-4">No vouchers were delivered in this run.</MudAlert>
+            }
+
+            @if (_detail.SkippedRecords.Any())
+            {
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Skipped recipients (@_detail.SkippedRecords.Count)</MudText>
+                <MudTable Items="_detail.SkippedRecords" Dense="true" Hover="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Recipient</MudTh>
+                        <MudTh>Reason</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.PhoneNumber</MudTd>
+                        <MudTd>@context.Reason</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The batch run to display.</summary>
+    [Parameter] public Guid BatchId { get; set; }
+
+    private BatchDetailDto? _detail;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/distribution-batches/{BatchId}");
+            var token = await AuthState.GetTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _detail = await response.Content.ReadFromJsonAsync<BatchDetailDto>();
+            }
+            else
+            {
+                await MessageDialog.ShowAsync(DialogService, "Could not load run detail",
+                    $"Failed to load the distribution run: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "Could not load run detail",
+                ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string RecipientLabel(BatchRecipientItem row)
+    {
+        var name = string.IsNullOrWhiteSpace(row.RecipientName) ? null : row.RecipientName;
+        var phone = string.IsNullOrWhiteSpace(row.RecipientPhone) ? null : row.RecipientPhone;
+        return (name, phone) switch
+        {
+            (not null, not null) => $"{name} ({phone})",
+            (not null, null) => name!,
+            (null, not null) => phone!,
+            _ => "-",
+        };
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+
+    public class BatchDetailDto
+    {
+        public BatchSummaryDto Summary { get; set; } = new();
+        public List<SkippedItem> SkippedRecords { get; set; } = new();
+        public List<BatchRecipientItem> Recipients { get; set; } = new();
+    }
+
+    public class BatchSummaryDto
+    {
+        public Guid Id { get; set; }
+        public Guid PlanId { get; set; }
+        public string PlanName { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public string? CreatedByName { get; set; }
+        public string NotifyChannel { get; set; } = "";
+        public int RecipientCount { get; set; }
+        public int DistributedCount { get; set; }
+        public int SkippedCount { get; set; }
+    }
+
+    public class BatchRecipientItem
+    {
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string? RecipientPhone { get; set; }
+        public string? RecipientName { get; set; }
+        public string Status { get; set; } = "";
+        public string Method { get; set; } = "";
+        public DateTime DistributedAt { get; set; }
+        public DateTime? UsedDate { get; set; }
+    }
+
+    public class SkippedItem
+    {
+        public string PhoneNumber { get; set; } = "";
+        public string Reason { get; set; } = "";
+    }
+}

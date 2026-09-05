@@ -24,6 +24,19 @@ public interface ICreditService
     Task TryConsumeAsync(Guid brandId, Guid voucherDetailId, string? reference = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reusable funding check for a plan approval: can the brand fund <paramref name="requiredQuantity"/>
+    /// credits right now? Used by both the approve-form pre-check and the approve action (double-check).
+    /// </summary>
+    Task<CreditFundingResult> EvaluatePlanFundingAsync(Guid brandId, int requiredQuantity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Charges <paramref name="quantity"/> credits for a plan approval, FIFO across non-expired batches.
+    /// Idempotent per planId (one plan-level charge per plan). Returns false — with no partial charge —
+    /// when the balance is insufficient. Never throws.
+    /// </summary>
+    Task<bool> TryConsumeForPlanAsync(Guid brandId, Guid planId, int quantity, string? reference = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a Purchase batch after admin verified the bank money-in.
     /// Price and expiry are snapshotted from the brand's resolved policy.
     /// </summary>
@@ -73,3 +86,6 @@ public record CreditConsumptionResult(
     int TotalCount,
     int Page,
     int PageSize);
+
+/// <summary>Result of a plan-funding check: whether the brand can fund <see cref="Required"/> credits now.</summary>
+public record CreditFundingResult(bool Sufficient, int Balance, int Required);
