@@ -49,17 +49,19 @@
 - [src/NonCash.Core/Configuration/CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
 - [src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
 - [src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs](file://src/NonCash.Infrastructure/Migrations/20260814110418_AddEmailLog.cs)
+- [src/NonCash.Core/Services/PromotionService.cs](file://src/NonCash.Core/Services/PromotionService.cs)
+- [src/NonCash.Core/Services/VoucherTransferService.cs](file://src/NonCash.Core/Services/VoucherTransferService.cs)
+- [tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs](file://tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Enhanced business creation workflow with automatic email notifications to business contacts when new businesses are created and activated
-- Added robust error handling where notification failures don't block business creation process
-- Integrated comprehensive email logging system for complete audit trails of all outbound communications
-- Updated business management capabilities with dedicated Business entity and CRUD operations
-- Improved customer management with enhanced blacklist functionality and search capabilities
-- Updated notification service to integrate with email logging system for complete audit trails
-- Added new API endpoints for business management and improved customer operations
+- Enhanced customer management with strict recipient validation rules throughout distribution process
+- Eliminated automatic customer creation during distribution to ensure data integrity
+- Added comprehensive validation for phone numbers and email addresses before attempting distribution
+- Implemented specific error codes including CustomerNotFound and NoCustomerForEmail for better error handling
+- Updated distribution workflows to require pre-existing customers with proper validation
+- Enhanced batch distribution tracking with detailed skip records and audit trails
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -147,7 +149,7 @@ MAN --> BMM
 NonCash organizes business capabilities into microservices aligned with functional epics:
 - Planning Service: Campaign creation, budgeting, and targets
 - Approval Service: Routing and state management for plan reviews
-- Distribution Service: Sales, promotions, and inbox delivery
+- Distribution Service: Sales, promotions, and inbox delivery with strict recipient validation
 - Usage Service: POS redemption workflow (Lock → Commit/Rollback)
 - Identity & Tenant Service: RBAC for UserAccount, multi-tenancy for Brand and Outlet, and Customer profile management
 - Settlement Service: Cross-tenant settlement ledger and netting reports
@@ -185,6 +187,7 @@ INTEGRATION["Integration Service"] --> DAL
 EXPIRY["Credit Expiry Sweep Service"] --> DAL
 EMAIL["Email Notification Service"] --> DAL
 BUSINESS["Business Management Service"] --> DAL
+DISTRIBUTION["Distribution Service<br/>Strict Recipient Validation"] --> DAL
 ```
 
 **Diagram sources**
@@ -229,32 +232,51 @@ Generate --> End(["Ready for Distribution"])
 - [docs/data-models.md:11-43](file://docs/data-models.md#L11-L43)
 
 ### Multi-Channel Distribution Strategies
-NonCash supports multiple distribution channels:
+
+**Updated** Enhanced distribution strategies with strict recipient validation and elimination of automatic customer creation.
+
+NonCash supports multiple distribution channels with enhanced validation:
 - Self-purchase (Sale): Members buy vouchers directly; ownership assigned to MemberID; logged in VoucherDistribution
-- Batch promotion: Import phone numbers or MemberIDs; system creates and delivers vouchers to inboxes; logged as Promotion method
+- Batch promotion: Import phone numbers or MemberIDs; system validates recipients exist before distribution; logged as Promotion method
 - Gifting/transfer: Owners initiate transfers; recipients confirm; logged as Transfer method
+
+**Enhanced Recipient Validation Process:**
+- **Pre-validation**: All recipients must already exist as customers in the system
+- **Phone Number Validation**: Normalized phone numbers checked against existing customer records
+- **Email Address Validation**: Email tokens resolved to existing customers with valid phone numbers
+- **Duplicate Prevention**: Case-insensitive token deduplication prevents multiple distributions to same customer
+- **Blacklist Checking**: Blacklisted customers are automatically excluded from all distribution methods
+- **Brand Blocking**: Customers blocked by specific brands are prevented from receiving their promotions
 
 ```mermaid
 sequenceDiagram
 participant Brand as "Brand Manager"
 participant Dist as "Distribution Service"
-participant Mem as "Member App"
+participant Cust as "Customer Repository"
 participant DB as "PostgreSQL"
 Brand->>Dist : "Submit Distribution Request"
+Dist->>Cust : "Validate each recipient exists"
+alt Unknown Phone
+Cust-->>Dist : "CustomerNotFound"
+Dist->>DB : "Record skip in SkippedRecords"
+else Valid Customer
+Cust-->>Dist : "Customer found"
 Dist->>DB : "Create VoucherDistribution entries"
 DB-->>Dist : "Confirm"
-Dist-->>Brand : "Distribution Completed"
-Dist-->>Mem : "Vouchers Available in My Vouchers"
+end
+Dist-->>Brand : "Distribution Completed with Skip Records"
 ```
 
 **Diagram sources**
 - [_bmad-output/planning-artifacts/epics.md:199-257](file://_bmad-output/planning-artifacts/epics.md#L199-L257)
 - [docs/data-models.md:55-62](file://docs/data-models.md#L55-L62)
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
 
 **Section sources**
 - [Key Functionalities.txt:87-134](file://Key%20Functionalities.txt#L87-L134)
 - [_bmad-output/planning-artifacts/epics.md:199-257](file://_bmad-output/planning-artifacts/epics.md#L199-L257)
 - [docs/data-models.md:55-62](file://docs/data-models.md#L55-L62)
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
 
 ### POS Redemption Security and Transaction Lifecycle
 POS redemption enforces transaction integrity with lock/commit/rollback, now enhanced with settlement processing and Epic 10 batch-based credit consumption:
@@ -345,6 +367,7 @@ Pub --> Gen["Generate VoucherPlanDetail"]
 - Settlement ledger provides financial reconciliation between brands
 - **Enhanced credit ledger tracks batch-based credit consumption, adjustments, and expiry events**
 - **Email notification audit trail tracks all outbound communications with success/failure status**
+- **Distribution batch audit trail tracks recipient validation results and skip reasons**
 
 ```mermaid
 flowchart TD
@@ -353,11 +376,13 @@ UsageLogs["VoucherUsage Logs"] --> Audit["Audit Trail"]
 SettlementLogs["Settlement Entries"] --> Financial["Financial Reconciliation"]
 CreditLogs["Credit Batch & Consumption Logs"] --> Billing["Enhanced Billing Reports"]
 EmailLogs["Email Notification Logs"] --> EmailAudit["Email Audit Trail"]
+BatchLogs["Distribution Batch Logs"] --> BatchAudit["Recipient Validation Audit"]
 Dash --> Metrics["Volume vs Targets"]
 Audit --> Compliance["Compliance & Reconciliation"]
 Financial --> Netting["Netting Reports"]
 Billing --> Balance["Batch Balance Tracking"]
 EmailAudit --> Delivery["Delivery Success Rate"]
+BatchAudit --> Validation["Recipient Validation Success Rate"]
 ```
 
 **Diagram sources**
@@ -726,9 +751,9 @@ Business-brand relationships are automatically tracked:
 
 ## Enhanced Customer Management
 
-**Updated** Enhanced customer management system with improved blacklist functionality, search capabilities, and integration with email logging system.
+**Updated** Enhanced customer management system with strict recipient validation rules, improved blacklist functionality, search capabilities, and integration with email logging system.
 
-The customer management system provides comprehensive customer record management with advanced filtering, blacklist controls, and integration points for promotional campaigns.
+The customer management system provides comprehensive customer record management with advanced filtering, blacklist controls, and integration points for promotional campaigns. The system now enforces strict validation rules throughout the distribution process to ensure data integrity.
 
 ### Customer Entity Enhancements
 The Customer entity includes enhanced status management:
@@ -736,6 +761,44 @@ The Customer entity includes enhanced status management:
 - **Phone Number Normalization**: Automatic digit extraction for uniqueness
 - **Email Integration**: Support for email-based communications
 - **Search Optimization**: Indexed fields for efficient querying
+
+### Strict Recipient Validation Rules
+
+**Updated** Distribution processes now enforce strict recipient validation to eliminate automatic customer creation and ensure data integrity.
+
+The enhanced validation system ensures that all recipients must already exist as customers before any distribution attempts:
+
+#### Pre-Distribution Validation Process:
+- **Phone Number Validation**: Each phone number is normalized and checked against existing customer records
+- **Email Address Validation**: Email tokens are resolved to existing customers with valid phone numbers
+- **Duplicate Prevention**: Case-insensitive token deduplication prevents multiple distributions to the same customer
+- **Blacklist Checking**: Blacklisted customers are automatically excluded from all distribution methods
+- **Brand Blocking**: Customers blocked by specific brands are prevented from receiving their promotions
+
+#### Error Handling and Skip Records:
+- **CustomerNotFound**: Returned when phone number doesn't match any existing customer
+- **NoCustomerForEmail**: Returned when email doesn't resolve to an existing customer
+- **Blacklisted**: Returned when customer has blacklisted status
+- **BrandBlocked**: Returned when customer is blocked by the specific brand
+- **InvalidPhoneNumber**: Returned when phone number cannot be normalized
+- **Duplicate**: Returned when customer appears multiple times in recipient list
+
+```mermaid
+flowchart TD
+RecipientList["Recipient List Input"] --> Normalize["Normalize Phone Numbers"]
+Normalize --> ValidateExistence["Check Customer Existence"]
+ValidateExistence --> |Exists| CheckStatus["Check Status & Blocks"]
+ValidateExistence --> |Not Found| RecordSkip["Record CustomerNotFound Skip"]
+CheckStatus --> |Valid| AddEligible["Add to Eligible List"]
+CheckStatus --> |Invalid| RecordSkip
+RecordSkip --> NextRecipient["Process Next Recipient"]
+AddEligible --> NextRecipient
+NextRecipient --> Distribute["Distribute to Eligible Customers"]
+```
+
+**Diagram sources**
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
+- [tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs:227-303](file://tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs#L227-L303)
 
 ### Blacklist Management Features
 Advanced blacklist functionality with full audit trail:
@@ -773,6 +836,8 @@ Customer management integrates with the email logging system:
 **Section sources**
 - [src/NonCash.Core/Entities/Customer.cs:1-21](file://src/NonCash.Core/Entities/Customer.cs#L1-L21)
 - [src/NonCash.Core/Services/CustomerService.cs:61-96](file://src/NonCash.Core/Services/CustomerService.cs#L61-L96)
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
+- [tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs:227-303](file://tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs#L227-L303)
 
 ## Maker-Checker Adjustment Workflow
 
@@ -1069,6 +1134,7 @@ INTEGRATION["Integration Service"] --> DB
 EXPIRY["Credit Expiry Sweep"] --> DB
 EMAIL["Email Notification Service"] --> DB
 BUSINESS["Business Management Service"] --> DB
+DISTRIBUTION["Distribution Service<br/>Strict Validation"] --> DB
 ```
 
 **Diagram sources**
@@ -1095,6 +1161,8 @@ BUSINESS["Business Management Service"] --> DB
 - **Implement connection pooling for email SMTP connections to improve performance**
 - **Cache business-brand relationships to reduce database queries during brand lookups**
 - **Implement retry mechanisms with exponential backoff for email delivery failures**
+- **Optimize recipient validation queries with proper indexing on phone numbers and emails**
+- **Implement batch validation caching to reduce repeated customer lookups during distribution**
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -1119,14 +1187,21 @@ Common issues and resolutions:
 - **Business tax code conflicts**: Verify tax code uniqueness validation and duplicate prevention
 - **Customer search performance**: Check phone number normalization and index usage
 - **Email notification timeouts**: Verify SMTP configuration and network connectivity
+- **Distribution recipient validation failures**: Check CustomerNotFound and NoCustomerForEmail errors in skip records
+- **Unexpected customer creation**: Verify that distribution processes are not creating customers automatically
+- **Duplicate distribution issues**: Check case-insensitive token deduplication and normalized phone matching
+- **Blacklist bypass attempts**: Verify blacklist checks are performed before all distribution methods
+- **Brand blocking not working**: Check brand customer blocking configuration and validation logic
 
 **Section sources**
 - [Key Functionalities.txt:135-156](file://Key%20Functionalities.txt#L135-L156)
 - [docs/api-contracts.md:14-87](file://docs/api-contracts.md#L14-L87)
 - [docs/data-models.md:46-62](file://docs/data-models.md#L46-L62)
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
+- [tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs:227-303](file://tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs#L227-L303)
 
 ## Conclusion
-NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, loyalty app integrations, comprehensive email logging, and enhanced business management with automatic activation notifications, the system offers robust financial reconciliation and seamless third-party integrations. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution, POS redemption with strong transaction integrity, enhanced credit management, operational automation, and complete audit trails for compliance and troubleshooting.
+NonCash provides a secure, scalable SaaS platform for voucher production and redemption with significantly enhanced capabilities through the Epic 10 batch-based credit system. The major architectural shift introduces sophisticated credit management with batch lifecycle, pricing policies, maker-checker approval workflows, and automated expiry handling. Combined with cross-tenant settlement processing, payment processing integration, loyalty app integrations, comprehensive email logging, enhanced business management with automatic activation notifications, and strict recipient validation throughout distribution processes, the system offers robust financial reconciliation, seamless third-party integrations, and enhanced data integrity. Its 3-layer architecture, microservices design, and comprehensive API contracts enable reliable production planning, multi-channel distribution with strict validation, POS redemption with strong transaction integrity, enhanced credit management, operational automation, and complete audit trails for compliance and troubleshooting.
 
 ## Appendices
 
@@ -1177,6 +1252,18 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
   - Email sending gracefully handles missing SMTP configuration by logging warnings and skipping delivery
 - **Edge: Business contact email validation**
   - Email notifications are only sent when business contact email is properly configured
+- **Edge: Distribution recipient validation**
+  - All recipients must exist as customers before distribution; unknown recipients are skipped with CustomerNotFound error
+- **Edge: Email-based distribution validation**
+  - Email tokens are resolved to existing customers; NoCustomerForEmail error returned when email doesn't match any customer
+- **Edge: Duplicate recipient handling**
+  - Case-insensitive token deduplication prevents multiple distributions to same customer; duplicates reported as skip records
+- **Edge: All-invalid recipient lists**
+  - When all recipients are invalid, returns NoEligibleCustomers error with nothing persisted to database
+- **Edge: Brand blocking enforcement**
+  - Customers blocked by specific brands are prevented from receiving their promotions with BrandBlocked skip reason
+- **Edge: Phone number normalization**
+  - Phone numbers are normalized before validation to handle different formats and spellings consistently
 
 **Section sources**
 - [_bmad-output/planning-artifacts/epics.md:205-243](file://_bmad-output/planning-artifacts/epics.md#L205-L243)
@@ -1190,3 +1277,5 @@ NonCash provides a secure, scalable SaaS platform for voucher production and red
 - [src/NonCash.Infrastructure/Services/EmailNotificationService.cs:367-385](file://src/NonCash.Infrastructure/Services/EmailNotificationService.cs#L367-L385)
 - [src/NonCash.API/Controllers/BusinessesController.cs:52-96](file://src/NonCash.API/Controllers/BusinessesController.cs#L52-L96)
 - [src/NonCash.Core/Services/CustomerService.cs:61-78](file://src/NonCash.Core/Services/CustomerService.cs#L61-L78)
+- [src/NonCash.Core/Services/PromotionService.cs:74-178](file://src/NonCash.Core/Services/PromotionService.cs#L74-L178)
+- [tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs:227-303](file://tests/NonCash.IntegrationTests/Controllers/DistributionBatchTests.cs#L227-L303)

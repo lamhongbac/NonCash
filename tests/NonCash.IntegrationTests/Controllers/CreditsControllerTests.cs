@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -654,6 +655,87 @@ public class CreditsControllerTests : IDisposable
         (await _context.CreditConsumptions.CountAsync(c => c.PlanId == plan.Id)).Should().Be(1);
     }
 
+    [Fact]
+    public async Task Approve_ResponsePayload_SerializesApprovalStatusAsString()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 10, "welcome", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0, approvalStatus: ApprovalStatus.Pending);
+        plan.TargetQuantity = 2;
+        _context.SaveChanges();
+        var controller = new ApprovalsController(
+            CreateApprovalService(), new FakeCurrentUserService("BrandManager", _brandAId, _staffUserId));
+
+        var result = await controller.Approve(plan.Id, new ApproveRequest(null), CancellationToken.None);
+
+        // Regression: the Blazor approve flow deserializes approvalStatus as string —
+        // the API must not emit the raw enum number in the success payload.
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        using var doc = JsonDocument.Parse(
+            JsonSerializer.Serialize(ok.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var status = doc.RootElement.GetProperty("approvalStatus");
+        status.ValueKind.Should().Be(JsonValueKind.String);
+        status.GetString().Should().Be("Approved");
+    }
+
+    // ----- usage-history enrichment & reconciliation summary -----
+
+    [Fact]
+    public async Task GetConsumptions_EnrichesPlanApprovalRows_WithPlanNameAndTotalQuantity()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 100, "topup", null, null);
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0, approvalStatus: ApprovalStatus.Pending);
+        plan.DisplayName = "September Gift";
+        plan.TargetQuantity = 20;
+        _context.SaveChanges();
+        var approvalService = CreateApprovalService();
+        (await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null)).Success.Should().BeTrue();
+        var controller = CreateController("BrandManager", _brandAId);
+
+        var result = await controller.GetConsumptions(null, 1, 50, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = ok.Value.Should().BeOfType<CreditConsumptionListResponse>().Subject;
+        response.TotalCount.Should().Be(1);
+        // The real billed amount is the SUM of quantities (20), not the row count (1).
+        response.TotalQuantity.Should().Be(20);
+        var row = response.Consumptions.Should().ContainSingle().Subject;
+        row.PlanId.Should().Be(plan.Id);
+        row.PlanName.Should().Be("September Gift");
+        row.Quantity.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task GetSummary_ReturnsReconciliationTotals()
+    {
+        await _creditService.CreatePurchaseAsync(_brandAId, 100, "topup", null, null);
+        await _creditService.GrantWelcomeAsync(_brandAId, sendNotification: false); // +500
+        var plan = SeedPlan(_brandAId, VoucherType.Gift, voucherCount: 0, approvalStatus: ApprovalStatus.Pending);
+        plan.TargetQuantity = 20;
+        _context.SaveChanges();
+        var approvalService = CreateApprovalService();
+        (await approvalService.ApproveAsync(plan.Id, _staffUserId, _brandAId, "BrandManager", null)).Success.Should().BeTrue();
+        var controller = CreateController("BrandManager", _brandAId);
+
+        var result = await controller.GetSummary(null, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = ok.Value.Should().BeOfType<CreditSummaryResponse>().Subject;
+        response.BrandId.Should().Be(_brandAId);
+        response.TotalGranted.Should().Be(600);
+        response.TotalConsumed.Should().Be(20);
+        response.Balance.Should().Be(580);
+    }
+
+    [Fact]
+    public async Task GetSummary_BrandUser_RequestingOtherBrand_IsForbidden()
+    {
+        var controller = CreateController("BrandManager", _brandAId);
+
+        var result = await controller.GetSummary(_brandBId, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+    }
+
     // ----- Phase 2: generation is capped at Remaining and never touches TargetDistributed -----
 
     [Fact]
@@ -743,15 +825,17 @@ public class CreditsControllerTests : IDisposable
     {
         private readonly string _role;
         private readonly Guid? _brandId;
+        private readonly Guid? _userId;
 
-        public FakeCurrentUserService(string role, Guid? brandId)
+        public FakeCurrentUserService(string role, Guid? brandId, Guid? userId = null)
         {
             _role = role;
             _brandId = brandId;
+            _userId = userId;
         }
 
         public Guid? GetCurrentBrandId() => _brandId;
-        public string? GetCurrentUserId() => Guid.NewGuid().ToString();
+        public string? GetCurrentUserId() => (_userId ?? Guid.NewGuid()).ToString();
         public string? GetCurrentUserRole() => _role;
         public bool IsInRole(string role) => role == _role;
         public Guid? GetCurrentCustomerId() => null;

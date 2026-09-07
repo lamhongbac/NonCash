@@ -21,7 +21,8 @@ public record VoucherReceivedNotification(
     string? VoucherName,
     decimal FaceValue,
     DateTime ExpiryDate,
-    NotificationChannel Channels);
+    NotificationChannel Channels,
+    string? MagicLinkUrl = null);
 
 /// <summary>Payload sent to FinancialControllers when an adjustment awaits approval (Epic 10).</summary>
 public record AdjustmentPendingNotification(
@@ -131,7 +132,8 @@ public record VoucherTransferInitiatedNotification(
     string RecipientName,
     string SenderName,
     int VoucherCount,
-    DateTime TransferredAt);
+    DateTime TransferredAt,
+    string? MagicLinkUrl = null);
 
 /// <summary>Payload sent to a user who requested a password reset.</summary>
 public record PasswordResetNotification(

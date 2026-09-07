@@ -31,6 +31,8 @@ public interface IPosService
         string transactionId,
         decimal amountUsed,
         Guid outletId,
+        string? posNo = null,
+        string? operatorId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

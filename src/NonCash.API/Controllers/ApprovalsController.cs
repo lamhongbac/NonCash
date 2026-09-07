@@ -99,7 +99,7 @@ public class ApprovalsController : ControllerBase
             return Ok(new
             {
                 plan.Id,
-                plan.ApprovalStatus,
+                ApprovalStatus = plan.ApprovalStatus.ToString(),
                 plan.ApproverId,
                 plan.PublishDate,
                 result.GeneratedCount,

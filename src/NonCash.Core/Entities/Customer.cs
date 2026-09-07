@@ -26,4 +26,12 @@ public class Customer : BaseEntity
     {
         return string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
     }
+
+    /// <summary>
+    /// CR-2026-09-06-11 fill-empty-only: placeholder rows (created by transfer/gifting
+    /// before the recipient registers) carry the phone number as FullName. A brand
+    /// write may populate such placeholder/empty fields but must never overwrite a
+    /// real value — corrections go through the platform admin (CR-2026-09-07-14).
+    /// </summary>
+    public bool HasPlaceholderName() => string.IsNullOrWhiteSpace(FullName) || FullName == PhoneNumber;
 }

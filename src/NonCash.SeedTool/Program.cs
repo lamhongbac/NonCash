@@ -369,6 +369,7 @@ Console.WriteLine("\nDone! You can now test the transfer flow.");
 class StubJwtTokenService : IJwtTokenService
 {
     public string GenerateToken(UserAccount user) => "stub-token";
+    public string GenerateToken(UserAccount user, Guid outletId) => "stub-token";
     public string GenerateToken(MemberAccount member) => "stub-token";
     public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(8);
 }

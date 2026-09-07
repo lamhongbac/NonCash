@@ -89,12 +89,24 @@ Platform access for creating, reviewing, and approving plans.
 - `Status`: Enum (Active, Locked)
 
 #### `Customer` (End-User / App Member)
-The consumers who hold and use the distributed vouchers.
+The consumers who hold and use the distributed vouchers. **Global identity: one row per person** — `PhoneNumber` is unique platform-wide (1 person = 1 phone = 1 wallet); there is deliberately no `BrandID` on this table.
 - `CustomerID`: GUID (Primary Key)
 - `PhoneNumber`: String (Primary identifier for transfer/login)
 - `FullName`: String
 - `Email`: String
 - `Status`: Enum (Active, Blacklisted)
+
+#### `BrandCustomer` (Brand ↔ Customer Relationship)
+Tracks which brands hold a relationship with a customer — brand ownership is separate from the unique global identity above. One row per brand–customer pair, created at the first brand touchpoint (import, manual add, promotion, purchase, transfer, gifting, redemption).
+- `ID`: GUID (Primary Key)
+- `BrandID`: GUID (FK to Brand)
+- `CustomerID`: GUID (FK to Customer)
+- `Source`: Enum (Import, Manual, PromotionAuto, SelfPurchase, GiftingAuto, Transfer, Redemption) — how the link started; never upgraded on re-link
+- `IsBlocked`: Boolean (per-brand block) · `BlockedAt`: DateTime?
+- `MarketingOptOut`: Boolean
+- `CreatedBy`: GUID? (UserAccount; null for system auto-links)
+
+See [Customer Action Matrix](./customer-action-matrix.md) §1 for the full identity model and the customer creation flows (with brand / without brand).
 
 ### 4. Billing (Prepaid Credits)
 
@@ -110,3 +122,12 @@ Append-only ledger for the prepaid credit billing model (Epic 9). A Brand's bala
 - `CreatedAt`: DateTime
 
 Indexes: unique filtered index on `VoucherDetailID` (idempotent consumption), composite index on `(BrandID, CreatedAt)` for ledger queries.
+
+---
+
+## Registered Changes (CR Registry)
+
+| CR ID | Item | Status |
+|---|---|---|
+| CR-2026-09-07-16 | **Bearer/anonymous distribution channel for data-minimizing brands** — brands that rent the platform but refuse to share customer data. Three candidate options: **A** — export minted codes, brand self-sends (platform never sees recipient data); **B** — platform sends to (email, name) then purges per a contract-defined retention window; **C** — claim-link without account (bearer voucher; optional self-registration converts it into a wallet voucher, shifting the consent basis to the customer). Requires: `voucher_plan_details` allowing no member binding (bearer state), a login-free claim page (C), an email purge job (B/C), a contract addendum (retention commitment) + Import-screen notice. Documented trade-offs: no unified wallet, no P2P transfer/gifting, no identity-based blacklist, no cross-brand dedupe for bearer vouchers. | Registered — pending decision (owner evaluating trade-offs) |
+| CR-2026-09-07-17 | **Multi-instrument generalization** (voucher / gift card / prepaid / credit / coupon — NonCash as a digital-instrument engine). Classification via three independent axes: funding model (Promotional / Prepaid-cash / Postpaid-credit), redemption semantics (One-shot / Balance-decrement / Discount-rule), value backing (None / Cash / Credit). **Phase 0** (schema only, no behavior change): add `InstrumentType` (default `Voucher`) + `Subtype` + policy columns to the plan header. Later phases: gift card (builds on the SelfPurchase cash flow), prepaid (needs balance + an `instrument_transactions` ledger + topup API), credit instrument (after Epic 7 settlement; rename to avoid clashing with the internal billing "credits"), coupon (POS discount semantics). **3-layer code rule**: the redemption code stays an opaque credential forever (no embedded metadata); classification travels server-side via the verify/commit API response; a structured **reference number** (type prefix + serial + check digit, per-brand template) is designed at Phase 1 for balance instruments. Regulatory note: prepaid/credit may require licensing (e-money/lending territory) — contract terms must differ per instrument type. | Registered — pending decision |

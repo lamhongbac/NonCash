@@ -51,6 +51,8 @@ public interface IVoucherLockRepository
         DateTime expiryCutoff,
         Guid? sponsorBrandId = null,
         Guid? redeemBrandId = null,
+        string? posNo = null,
+        string? operatorId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

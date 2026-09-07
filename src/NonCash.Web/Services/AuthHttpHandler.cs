@@ -27,7 +27,21 @@ public class AuthHttpHandler : DelegatingHandler
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        var response = await base.SendAsync(request, cancellationToken);
+        HttpResponseMessage response;
+        try
+        {
+            response = await base.SendAsync(request, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            // API is unreachable — return 503 so calling pages can show a friendly error.
+            return new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Request timed out — return 504 Gateway Timeout.
+            return new HttpResponseMessage(System.Net.HttpStatusCode.GatewayTimeout);
+        }
 
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {

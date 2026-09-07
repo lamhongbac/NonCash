@@ -58,8 +58,18 @@ public interface ICreditService
     /// <summary>Returns a paginated batch list with optional filters (admin/brand history view).</summary>
     Task<CreditBatchResult> GetBatchesAsync(CreditBatchFilters filters, CancellationToken cancellationToken = default);
 
-    /// <summary>Returns a paginated consumption list for a brand.</summary>
+    /// <summary>
+    /// Returns a paginated consumption list for a brand, enriched with human-readable
+    /// names (plan display name / voucher serial) for the history view, plus the
+    /// all-time sum of consumed credits (not just the page).
+    /// </summary>
     Task<CreditConsumptionResult> GetConsumptionsAsync(Guid brandId, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// All-time ledger totals for a brand: credits granted (positive batches) and
+    /// credits consumed (sum over consumption rows). Powers the reconciliation strip.
+    /// </summary>
+    Task<CreditLedgerTotals> GetLedgerTotalsAsync(Guid brandId, CancellationToken cancellationToken = default);
 
     /// <summary>Returns batches with remaining credits expiring within the given window.</summary>
     Task<IReadOnlyList<CreditBatch>> GetExpiringBatchesAsync(Guid brandId, int withinDays, CancellationToken cancellationToken = default);
@@ -81,11 +91,21 @@ public record CreditBatchResult(
     int Page,
     int PageSize);
 
+/// <summary>One consumption ledger row enriched with display names for the history view.</summary>
+public record CreditConsumptionItem(
+    CreditConsumption Consumption,
+    string? PlanName,
+    string? VoucherSerialNo);
+
 public record CreditConsumptionResult(
-    IReadOnlyList<CreditConsumption> Consumptions,
+    IReadOnlyList<CreditConsumptionItem> Consumptions,
     int TotalCount,
+    int TotalQuantity,
     int Page,
     int PageSize);
+
+/// <summary>All-time ledger totals: granted (positive batches) vs consumed (charge rows).</summary>
+public record CreditLedgerTotals(int TotalGranted, int TotalConsumed);
 
 /// <summary>Result of a plan-funding check: whether the brand can fund <see cref="Required"/> credits now.</summary>
 public record CreditFundingResult(bool Sufficient, int Balance, int Required);

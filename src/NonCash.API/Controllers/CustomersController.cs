@@ -18,19 +18,22 @@ public class CustomersController : ControllerBase
     private readonly ICurrentUserService _currentUser;
     private readonly IDistributionBatchService _distributionBatchService;
     private readonly IVoucherCodeService _voucherCodeService;
+    private readonly IRepository<CustomerAuditLog> _auditLogRepository;
 
     public CustomersController(
         CustomerService customerService,
         ICustomerImportService importService,
         ICurrentUserService currentUser,
         IDistributionBatchService distributionBatchService,
-        IVoucherCodeService voucherCodeService)
+        IVoucherCodeService voucherCodeService,
+        IRepository<CustomerAuditLog> auditLogRepository)
     {
         _customerService = customerService ?? throw new ArgumentNullException(nameof(customerService));
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
         _distributionBatchService = distributionBatchService ?? throw new ArgumentNullException(nameof(distributionBatchService));
         _voucherCodeService = voucherCodeService ?? throw new ArgumentNullException(nameof(voucherCodeService));
+        _auditLogRepository = auditLogRepository ?? throw new ArgumentNullException(nameof(auditLogRepository));
     }
 
     /// <summary>
@@ -169,6 +172,11 @@ public class CustomersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 3-tier write model (CR-2026-09-06-11 / CR-2026-09-07-14): BrandManager edits are
+    /// fill-empty-only (never overwrite existing values); Admin edits are full and every
+    /// changed field is audit-logged. The branch lives in the service via the brand scope.
+    /// </summary>
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<CustomerResponse>> UpdateCustomer(Guid id, UpdateCustomerRequest request, CancellationToken cancellationToken)
     {
@@ -178,7 +186,7 @@ public class CustomersController : ControllerBase
             if (scopeError != null)
                 return scopeError;
 
-            var customer = await _customerService.UpdateAsync(id, request.FullName, request.Email, cancellationToken, brandScope);
+            var customer = await _customerService.UpdateAsync(id, request.FullName, request.Email, cancellationToken, brandScope, ParseCurrentUserId());
 
             BrandCustomer? mapping = null;
             if (brandScope.HasValue)
@@ -197,6 +205,10 @@ public class CustomersController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return Conflict(new { error = ex.Message });
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return AuditSchemaOutdated();
         }
     }
 
@@ -351,6 +363,9 @@ public class CustomersController : ControllerBase
             return Ok(new CustomerImportResponse(
                 result.Created,
                 result.Updated,
+                result.Unchanged,
+                result.Skipped.Count,
+                result.Skipped.Select(s => new CustomerImportSkipDto(s.Row, s.PhoneNumber, s.FullName, s.Email, s.Message)).ToList(),
                 result.Errors.Count,
                 result.Errors.Select(e => new CustomerImportErrorDto(e.Row, e.PhoneNumber, e.FullName, e.Email, e.Message)).ToList()
             ));
@@ -366,6 +381,29 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>
+    /// Admin-only audit trail (CR-2026-09-07-14): every platform-admin edit to this
+    /// customer's shared global record, newest first.
+    /// </summary>
+    [HttpGet("{id:guid}/audits")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<IReadOnlyList<CustomerAuditDto>>> GetCustomerAudits(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var entries = await _auditLogRepository.FindAsync(x => x.CustomerId == id, cancellationToken);
+            var audits = entries
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => new CustomerAuditDto(x.Id, x.CustomerId, x.ChangedByUserId, x.Field, x.OldValue, x.NewValue, x.CreatedAt))
+                .ToList();
+            return Ok(audits);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return AuditSchemaOutdated();
+        }
+    }
+
+    /// <summary>
     /// Clear 503 when the brand_customers table is missing (migration not applied)
     /// instead of an opaque 500.
     /// </summary>
@@ -373,6 +411,13 @@ public class CustomersController : ControllerBase
     {
         return StatusCode(StatusCodes.Status503ServiceUnavailable,
             new { error = "Database schema is out of date: the brand_customers migration has not been applied." });
+    }
+
+    /// <summary>Same clear 503 when the customer_audit_logs migration is missing.</summary>
+    private ActionResult AuditSchemaOutdated()
+    {
+        return StatusCode(StatusCodes.Status503ServiceUnavailable,
+            new { error = "Database schema is out of date: the customer_audit_logs migration has not been applied." });
     }
 
     private static CustomerResponse MapToResponse(Customer customer, BrandCustomer? mapping = null)

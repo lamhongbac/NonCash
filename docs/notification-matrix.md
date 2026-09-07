@@ -134,3 +134,11 @@ For notifications to be delivered, the relevant records must have email addresse
 - **`Customers.Email`** — used for member-facing notifications (voucher received, transfer received)
 
 If the email field is empty, the service logs `skipped: no email on file` and continues without error.
+
+## Registered Changes (CR Registry)
+
+| CR ID | Item | Status |
+|---|---|---|
+| CR-2026-09-06-12 | Reword the `VoucherReceived` template with calmer transactional copy — the current promotional phrasing ("You've received a voucher") is a spam-filter fingerprint risk (observed during the 2026-09-06 deliverability incident) | Registered — pending decision |
+| CR-2026-09-06-13 | Email sender-account recovery after the 2026-09-06 compromise: revoke the leaked Gmail app password → change the account password → check filters/forwarding → issue a new app password injected via env var (never committed) → rotate the other secrets sharing that file (DB, ZaloPay, VNPAY, MediaService) → set up SPF/DKIM/DMARC for the sender domain → 24–72h cool-down → retest to the two authorized addresses only. Owner: user (Google account); agent assists on config/env vars | Approved — pending implementation |
+| CR-2026-09-07-19 | **Member magic-link access (Strategy A — Always Magic Link):** all voucher notification emails (`VoucherReceived`, `VoucherTransferInitiated`) include a signed JWT magic link that auto-logs the customer into the member app regardless of password state. Password becomes optional convenience only. Requires: (1) magic link token generation in `EmailNotificationService` (JWT, 7-day TTL, scoped to MemberAccountId); (2) `GET /api/v1/auth/magic-link` endpoint to validate token → issue MemberAccount JWT; (3) update email templates with "View My Voucher" button linking to magic URL; (4) member app `/member/welcome?token=...` page; (5) optional "Set password" page for customers who want direct login. Rationale: customers auto-created via promotion/transfer have no password, yet the email says "log in to view" — magic link closes this gap for all distribution paths (promotion, transfer, future channels). Decision: 2026-09-07, owner-approved. | Approved — pending implementation |

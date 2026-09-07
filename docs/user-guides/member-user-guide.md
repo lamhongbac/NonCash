@@ -152,6 +152,11 @@ To use a voucher at a participating outlet:
 
 > **Note:** A voucher that is pending transfer (locked) cannot be redeemed until the transfer is resolved.
 
+**Code validity and safety:**
+
+- The displayed code is generated fresh each time you open the voucher and stays valid for **2 minutes**. If the cashier says the code has expired, close and re-open the voucher to show a new one.
+- Treat the code like cash — anyone holding a currently valid code can redeem it. Never share screenshots of your code.
+
 ### 4.4 Vouchers from a Loyalty App
 
 If a Brand you follow runs its own Loyalty App connected to NonCash, vouchers may be delivered to you through that app:

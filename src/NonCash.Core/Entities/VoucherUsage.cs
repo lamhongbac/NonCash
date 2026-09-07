@@ -12,6 +12,12 @@ public class VoucherUsage : BaseEntity
     public Guid? SponsorBrandId { get; set; }
     public Guid? RedeemBrandId { get; set; }
 
+    // CR-2026-09-07-18 (C): optional operator attribution for POS clients (same trust level as cashier IDs).
+    /// <summary>Client-reported POS terminal identifier. Optional — real POS integrations may omit it.</summary>
+    public string? PosNo { get; set; }
+    /// <summary>Client-reported cashier/operator identifier. Optional.</summary>
+    public string? OperatorId { get; set; }
+
     // Navigation
     public VoucherPlanDetail? Voucher { get; set; }
     public Brand? SponsorBrand { get; set; }

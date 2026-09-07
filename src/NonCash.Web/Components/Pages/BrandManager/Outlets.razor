@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NonCash.Web.Services.ClientAuthService AuthState
+@inject IJSRuntime JS
 
 <PageTitle>Outlet Management</PageTitle>
 
@@ -37,27 +38,27 @@ else if (_outlets is not null)
     <MudTable Items="_outlets" Hover="true" Breakpoint="Breakpoint.Sm">
         <HeaderContent>
             <MudTh>Name</MudTh>
+            <MudTh>Code</MudTh>
             <MudTh>Address</MudTh>
             <MudTh>Status</MudTh>
-            <MudTh>API Key Prefix</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Address">@context.Address</MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status</MudChip>
-            </MudTd>
-            <MudTd DataLabel="API Key Prefix">
-                @if (!string.IsNullOrEmpty(context.ApiKeyPrefix))
+            <MudTd DataLabel="Code">
+                @if (!string.IsNullOrEmpty(context.Code))
                 {
-                    <MudText Typo="Typo.caption" Style="font-family: monospace;">@context.ApiKeyPrefix</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Info">@context.Code</MudChip>
                 }
                 else
                 {
                     <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
                 }
+            </MudTd>
+            <MudTd DataLabel="Address">@context.Address</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status</MudChip>
             </MudTd>
             <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd>
@@ -89,8 +90,19 @@ else if (_outlets is not null)
     </TitleContent>
     <DialogContent>
         <MudForm @ref="_form" Model="_model">
+            @if (_isEdit)
+            {
+                <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudTextField @bind-Value="_model.ApiKeyPrefix" Label="API Key" ReadOnly="true"
+                                  Variant="Variant.Outlined" Style="font-family: monospace;" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.ContentCopy"
+                               OnClick="CopySetupKey">Copy Setup Key</MudButton>
+                </MudStack>
+            }
             <MudTextField @bind-Value="_model.Name" Label="Name" Required="true" RequiredError="Name is required" />
             <MudTextField @bind-Value="_model.Address" Label="Address" />
+            <MudTextField @bind-Value="_model.Code" Label="Store Code" HelperText="Short code for POS login (e.g. S01). Must be unique within your brand." MaxLength="20" />
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -174,7 +186,9 @@ else if (_outlets is not null)
         {
             Id = outlet.Id,
             Name = outlet.Name,
-            Address = outlet.Address
+            Address = outlet.Address,
+            Code = outlet.Code,
+            ApiKeyPrefix = outlet.ApiKeyPrefix
         };
         _showDialog = true;
     }
@@ -191,7 +205,7 @@ else if (_outlets is not null)
         {
             if (_isEdit)
             {
-                var request = new { _model.Name, _model.Address };
+                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code };
                 var token = await AuthState.GetTokenAsync();
                 var httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/outlets/{_model.Id}") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
@@ -210,7 +224,7 @@ else if (_outlets is not null)
             }
             else
             {
-                var request = new { _model.Name, _model.Address };
+                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code };
                 var token = await AuthState.GetTokenAsync();
                 var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/outlets") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
@@ -288,12 +302,29 @@ else if (_outlets is not null)
 
     private static bool IsClosed(string status) => status == "Closed";
 
+    private async Task CopySetupKey()
+    {
+        var code = string.IsNullOrWhiteSpace(_model.Code) ? "(not set)" : _model.Code;
+        var apiKey = string.IsNullOrWhiteSpace(_model.ApiKeyPrefix) ? "(not set)" : _model.ApiKeyPrefix;
+        var block = $"Outlet ID: {_model.Id}\nStore Code: {code}\nAPI Key: {apiKey}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", block);
+            Snackbar.Add("Setup key copied to clipboard", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Copy failed: {ex.Message}", Severity.Warning);
+        }
+    }
+
     public class OutletDto
     {
         public Guid Id { get; set; }
         public Guid BrandId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Address { get; set; }
+        public string? Code { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? ApiKeyPrefix { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -313,5 +344,7 @@ else if (_outlets is not null)
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Address { get; set; }
+        public string? Code { get; set; }
+        public string? ApiKeyPrefix { get; set; }
     }
 }

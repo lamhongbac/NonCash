@@ -21,7 +21,7 @@ public class PublicRegistrationControllerTests
         var userAccountRepository = new FakeUserAccountRepository();
         _requestRepository = new FakeBusinessRegistrationRequestRepository();
         var notificationService = new ConsoleNotificationService();
-        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService, new FakeCustomerRepository());
+        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService, new FakeCustomerRepository(), new FakeOutletRepository(), new FakeUserOutletRepository());
 
         _registrationService = new RegistrationService(
             new FakeBusinessRepository(),
@@ -206,8 +206,10 @@ public class PublicRegistrationControllerTests
             memberRepository,
             new FakeJwtTokenService(),
             new ConsoleNotificationService(),
-            customerRepository);
-        var customerService = new CustomerService(customerRepository, new FakeBrandCustomerRepository());
+            customerRepository,
+            new FakeOutletRepository(),
+            new FakeUserOutletRepository());
+        var customerService = new CustomerService(customerRepository, new FakeBrandCustomerRepository(), new FakeCustomerAuditLogRepository());
         var controller = new MemberRegistrationController(customerService, customerRepository, memberRepository, authService);
 
         var request = new MemberRegisterRequest("bannedmember", "Password@123", "Banned Customer", phone, "banned@example.com");
@@ -316,6 +318,7 @@ public class PublicRegistrationControllerTests
     private class FakeJwtTokenService : IJwtTokenService
     {
         public string GenerateToken(UserAccount user) => "fake-token";
+        public string GenerateToken(UserAccount user, Guid outletId) => "fake-staff-token";
         public string GenerateToken(MemberAccount member) => "fake-member-token";
         public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(1);
     }
@@ -380,5 +383,48 @@ public class PublicRegistrationControllerTests
         public Task<IReadOnlyList<BrandCustomer>> GetForBrandAsync(Guid brandId, IEnumerable<Guid> customerIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<BrandCustomer>>(new List<BrandCustomer>());
         public Task<bool> IsBlockedAsync(Guid brandId, Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task SetBlockedAsync(Guid brandId, Guid customerId, bool blocked, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    // Self-registration never audits (no admin edits); inert ctor stub for CR-14.
+    private class FakeCustomerAuditLogRepository : IRepository<CustomerAuditLog>
+    {
+        public Task<CustomerAuditLog?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<CustomerAuditLog?>(null);
+        public Task<IEnumerable<CustomerAuditLog>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<CustomerAuditLog>>(new List<CustomerAuditLog>());
+        public Task<IEnumerable<CustomerAuditLog>> FindAsync(Expression<Func<CustomerAuditLog, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<CustomerAuditLog>>(new List<CustomerAuditLog>());
+        public Task<int> CountAsync(Expression<Func<CustomerAuditLog, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<CustomerAuditLog> AddAsync(CustomerAuditLog entity, CancellationToken cancellationToken = default) => Task.FromResult(entity);
+        public void Update(CustomerAuditLog entity) { }
+        public void Delete(CustomerAuditLog entity) { }
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private class FakeOutletRepository : IOutletRepository
+    {
+        public Task<Outlet?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<Outlet?>(null);
+        public Task<IEnumerable<Outlet>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Outlet>>(new List<Outlet>());
+        public Task<IEnumerable<Outlet>> FindAsync(Expression<Func<Outlet, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Outlet>>(new List<Outlet>());
+        public Task<int> CountAsync(Expression<Func<Outlet, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<Outlet> AddAsync(Outlet entity, CancellationToken cancellationToken = default) => Task.FromResult(entity);
+        public void Update(Outlet entity) { }
+        public void Delete(Outlet entity) { }
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IEnumerable<Outlet>> ListByBrandAsync(Guid brandId, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Outlet>>(new List<Outlet>());
+        public Task<int> CountByBrandAsync(Guid brandId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<Outlet?> GetByCodeAsync(Guid brandId, string code, CancellationToken cancellationToken = default) => Task.FromResult<Outlet?>(null);
+    }
+
+    private class FakeUserOutletRepository : IUserOutletRepository
+    {
+        public Task<UserOutlet?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<UserOutlet?>(null);
+        public Task<IEnumerable<UserOutlet>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<UserOutlet>>(new List<UserOutlet>());
+        public Task<IEnumerable<UserOutlet>> FindAsync(Expression<Func<UserOutlet, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<UserOutlet>>(new List<UserOutlet>());
+        public Task<int> CountAsync(Expression<Func<UserOutlet, bool>> predicate, CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<UserOutlet> AddAsync(UserOutlet entity, CancellationToken cancellationToken = default) => Task.FromResult(entity);
+        public void Update(UserOutlet entity) { }
+        public void Delete(UserOutlet entity) { }
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IEnumerable<Outlet>> GetOutletsForUserAsync(Guid userId, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<Outlet>>(new List<Outlet>());
+        public Task<IEnumerable<UserAccount>> GetUsersForOutletAsync(Guid outletId, CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<UserAccount>>(new List<UserAccount>());
+        public Task ReplaceAssignmentsAsync(Guid userId, Guid brandId, IEnumerable<Guid> outletIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

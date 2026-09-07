@@ -14,7 +14,7 @@ public class OutletService
         _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
     }
 
-    public async Task<Outlet> CreateAsync(string name, string? address, CancellationToken cancellationToken = default)
+    public async Task<Outlet> CreateAsync(string name, string? address, string? code = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Outlet name is required.", nameof(name));
@@ -27,6 +27,7 @@ public class OutletService
             BrandId = brandId,
             Name = name.Trim(),
             Address = address?.Trim(),
+            Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim(),
             Status = OutletStatus.Active,
             ApiKeyPrefix = GenerateApiKeyPrefix()
         };
@@ -82,7 +83,7 @@ public class OutletService
         return outlet;
     }
 
-    public async Task<Outlet> UpdateAsync(Guid id, string name, string? address, CancellationToken cancellationToken = default)
+    public async Task<Outlet> UpdateAsync(Guid id, string name, string? address, string? code = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Outlet name is required.", nameof(name));
@@ -96,6 +97,7 @@ public class OutletService
 
         outlet.Name = name.Trim();
         outlet.Address = address?.Trim();
+        outlet.Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
 
         await _outletRepository.SaveChangesAsync(cancellationToken);
         return outlet;

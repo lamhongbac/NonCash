@@ -1,6 +1,6 @@
 # Customer Action Matrix
 
-**Status: IMPLEMENTED (2026-09-03) — enforcement status in §6**
+**Status: IMPLEMENTED (2026-09-03) — enforcement status in §7**
 **Created: 2026-09-03 · Owner: Platform / Business · Related: customer data model redesign (Option A)**
 
 This document defines **which actions are allowed or denied** for a customer in each
@@ -10,7 +10,42 @@ that touches customer behavior.
 
 ---
 
-## 1. Core principle — prospective-only enforcement ("grandfathering")
+## 1. Identity model — unique customer, separate brand ownership
+
+> **A customer exists exactly once (in `customers`). Which brands "own" a
+> relationship with that customer is tracked separately (in `brand_customers`).**
+
+| Table | Role | Key facts |
+|---|---|---|
+| `customers` | **Global platform identity** | One row per person — `PhoneNumber` is unique platform-wide (1 person = 1 phone = 1 wallet). Pure identity data; no brand reference. |
+| `brand_customers` | **Brand ↔ customer relationship** | One row per (BrandId, CustomerId) pair. Carries `Source` (how the link started — never upgraded on re-link), `IsBlocked` (S1), `MarketingOptOut`, `CreatedBy`. |
+
+### 1.1 Customer creation flows — with brand vs without brand
+
+**Without brand** (platform asset, no mapping):
+
+| Path | Entry point | Result |
+|---|---|---|
+| Admin creates a customer | `POST /api/v1/customers` as Admin (API-only — no Admin UI) | `customers` row only |
+| Member self-registration | `POST /api/v1/members/register` (public) | `customers` + `member_accounts` rows, **no mapping** — the first brand touch creates the first mapping (D2) |
+
+**With brand** (mapping written at the touchpoint):
+
+| Path | `Source` | Notes |
+|---|---|---|
+| BrandManager Add (Customers page) | `Manual` | Link-or-create: an already-known phone is linked to the brand, not duplicated |
+| BrandManager CSV import | `Import` | Same link-or-create upsert rule |
+| Batch promotion distribution | `PromotionAuto` | Existing customers only — recipients must pre-exist |
+| Store self-purchase (Gift plan) | `SelfPurchase` | |
+| B2B gifting / P2P transfer | `GiftingAuto` / `Transfer` | Unknown recipient phone → placeholder `customers` row first (enriched with real profile data at self-registration) |
+| POS redemption | `Redemption` | |
+
+Rule of thumb: **staff-side paths always map; member-side onboarding never maps** — the
+mapping appears when the customer first touches a brand (D2).
+
+---
+
+## 2. Core principle — prospective-only enforcement ("grandfathering")
 
 > **A paid asset stays valid as it is. A block only prevents actions from the moment
 > the block occurs.**
@@ -28,7 +63,7 @@ This principle is the direct consequence of design decision D3 (2026-09-03).
 
 ---
 
-## 2. Customer states
+## 3. Customer states
 
 | State | Field (target) | Set by | Meaning |
 |---|---|---|---|
@@ -41,7 +76,7 @@ S2 is exclusive and overrides everything.
 
 ---
 
-## 3. The matrix — customer-initiated actions (member side)
+## 4. The matrix — customer-initiated actions (member side)
 
 Target state. "Brand B" = the brand that applied the block in S1.
 
@@ -75,7 +110,7 @@ check blocks everything; this refines with the mapping.)
 
 ---
 
-## 4. The matrix — staff-initiated actions (management side)
+## 5. The matrix — staff-initiated actions (management side)
 
 | # | Action | BrandManager | Admin | Notes |
 |---|---|---|---|---|
@@ -94,7 +129,7 @@ respecting per-brand `MarketingOptOut`); brands never browse each other's subset
 
 ---
 
-## 5. Mapping creation events (what writes `brand_customers`)
+## 6. Mapping creation events (what writes `brand_customers`)
 
 | Event | Source value | Trigger point |
 |---|---|---|
@@ -110,7 +145,7 @@ respecting per-brand `MarketingOptOut`); brands never browse each other's subset
 
 ---
 
-## 6. Enforcement status (implemented 2026-09-03)
+## 7. Enforcement status (implemented 2026-09-03)
 
 All touchpoints below now enforce the matrix. The per-brand block and the
 `brand_customers` mapping are implemented (`BrandCustomer` entity, repository,
@@ -133,8 +168,8 @@ mirror the blacklist into `MemberAccount.Status` — un-blacklisting restores lo
 instantly (P4). Service-level checks (rows 1–5) remain as defense-in-depth because
 integration partners call APIs without member login.
 
-Auto-link hooks per §5 are active on all events (promotion, self-purchase, P2P
-transfer, gifting accept, POS redemption). Staff-side scoping (§4) is enforced in
+Auto-link hooks per §6 are active on all events (promotion, self-purchase, P2P
+transfer, gifting accept, POS redemption). Staff-side scoping (§5) is enforced in
 `CustomersController` + `CustomerService` (BrandManager sees/edits mapped customers
 only; blacklist/unblacklist are Admin-only; block/unblock are per-brand).
 
@@ -143,7 +178,7 @@ only; blacklist/unblacklist are Admin-only; block/unblock are per-brand).
 
 ---
 
-## 7. Decisions (resolved 2026-09-03)
+## 8. Decisions (resolved 2026-09-03)
 
 | # | Question | Decision | Rationale |
 |---|---|---|---|
@@ -154,12 +189,26 @@ only; blacklist/unblacklist are Admin-only; block/unblock are per-brand).
 
 ---
 
-## 8. Changelog
+## 9. Registered Changes (CR Registry)
+
+| CR ID | Item | Status |
+|---|---|---|
+| CR-2026-09-06-10 | Fix import lost-update: `UpsertAsync` updates an existing customer's name/email without calling `Update()`, so those changes are silently never persisted against the production DB (masked in tests by InMemory change tracking). Direction set by CR-2026-09-06-11: persist **fills into empty fields only**, never overwrite existing values; the import result must report skipped-overwrite rows | **Verified 2026-09-07** |
+| CR-2026-09-06-11 | **3-tier write model for the global customer record** (decided 2026-09-07): (1) Customer (member app) owns their own data; (2) Brand writes (Add-link, Import, Edit) are **fill-empty-only** — may populate empty/placeholder fields (placeholder rows from transfer/gifting: FullName = phone, no email) but must never overwrite existing values; (3) Platform Admin has full edit — see CR-2026-09-07-14. Phone number is the natural key and is not editable under this model | **Verified 2026-09-07** |
+| CR-2026-09-07-14 | **Admin customer edit**: split `PUT /api/v1/customers/{id}` (currently BrandManager+Admin) so BrandManager edits follow fill-empty-only while Admin gets full edit; build the missing Admin → Customers UI (list/detail/edit); add an audit trail for admin edits (who/when/old→new) since email is the voucher delivery channel; phone number not editable. Optional phase 2: notify the customer when an admin changes their email | **Verified 2026-09-07** |
+| CR-2026-09-07-15 | **Contract clause: 3-layer customer-data ownership** — add to the business contract template: (1) identity record = customer-owned, platform custodian, brand contributor (fill-empty-only, no overwrite rights); (2) relationship data (`brand_customers` mapping, original import lists, per-brand transaction history) = brand-exclusive asset, platform guarantees no cross-brand sharing; (3) platform data (fraud signals, global blacklist, billing) = platform-owned. Plus import warranty (brand warrants lawful basis/consent for uploaded contacts), curation clause (admin edit with audit), exit clause (brand may export relationship data on offboarding; identity record stays). Also: one-line notice on the Import screen ("imported customers join the shared platform identity; your brand keeps exclusive rights to its list and activity data") and a §1 identity-model update in this doc | Approved — pending implementation |
+
+## 10. Changelog
 
 | Date | Change |
 |---|---|
-| 2026-09-03 | Implemented (Option A): `BrandCustomer` mapping (entity, repository, migration + D1 backfill); S1 per-brand block enforced at promotion, store purchase (own-brand plans), and gifting recipient; S2 enforced at member login (O2), self-registration, and transfer sender; auto-link hooks on all §5 events; brand-scoped staff visibility (§4); `AllowAnonymous` removed from customer GET endpoints; §6 gaps closed. |
-| 2026-09-03 | O1 decided: S2 does **not** block POS redemption of held vouchers (continuing action, code-based, no login). O2 decided: S2 **blocks login** — stop-until-clarified state; pending-transfer expiry accepted. P2 rule refined (new vs continuing actions); §3/§6 updated. |
+| 2026-09-07 | **CR-10 + CR-11 + CR-14 Verified** by user test — Sóng 1 (customer fill-empty-only + admin audit trail) confirmed working. Completion gate cleared. |
+| 2026-09-07 | Add-customer link-or-create fix (`CustomerService.CreateAsync`) **Verified 2026-09-06** via user test — BrandManager Add on a globally-existing phone now links the customer into the brand; a repeat Add returns 409 already-linked. Completion gate cleared. |
+| 2026-09-07 | §9: CR-2026-09-06-11 decided as the **3-tier write model** (customer self-service / brand fill-empty-only / admin full edit) and approved together with CR-2026-09-07-14 (admin customer edit + UI + audit) and CR-2026-09-07-15 (contract ownership clause); CR-2026-09-06-10 direction set (persist fills only, report skipped overwrites). |
+| 2026-09-06 | §9 added (CR registry): CR-2026-09-06-10 (import lost-update) and CR-2026-09-06-11 (fill-empty-only rule) registered — both surfaced during the Add-customer link-or-create fix session. |
+| 2026-09-06 | §1 added: identity model — unique global customer (`customers`) with brand ownership tracked separately (`brand_customers`); the two customer-creation flows (with brand / without brand) consolidated; later sections renumbered. |
+| 2026-09-03 | Implemented (Option A): `BrandCustomer` mapping (entity, repository, migration + D1 backfill); S1 per-brand block enforced at promotion, store purchase (own-brand plans), and gifting recipient; S2 enforced at member login (O2), self-registration, and transfer sender; auto-link hooks on all §6 events; brand-scoped staff visibility (§5); `AllowAnonymous` removed from customer GET endpoints; §7 gaps closed. |
+| 2026-09-03 | O1 decided: S2 does **not** block POS redemption of held vouchers (continuing action, code-based, no login). O2 decided: S2 **blocks login** — stop-until-clarified state; pending-transfer expiry accepted. P2 rule refined (new vs continuing actions); §4/§7 updated. |
 | 2026-09-03 | Created. Principles P1–P4 (from D3 decision); matrices for member-side and staff-side actions; mapping events; 8 verified enforcement gaps; O1/O2 open. |
 
 ---

@@ -1,3 +1,5 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using NonCash.API.HostedServices;
 using NonCash.API.Middleware;
@@ -14,6 +16,18 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// CORS: allow the NonCash.Pos PWA app (https://localhost:7200) to call the API.
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("https://localhost:7200", "http://localhost:5201")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "NonCash API", Version = "v1" });
@@ -69,6 +83,7 @@ builder.Services.AddScoped<BrandService>();
 builder.Services.AddScoped<OutletService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<StoreStaffService>();
 builder.Services.AddScoped<IVoucherPlanService, VoucherPlanService>();
 builder.Services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 builder.Services.AddScoped<IVoucherGenerationService, VoucherGenerationService>();
@@ -91,8 +106,7 @@ builder.Services.AddScoped<IPosService, PosService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IDistributionReportService, DistributionReportService>();
 builder.Services.AddScoped<IDistributionBatchService, DistributionBatchService>();
-builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
-
+builder.Services.AddScoped<IUserOutletRepository, UserOutletRepository>();
 // Settlement (Epic 7.2)
 builder.Services.AddScoped<ISettlementService, SettlementService>();
 
@@ -202,6 +216,24 @@ builder.Services.AddHostedService<CreditExpirySweepService>();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>("postgresql");
 
+// Rate limiter (CR-2026-09-07-18): protect staff-login from credential stuffing. 5 requests
+// per minute per client IP; other endpoints are unaffected. CR-04 will broaden this.
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("staff-login", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync("{\"error\":\"Too many login attempts. Please try again later.\"}", token);
+    };
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -212,6 +244,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors();
+app.UseRateLimiter();
 app.UseStaticFiles(); // Serve uploaded images from wwwroot/uploads/
 app.UseAuthentication();
 app.UseMiddleware<BrandScopeMiddleware>();

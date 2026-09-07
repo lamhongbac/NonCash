@@ -415,9 +415,30 @@ public class CreditServiceTests
         var pageOne = await _sut.GetConsumptionsAsync(_brandId, page: 1, pageSize: 2);
 
         all.TotalCount.Should().Be(3);
-        all.Consumptions.Should().OnlyContain(c => c.BrandId == _brandId);
+        all.Consumptions.Should().OnlyContain(c => c.Consumption.BrandId == _brandId);
+        // TotalQuantity is the all-time credit sum (3 per-voucher rows x Quantity 1), not the row count alone.
+        all.TotalQuantity.Should().Be(3);
         pageOne.Consumptions.Should().HaveCount(2);
         pageOne.TotalCount.Should().Be(3);
+        pageOne.TotalQuantity.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetLedgerTotalsAsync_SumsGrantedAndConsumed_PerBrand()
+    {
+        var otherBrandId = Guid.NewGuid();
+        SeedBatch(_brandId, 100, DateTime.UtcNow, type: CreditBatchType.Purchase);
+        SeedBatch(_brandId, 500, DateTime.UtcNow, type: CreditBatchType.WelcomeGrant);
+        SeedBatch(_brandId, -30, DateTime.UtcNow, type: CreditBatchType.Clawback); // negative: not "granted"
+        SeedBatch(otherBrandId, 999, DateTime.UtcNow);
+        await _sut.TryConsumeForPlanAsync(_brandId, Guid.NewGuid(), 20, "plan A");
+        await _sut.TryConsumeForPlanAsync(_brandId, Guid.NewGuid(), 5, "plan B");
+        await _sut.TryConsumeForPlanAsync(otherBrandId, Guid.NewGuid(), 7, "other brand");
+
+        var totals = await _sut.GetLedgerTotalsAsync(_brandId);
+
+        totals.TotalGranted.Should().Be(600);
+        totals.TotalConsumed.Should().Be(25);
     }
 
     [Fact]

@@ -75,7 +75,8 @@ public class CreditsController : ControllerBase
     }
 
     /// <summary>
-    /// Returns a paginated per-voucher consumption history — same scoping as balance.
+    /// Returns a paginated consumption history enriched with plan names / voucher serials — same scoping as balance.
+    /// TotalQuantity is the all-time sum of charged credits (a plan-approval row carries Quantity=N).
     /// </summary>
     [HttpGet("consumptions")]
     public async Task<ActionResult<CreditConsumptionListResponse>> GetConsumptions(
@@ -91,9 +92,35 @@ public class CreditsController : ControllerBase
         var result = await _creditService.GetConsumptionsAsync(scopedBrandId.Value, page, pageSize, cancellationToken);
 
         var consumptions = result.Consumptions.Select(c => new CreditConsumptionDto(
-            c.Id, c.BatchId, c.VoucherDetailId, c.PlanId, c.Quantity, c.Reference, c.CreatedAt)).ToList();
+            c.Consumption.Id,
+            c.Consumption.BatchId,
+            c.Consumption.VoucherDetailId,
+            c.Consumption.PlanId,
+            c.PlanName,
+            c.VoucherSerialNo,
+            c.Consumption.Quantity,
+            c.Consumption.Reference,
+            c.Consumption.CreatedAt)).ToList();
 
-        return Ok(new CreditConsumptionListResponse(consumptions, result.TotalCount, result.Page, result.PageSize));
+        return Ok(new CreditConsumptionListResponse(consumptions, result.TotalCount, result.TotalQuantity, result.Page, result.PageSize));
+    }
+
+    /// <summary>
+    /// Reconciliation strip for the brand's wallet: usable balance, all-time granted, all-time consumed.
+    /// </summary>
+    [HttpGet("summary")]
+    public async Task<ActionResult<CreditSummaryResponse>> GetSummary(
+        [FromQuery] Guid? brandId,
+        CancellationToken cancellationToken)
+    {
+        var scopedBrandId = ResolveBrandScope(brandId);
+        if (scopedBrandId == null)
+            return Forbid();
+
+        var balance = await _creditService.GetBalanceAsync(scopedBrandId.Value, cancellationToken);
+        var totals = await _creditService.GetLedgerTotalsAsync(scopedBrandId.Value, cancellationToken);
+
+        return Ok(new CreditSummaryResponse(scopedBrandId.Value, balance, totals.TotalGranted, totals.TotalConsumed));
     }
 
     /// <summary>

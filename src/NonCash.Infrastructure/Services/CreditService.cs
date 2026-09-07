@@ -350,14 +350,77 @@ public class CreditService : ICreditService
             .Where(c => c.BrandId == brandId);
 
         var totalCount = await query.CountAsync(cancellationToken);
+        // All-time consumed credits (SUM of row quantities), so the UI never mistakes
+        // the row count for the charged amount (one plan-approval row carries Quantity=N).
+        var totalQuantity = await query.SumAsync(c => (int?)c.Quantity, cancellationToken) ?? 0;
 
-        var consumptions = await query
+        var pageRows = await query
             .OrderByDescending(c => c.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new CreditConsumptionResult(consumptions, totalCount, page, pageSize);
+        // Enrich the page with human-readable names (one lookup per referenced id set).
+        var planIds = pageRows.Where(c => c.PlanId.HasValue).Select(c => c.PlanId!.Value).Distinct().ToList();
+        var detailIds = pageRows.Where(c => c.VoucherDetailId.HasValue).Select(c => c.VoucherDetailId!.Value).Distinct().ToList();
+
+        var planNames = planIds.Count == 0
+            ? new Dictionary<Guid, string?>()
+            : await _context.VoucherPlanHeaders
+                .AsNoTracking()
+                .Where(p => planIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
+
+        var detailById = detailIds.Count == 0
+            ? new Dictionary<Guid, VoucherPlanDetail>()
+            : await _context.VoucherPlanDetails
+                .AsNoTracking()
+                .Where(d => detailIds.Contains(d.Id))
+                .ToDictionaryAsync(d => d.Id, cancellationToken);
+
+        // Per-voucher rows reach their plan name through the detail's ParentId.
+        var parentIds = detailById.Values.Select(d => d.ParentId).Distinct().Where(id => !planNames.ContainsKey(id)).ToList();
+        if (parentIds.Count > 0)
+        {
+            var parentNames = await _context.VoucherPlanHeaders
+                .AsNoTracking()
+                .Where(p => parentIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
+            foreach (var kv in parentNames)
+                planNames[kv.Key] = kv.Value;
+        }
+
+        var items = pageRows.Select(c =>
+        {
+            string? planName = null;
+            string? serialNo = null;
+            if (c.PlanId.HasValue)
+                planNames.TryGetValue(c.PlanId.Value, out planName);
+            if (c.VoucherDetailId.HasValue && detailById.TryGetValue(c.VoucherDetailId.Value, out var detail))
+            {
+                serialNo = detail.SerialNo;
+                planNames.TryGetValue(detail.ParentId, out planName);
+            }
+            return new CreditConsumptionItem(c, planName, serialNo);
+        }).ToList();
+
+        return new CreditConsumptionResult(items, totalCount, totalQuantity, page, pageSize);
+    }
+
+    public async Task<CreditLedgerTotals> GetLedgerTotalsAsync(Guid brandId, CancellationToken cancellationToken = default)
+    {
+        // Granted = credits that entered the wallet (negative clawback batches excluded).
+        var granted = await _context.CreditBatches
+            .AsNoTracking()
+            .Where(b => b.BrandId == brandId && b.OriginalAmount > 0)
+            .SumAsync(b => (int?)b.OriginalAmount, cancellationToken) ?? 0;
+
+        var consumed = await _context.CreditConsumptions
+            .AsNoTracking()
+            .Where(c => c.BrandId == brandId)
+            .SumAsync(c => (int?)c.Quantity, cancellationToken) ?? 0;
+
+        return new CreditLedgerTotals(granted, consumed);
     }
 
     public async Task<IReadOnlyList<CreditBatch>> GetExpiringBatchesAsync(

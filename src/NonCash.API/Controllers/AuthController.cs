@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NonCash.API.DTOs;
 using NonCash.Core.Interfaces;
 
@@ -83,5 +84,31 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = result.ErrorMessage });
 
         return Ok(new { message = "Password has been reset successfully." });
+    }
+
+    /// <summary>CR-2026-09-07-18: POS staff login (username + storeCode + password).
+    /// Rate-limit this endpoint aggressively to prevent credential stuffing. Generic error
+    /// on all failure paths (do not reveal which component was wrong).</summary>
+    [HttpPost("staff-login")]
+    [AllowAnonymous]
+    [EnableRateLimiting("staff-login")]
+    public async Task<ActionResult<StaffLoginResponse>> StaffLogin(StaffLoginRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _authService.LoginStaffAsync(request.Username, request.StoreCode, request.Password, cancellationToken);
+
+        if (!result.Success)
+        {
+            return Unauthorized(new { error = result.ErrorMessage });
+        }
+
+        var user = result.User!;
+        var response = new StaffLoginResponse(
+            result.Token!,
+            result.ExpiresAt!.Value,
+            new UserDto(user.Id, user.FullName, user.Role.ToString(), user.BrandId, null),
+            result.OutletId!.Value
+        );
+
+        return Ok(response);
     }
 }

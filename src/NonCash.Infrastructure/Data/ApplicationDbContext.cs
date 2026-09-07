@@ -16,6 +16,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<Outlet> Outlets => Set<Outlet>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<CustomerAuditLog> CustomerAuditLogs => Set<CustomerAuditLog>();
+    public DbSet<UserOutlet> UserOutletAssignments => Set<UserOutlet>();
     public DbSet<BrandCustomer> BrandCustomers => Set<BrandCustomer>();
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
     public DbSet<MemberAccount> MemberAccounts => Set<MemberAccount>();

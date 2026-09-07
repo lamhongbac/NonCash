@@ -32,7 +32,8 @@ public class CustomersControllerTests
     {
         var repository = new CustomerRepository(context);
         var brandCustomers = new BrandCustomerRepository(context);
-        var service = new CustomerService(repository, brandCustomers);
+        var auditLogs = new Repository<CustomerAuditLog>(context);
+        var service = new CustomerService(repository, brandCustomers, auditLogs);
         var importService = new CsvCustomerImportService(service);
         var batchService = new DistributionBatchService(
             new VoucherPlanRepository(context),
@@ -44,7 +45,7 @@ public class CustomersControllerTests
             new UserAccountRepository(context),
             brandCustomers);
         return new CustomersController(
-            service, importService, currentUser ?? new TestCurrentUserService("Admin"), batchService, new VoucherCodeService());
+            service, importService, currentUser ?? new TestCurrentUserService("Admin"), batchService, new VoucherCodeService(), auditLogs);
     }
 
     private static async Task<CustomerResponse> CreateCustomerVia(
@@ -140,6 +141,36 @@ public class CustomersControllerTests
         var result = await controller.CreateCustomer(request, CancellationToken.None);
 
         result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task CreateCustomer_AsBrandManager_LinksExistingGlobalCustomer()
+    {
+        using var context = CreateContext();
+        var brandId = Guid.NewGuid();
+        // Customer exists globally (e.g. self-registered member) but is unknown to any brand.
+        var existing = new Customer { PhoneNumber = "0909000111", FullName = "Global User", Status = CustomerStatus.Active };
+        context.Customers.Add(existing);
+        context.SaveChanges();
+        // Detach the seed so the service's no-tracking fetch + Update can attach cleanly.
+        context.Entry(existing).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+
+        var controller = CreateController(context, new TestCurrentUserService("BrandManager", brandId));
+
+        var result = await controller.CreateCustomer(
+            new CreateCustomerRequest("0909000111", "Global User", "global@example.com"), CancellationToken.None);
+
+        // Linked, not duplicated: 201, still exactly one global row, mapping Source=Manual.
+        result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.CreatedAtActionResult>();
+        context.Customers.Count().Should().Be(1);
+        var mapping = context.BrandCustomers.SingleOrDefault(m => m.BrandId == brandId && m.CustomerId == existing.Id);
+        mapping.Should().NotBeNull();
+        mapping!.Source.Should().Be(BrandCustomerSource.Manual);
+
+        // Second add to the same brand is a real duplicate -> 409.
+        var duplicate = await controller.CreateCustomer(
+            new CreateCustomerRequest("0909000111", "Global User", null), CancellationToken.None);
+        duplicate.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>();
     }
 
     [Fact]
@@ -339,6 +370,72 @@ public class CustomersControllerTests
 
         blacklist.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Admin");
         unblacklist.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Admin");
+    }
+
+    // ----- CR-2026-09-06-11 fill-empty-only + CR-2026-09-07-14 admin audit -----
+
+    [Fact]
+    public async Task UpdateCustomer_AsBrandManager_FillsEmptyFieldsOnly()
+    {
+        // CR-11: a brand edit never overwrites the real name; the empty email gets filled.
+        // Brand writes produce no audit entries (auditing is for admin edits only).
+        using var context = CreateContext();
+        var brandId = Guid.NewGuid();
+        var manager = CreateController(context, new TestCurrentUserService("BrandManager", brandId));
+        var created = await CreateCustomerVia(manager, "0900000010", "Brand Customer");
+
+        var result = await manager.UpdateCustomer(created.Id,
+            new UpdateCustomerRequest("Rewritten Name", "filled@example.com"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>();
+        var customer = (result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult)!.Value as CustomerResponse;
+        customer!.FullName.Should().Be("Brand Customer");
+        customer.Email.Should().Be("filled@example.com");
+        context.CustomerAuditLogs.Count().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UpdateCustomer_AsAdmin_OverwritesAndAudits()
+    {
+        // CR-14: admin full edit — both fields change and every change lands in the audit log.
+        using var context = CreateContext();
+        var admin = CreateController(context);
+        var created = await CreateCustomerVia(admin, "0900000011", "Admin Target");
+
+        var result = await admin.UpdateCustomer(created.Id,
+            new UpdateCustomerRequest("Corrected Name", "corrected@example.com"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>();
+        var customer = (result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult)!.Value as CustomerResponse;
+        customer!.FullName.Should().Be("Corrected Name");
+        customer.Email.Should().Be("corrected@example.com");
+
+        var audits = context.CustomerAuditLogs.Where(x => x.CustomerId == created.Id).ToList();
+        audits.Should().HaveCount(2);
+        audits.Should().Contain(x => x.Field == "FullName" && x.OldValue == "Admin Target" && x.NewValue == "Corrected Name");
+        audits.Should().Contain(x => x.Field == "Email" && x.OldValue == null && x.NewValue == "corrected@example.com");
+    }
+
+    [Fact]
+    public async Task GetCustomerAudits_ReturnsEntries()
+    {
+        using var context = CreateContext();
+        var admin = CreateController(context);
+        var created = await CreateCustomerVia(admin, "0900000012", "Audit Target");
+        await admin.UpdateCustomer(created.Id, new UpdateCustomerRequest("Audit Target 2", null), CancellationToken.None);
+
+        var result = await admin.GetCustomerAudits(created.Id, CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>().Subject;
+        var audits = ok.Value as IReadOnlyList<CustomerAuditDto>;
+        audits.Should().ContainSingle(x => x.Field == "FullName" && x.NewValue == "Audit Target 2");
+    }
+
+    [Fact]
+    public void GetCustomerAudits_IsAdminOnly()
+    {
+        var method = typeof(CustomersController).GetMethod(nameof(CustomersController.GetCustomerAudits))!;
+        method.GetCustomAttribute<AuthorizeAttribute>()!.Roles.Should().Be("Admin");
     }
 
     // ----- Customer voucher history (brand-scoped) -----

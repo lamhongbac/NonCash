@@ -350,7 +350,16 @@ A per-brand block stops that brand's promotions, gift-plan sales, and voucher tr
 - `GET /api/v1/customers` — Admins see every customer across brands; Brand Managers only see customers mapped to their brand.
 - Mappings are created on import/manual create and auto-created on every brand-customer touchpoint (promotion, purchase, transfer, gifting, redemption). The mapping source is recorded (`Import`, `Manual`, `PromotionAuto`, `SelfPurchase`, `GiftingAuto`, `Transfer`, `Redemption`) and never overwritten by later re-links.
 
-> **Known gap:** there is no customer-management UI for Admins today — blacklist and block are API-only (Swagger UI at `/swagger`).
+### 7.4 Customer Oversight Page and Admin Edit (audit trail)
+
+**Customers** in the Admin navigation (`/admin/customers`) is the cross-brand customer console: search by name/email/phone, filter by status, blacklist/unblacklist — and **edit the global record**.
+
+Admin edits are the tier-3 write path of the platform's 3-tier write model (customer self-service → brand fill-empty-only → admin full edit; see `docs/customer-action-matrix.md` §9):
+
+- Admins may overwrite `FullName` and `Email` even when values already exist — brands cannot. `PhoneNumber` is the natural key and is never editable.
+- **Every admin edit is written to `customer_audit_logs`** (who / when / field / old → new). This is mandatory because email is the voucher delivery channel — a misdirected email edit reroutes vouchers.
+- The page's **history icon** per row opens the audit trail (`GET /api/v1/customers/{id}/audits`, Admin-only).
+- Use this for corrections only (typo'd email/name reported as wrong). For anything the customer can fix themselves, direct them to the member app instead.
 
 ---
 
@@ -451,7 +460,147 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 
 ---
 
-## 9. Security and Multi-Tenancy
+## 9. Email Notifications (On/Off & Templates)
+
+The platform sends transactional emails for registration, contracts, plan reviews, voucher delivery, and credit alerts. This section covers the two server-side levers an Admin needs: **switching delivery on/off** and **editing the email templates**.
+
+> **Note:** There is no Admin UI page for email management in v1 — both levers are managed on the API server (configuration file and template files). For the full scenario → trigger → recipient → template matrix, see [Notification Matrix](../notification-matrix.md).
+
+**Which configuration file to edit?** The API has two configuration files in source control:
+
+- `appsettings.json` — the base file, always loaded.
+- `appsettings.Development.json` — loaded only when `ASPNETCORE_ENVIRONMENT` is `Development` (local runs); its values override the base file. Environment variables override both files.
+
+In practice:
+
+- **Local development** (Visual Studio / `dotnet run`): edit `src/NonCash.API/appsettings.Development.json`. The working email settings described below currently live in this file.
+- **Deployed IIS server** (`C:\Projects\NonCashAPI\`): edit `appsettings.json` in that folder. The CI/CD deploy workflow backs up and restores this file across publishes, so server-side changes are preserved — do not rely on publishing configuration from the repo.
+
+### 9.1 Switch Email Delivery On or Off
+
+Email delivery is controlled by a feature flag in the API configuration (see *Which configuration file to edit?* above):
+
+```json
+"Notifications": {
+  "EmailEnabled": true
+}
+```
+
+- **`true`** — emails are sent via SMTP (requires the `Smtp` section, §9.3, to be configured).
+- **`false`** — nothing is delivered; notifications are written to the API console log instead.
+- **Not set** — defaults to `false` when `Environment:Name` is `dev`, and to `true` otherwise.
+
+> **Current state:** the `Notifications` section exists only in `appsettings.Development.json` today. On the server, add this section to `C:\Projects\NonCashAPI\appsettings.json` — if it is absent there, the default applies (off in dev, on otherwise).
+
+**Restart the API after changing the flag** — it is read once at startup. The switch is global: it covers all email types (there is no per-template switch in v1). You can also set it via the `Notifications__EmailEnabled` environment variable without editing files.
+
+### 9.2 Dev-Mode Kill-Switch (Master Safety)
+
+Independently of the flag above, `Environment:Name` is the master safety switch:
+
+- When set to `dev` (or missing — fails safe), **no real email is ever sent**, even if `EmailEnabled` is `true` and SMTP is fully configured.
+- Suppressed attempts are still audited: `email_logs` gets a row with `success = false` and `error_message = "Suppressed: dev mode (Environment:Name=dev)"`, and the API log shows `[DEV MODE] Email to ... suppressed`. Use this to verify the full flow without delivering anything.
+- To enable real delivery, set `Environment:Name` to `pilot` or `production` (or the `Environment__Name` environment variable) and restart the API.
+
+> **Where it lives:** `Environment:Name` is currently `"dev"` in **both** files — change it in the file that matches your runtime (`appsettings.Development.json` locally, `appsettings.json` on the server). The base file ships `"dev"` on purpose: a fresh or unconfigured server fails safe and never sends real email.
+
+> **Warning:** The development configuration currently contains real Gmail SMTP credentials. Switching `Environment:Name` to `production` on a dev machine **will deliver real emails to real addresses** — always verify with test recipient lists first.
+
+### 9.3 SMTP Settings
+
+Configured in the `Smtp` section of the API configuration file:
+
+| Key | Example | Notes |
+| --- | --- | --- |
+| `Host` | `smtp.gmail.com` | Empty = delivery disabled (console log fallback). |
+| `Port` | `587` | Standard STARTTLS port. |
+| `EnableSsl` | `true` | Keep enabled. |
+| `Username` | `your-account@gmail.com` | Usually the same as `FromAddress`. |
+| `Password` | *(app password)* | Gmail requires a 16-character **App Password** (2FA must be on), not the account password. |
+| `FromAddress` | `noreply@your-domain.com` | Sender address recipients see. |
+| `FromDisplayName` | `NonCash` | Sender display name. |
+
+> **Current state:** the base `appsettings.json` ships this section with empty values (delivery disabled); `appsettings.Development.json` holds the working Gmail configuration. On the server, fill in the `Smtp` values in `C:\Projects\NonCashAPI\appsettings.json`.
+
+> **Security:** Never commit real passwords to source control. Inject credentials via environment variables (for example `Smtp__Password`) or .NET user secrets.
+
+### 9.4 Edit an Email Template
+
+Templates are plain HTML files with `{{Placeholder}}` markers — one file per scenario, named exactly after the template (see §9.5).
+
+- **Deployed server:** edit `<API folder>\EmailTemplates\<TemplateName>.html`. The file is re-read on every send, so **changes take effect immediately — no restart, no redeploy**.
+- **Source control:** mirror every change into `src/NonCash.Infrastructure/EmailTemplates/` so Git stays the source of truth; files are copied to the output folder on the next build/publish.
+
+Editing rules:
+
+- Placeholders use double curly braces: `{{RecipientName}}`. Matching is case-insensitive.
+- A misspelled or unknown marker is **left as-is in the outgoing email** — recipients will see the raw `{{...}}` text. Always check marker names against §9.5.
+- Never delete or rename a template file: a missing file degrades that email to a minimal plain-text fallback and logs a warning.
+- Keep the HTML email-safe: inline CSS styles, table-based layouts, no external stylesheets or scripts.
+- The **subject line is defined in code**, not in the template file — changing a subject requires a code change.
+- After editing, trigger the scenario once (for example, distribute a voucher to a test customer) and verify the inbox plus the `email_logs` audit row (§9.6).
+
+### 9.5 Template & Placeholder Reference
+
+Registration & onboarding:
+
+| Template file | Sent when | Available placeholders |
+| --- | --- | --- |
+| `AdminNewRegistration.html` | New business self-registration submitted | `CompanyName`, `RequestId` |
+| `ApplicantRegistrationSubmitted.html` | Registration confirmation to the applicant | `CompanyName`, `RequestId`, `WelcomeUrl`, `WelcomeLinkHtml` |
+| `ContractSent.html` | Platform contract emailed to the business | `BusinessName`, `BrandName`, `PolicyTemplateName`, `WelcomeCredits`, `ExpiryHtml`, `ContractHtml`, `ConfirmationUrl`, `ConfirmationToken` |
+| `ActiveBusiness.html` | Registration approved — business activated | `BusinessName`, `BrandInfoHtml` |
+| `RegistrationRejected.html` | Registration rejected | `BusinessName`, `Reason` |
+| `BrandCreated.html` | Admin creates a business directly | `BrandName`, `BusinessName`, `TaxCode` |
+| `StaffAccountCreated.html` | Staff account created | `FullName`, `Username`, `Role`, `BrandName` |
+
+Plans & vouchers:
+
+| Template file | Sent when | Available placeholders |
+| --- | --- | --- |
+| `PlanReviewed.html` | Voucher plan approved or rejected | `Outcome`, `HeaderColor`, `PlanDisplayName`, `PublishDate`, `ReviewNotes` |
+| `VoucherReceived.html` | Voucher distributed or sold to a customer | `RecipientName`, `VoucherName`, `FaceValue`, `ExpiryDate`, `PhoneNumber` |
+| `VoucherTransferInitiated.html` | Voucher transfer received | `RecipientName`, `SenderName`, `VoucherCount`, `TransferredAt` |
+
+Credits:
+
+| Template file | Sent when | Available placeholders |
+| --- | --- | --- |
+| `WelcomeCreditGranted.html` | Welcome credits granted to a brand | `BrandName`, `CreditsGranted`, `ExpiresAt` |
+| `CreditPurchased.html` | Credit top-up recorded | `BrandName`, `Amount`, `TotalPaidVnd`, `Reference`, `ExpiresAt` |
+| `LowCreditBalance.html` | Balance dropped below the warning threshold | `BrandName`, `CurrentBalance`, `Threshold` |
+| `CreditsExpiring.html` | Credits nearing expiry | `BrandName`, `ExpiringCredits`, `DaysLeft`, `ExpiresAt` |
+| `CreditsForfeited.html` | Expired credits forfeited | `BrandName`, `ForfeitedCredits`, `ExpiredAt` |
+| `AdjustmentPending.html` | Credit adjustment awaits approval | `BrandName`, `AdjustmentType`, `Amount`, `RequestedByName`, `RequestId` |
+| `AdjustmentReviewed.html` | Credit adjustment approved/rejected | `Outcome`, `HeaderColor`, `BrandName`, `AdjustmentType`, `Amount`, `RequestId`, `ReviewNote` |
+
+Security:
+
+| Template file | Sent when | Available placeholders |
+| --- | --- | --- |
+| `PasswordReset.html` | Password reset requested | `FullName`, `ResetToken`, `TokenExpiry` |
+
+> **Note:** Several placeholders (for example `ContractHtml`, `BrandInfoHtml`, `ExpiryHtml`, `WelcomeLinkHtml`, `PublishDate`, `ReviewNotes`) inject pre-built HTML blocks or render as empty strings. Treat them as whole blocks — keep or remove the entire marker; do not restyle their contents inline.
+
+### 9.6 Delivery Audit, Retries & Health Check
+
+- Every send attempt — success, failure, or dev-suppressed — is recorded in the `email_logs` table: `to_address`, `subject`, `template_name`, `notification_type`, `success`, `error_message`, `retry_count`, `sent_at` (UTC).
+- **`success = true` means "accepted by the SMTP server", not "delivered to the inbox".** Post-acceptance failures (recipient-server rejection, greylisting, sender-reputation holds) return asynchronously as bounce (mailer-daemon) messages to the **sender mailbox** and do not update `email_logs`. When a user reports a missing email despite a success row, check the sender mailbox for bounces — a compromised or spam-flagged sender account has its mail silently held or dropped after acceptance.
+- Transient SMTP errors are retried up to 3 times with 2s → 4s → 8s backoff; permanent errors fail immediately and are logged.
+- Health check: `GET /api/v1/system/info` returns `emailDelivery` (flag on + SMTP configured) and `environment` (the kill-switch state) — check both when email seems off, since `emailDelivery` does not reflect the dev kill-switch.
+
+Quick audit query:
+
+```sql
+SELECT to_address, subject, template_name, success, error_message, sent_at
+FROM email_logs
+ORDER BY sent_at DESC
+LIMIT 20;
+```
+
+---
+
+## 10. Security and Multi-Tenancy
 
 - **JWT tokens** carry `sub` (UserID), `brandId`, and `role` claims.
 - **Brand scoping** is enforced automatically. Non-Admin users can only access data belonging to their Brand.
@@ -460,7 +609,7 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 
 ---
 
-## 10. Common Tasks Quick Reference
+## 11. Common Tasks Quick Reference
 
 | Task | Path | Role |
 | --- | --- | --- |
@@ -489,10 +638,12 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 | Blacklist a customer (platform) | API: `PUT /api/v1/customers/{id}/blacklist` | Admin |
 | Un-blacklist a customer | API: `PUT /api/v1/customers/{id}/unblacklist` | Admin |
 | Block a customer for a brand | API: `PUT /api/v1/customers/{id}/block?brandId={id}` | Admin |
+| Switch email delivery on/off | `Notifications:EmailEnabled` in `appsettings.Development.json` (local) or server `appsettings.json`, then restart the API (§9.1) | Admin (server access) |
+| Edit an email template | `<API folder>\EmailTemplates\*.html` — no restart (§9.4) | Admin (server access) |
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Issue | Cause | Resolution |
 | --- | --- | --- |
@@ -513,4 +664,8 @@ The **Welcome Policies** page shows the welcome-credit policy assigned to each B
 | Upload signed contract fails | Contract was never sent | Send the contract first before uploading the signed copy. |
 | Block endpoint returns 404 | No brand-customer mapping exists for that pair | The customer has never interacted with that brand — distribute/import (brand side) first. |
 | Blacklisted customer still redeems at POS | By design (O1) — held vouchers stay redeemable | Investigate the case; un-blacklist to restore, or keep blacklisted to stop all new actions. |
+| No emails delivered although SMTP is configured | `Environment:Name` = `dev` kill-switch, or `Notifications:EmailEnabled` = `false` | Set `Environment:Name` to `pilot`/`production` and/or the flag to `true`, then restart the API (§9.1–9.2); check `email_logs` for "Suppressed: dev mode". |
+| `email_logs` shows `success = true` but the recipient never received the email | SMTP accepted the message but delivery failed afterwards (recipient-server bounce, greylisting, sender-reputation hold) | Check the **sender mailbox** for mailer-daemon bounce/delay notifications — they do not update `email_logs`; verify the sender account is not compromised or throttled (§9.6). |
+| Template edits have no effect | Edited the source folder while the API runs from a build/publish output | Edit the file under the deployed `<API folder>\EmailTemplates\`, or rebuild/republish (§9.4). |
+| Recipients see raw `{{...}}` markers in the email | Placeholder name misspelled or not provided by that template | Correct the marker against the placeholder table in §9.5. |
 

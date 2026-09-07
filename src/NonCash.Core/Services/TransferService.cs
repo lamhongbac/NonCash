@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
@@ -13,6 +14,8 @@ public class TransferService : ITransferService
     private readonly IVoucherEventPublisher _eventPublisher;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
     private readonly IVoucherPlanRepository _planRepository;
+    private readonly IJwtTokenService _jwtTokenService;
+    private readonly IConfiguration _configuration;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
@@ -22,7 +25,9 @@ public class TransferService : ITransferService
         INotificationService notificationService,
         IVoucherEventPublisher eventPublisher,
         IBrandCustomerRepository brandCustomerRepository,
-        IVoucherPlanRepository planRepository)
+        IVoucherPlanRepository planRepository,
+        IJwtTokenService jwtTokenService,
+        IConfiguration configuration)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
@@ -32,6 +37,8 @@ public class TransferService : ITransferService
         _eventPublisher = eventPublisher;
         _brandCustomerRepository = brandCustomerRepository;
         _planRepository = planRepository;
+        _jwtTokenService = jwtTokenService ?? throw new ArgumentNullException(nameof(jwtTokenService));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
     public async Task<TransferResult> TransferAsync(
@@ -170,7 +177,8 @@ public class TransferService : ITransferService
                     recipientCustomer?.FullName ?? phone,
                     senderName,
                     1,
-                    now), cancellationToken);
+                    now,
+                    BuildMagicLinkUrl(recipientMemberId)), cancellationToken);
             }
             catch (Exception)
             {
@@ -281,5 +289,13 @@ public class TransferService : ITransferService
             Status = MemberAccountStatus.Active
         };
         return await _memberRepository.AddAsync(placeholder, cancellationToken);
+    }
+
+    /// <summary>CR-2026-09-07-19: Build a magic-link URL for passwordless member access.</summary>
+    private string BuildMagicLinkUrl(Guid memberAccountId)
+    {
+        var magicToken = _jwtTokenService.GenerateMagicLinkToken(memberAccountId);
+        var webBaseUrl = _configuration["WebBaseUrl"]?.TrimEnd('/') ?? "https://localhost:7162";
+        return $"{webBaseUrl}/member/welcome?token={Uri.EscapeDataString(magicToken)}";
     }
 }

@@ -111,6 +111,8 @@ public class PosService : IPosService
         string transactionId,
         decimal amountUsed,
         Guid outletId,
+        string? posNo = null,
+        string? operatorId = null,
         CancellationToken cancellationToken = default)
     {
         if (lockId == Guid.Empty)
@@ -150,7 +152,7 @@ public class PosService : IPosService
 
         var outcome = await _lockRepository.CommitAsync(
             lockId, transactionId, amountUsed, outletId, now, expiryCutoff,
-            sponsorBrandId, redeemBrandId, cancellationToken);
+            sponsorBrandId, redeemBrandId, posNo, operatorId, cancellationToken);
 
         // Epic 7.2: Create settlement entry for cross-tenant redemptions.
         if (outcome == CommitOutcome.Success

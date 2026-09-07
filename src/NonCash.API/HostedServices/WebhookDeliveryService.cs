@@ -51,7 +51,14 @@ public class WebhookDeliveryService : BackgroundService
                 _logger.LogError(ex, "Error in WebhookDeliveryService loop.");
             }
 
-            await Task.Delay(PollInterval, stoppingToken);
+            try
+            {
+                await Task.Delay(PollInterval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break; // Host is shutting down — exit gracefully.
+            }
         }
     }
 

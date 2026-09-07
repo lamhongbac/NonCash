@@ -122,6 +122,8 @@ public class PosController : ControllerBase
             request.TransactionId,
             request.AmountUsed,
             middlewareOutletId.Value,
+            request.PosNo,
+            request.OperatorId,
             cancellationToken);
 
         if (result.Status == "LockExpired")
@@ -171,11 +173,11 @@ public record PosVerifyRequest(string VoucherCode, Guid OutletId);
 
 public record PosVerifyResponse(string Status, string? Reason, PosVoucherInfoDto? VoucherInfo);
 
-public record PosLockRequest(string VoucherCode, Guid OutletId, string BillNumber);
+public record PosLockRequest(string VoucherCode, Guid OutletId, string BillNumber, string? PosNo = null, string? OperatorId = null);
 
 public record PosLockResponse(string Status, string? Reason, Guid? LockId, PosVoucherInfoDto? VoucherInfo);
 
-public record PosCommitRequest(Guid LockId, string TransactionId, decimal AmountUsed);
+public record PosCommitRequest(Guid LockId, string TransactionId, decimal AmountUsed, string? PosNo = null, string? OperatorId = null);
 
 public record PosCommitResponse(string Status, string? Reason, string? Message);
 

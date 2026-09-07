@@ -24,7 +24,7 @@
             @if (_balance.HasValue && _balance.Value <= 0)
             {
                 <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">
-                    Credits depleted — distribution is blocked until topped up.
+                    Credits depleted — plan approval is blocked until topped up.
                 </MudAlert>
             }
         </MudPaper>
@@ -51,7 +51,7 @@
     <MudItem xs="12" sm="4">
         <MudPaper Class="pa-4" Elevation="1">
             <MudText Typo="Typo.subtitle1" GutterBottom="true">How credits work</MudText>
-            <MudText Typo="Typo.body2">Each voucher distributed to a customer consumes <strong>1 credit</strong>.</MudText>
+            <MudText Typo="Typo.body2">Approving a plan consumes <strong>1 credit per approved voucher</strong> — generation, distribution and redemption are free.</MudText>
             <MudText Typo="Typo.body2" Class="mt-1">Credits are added by the platform admin after a verified bank transfer.</MudText>
             <MudText Typo="Typo.body2" Class="mt-1">Oldest credits are used first, so nothing is wasted before expiry.</MudText>
         </MudPaper>
@@ -69,6 +69,27 @@
         }
     </MudAlert>
 }
+
+@* ── Ledger reconciliation strip ───────────────────────────────── *@
+<MudPaper Class="pa-3 mb-4" Elevation="1">
+    <MudGrid>
+        <MudItem xs="12" sm="4" Class="d-flex flex-column align-center">
+            <MudText Typo="Typo.h5" Color="Color.Primary">@(_summary?.TotalGranted.ToString("N0") ?? "—")</MudText>
+            <MudText Typo="Typo.caption">Total Granted</MudText>
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex flex-column align-center">
+            <MudText Typo="Typo.h5" Color="Color.Error">@(_summary?.TotalConsumed.ToString("N0") ?? "—")</MudText>
+            <MudText Typo="Typo.caption">Total Consumed</MudText>
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex flex-column align-center">
+            <MudText Typo="Typo.h5" Color="@_balanceColor">@(_balance?.ToString("N0") ?? "—")</MudText>
+            <MudText Typo="Typo.caption">Current Balance</MudText>
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="text-align:center">
+        Balance = granted − consumed − expired/adjustments. See Usage History for a per-charge breakdown.
+    </MudText>
+</MudPaper>
 
 @* ── Batch / consumption history ─────────────────────────────── *@
 <MudPaper Class="pa-4">
@@ -141,6 +162,12 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Usage History">
+            <MudGrid Class="mb-2">
+                <MudItem xs="12" Class="d-flex align-center justify-end">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadConsumptions">Refresh</MudButton>
+                </MudItem>
+            </MudGrid>
+
             @if (_loadingConsumptions)
             {
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -150,20 +177,50 @@
                 <MudTable Items="_consumptions" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
                     <HeaderContent>
                         <MudTh>Date</MudTh>
-                        <MudTh>Source</MudTh>
-                        <MudTh Style="text-align:right">Qty</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Plan / Voucher</MudTh>
+                        <MudTh Style="text-align:right">Credits</MudTh>
                         <MudTh>Reference</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Date">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
-                        <MudTd DataLabel="Source">@SourceLabel(context)</MudTd>
-                        <MudTd DataLabel="Qty" Style="text-align:right">@context.Quantity</MudTd>
-                        <MudTd DataLabel="Reference">@(context.Reference ?? "—")</MudTd>
+                        <MudTd DataLabel="Type">
+                            @if (context.PlanId.HasValue)
+                            {
+                                <MudChip T="string" Color="Color.Primary" Size="Size.Small">Plan approval</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small">Voucher</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Plan / Voucher">
+                            @if (context.PlanId.HasValue)
+                            {
+                                <MudLink Href="@($"/brandmanager/plans/{context.PlanId}/review")">@(context.PlanName ?? "(unnamed plan)")</MudLink>
+                            }
+                            else if (context.VoucherDetailId.HasValue)
+                            {
+                                <span>@(context.VoucherSerialNo ?? (context.VoucherDetailId.Value.ToString()[..8] + "…"))</span>
+                                @if (!string.IsNullOrEmpty(context.PlanName))
+                                {
+                                    <MudText Typo="Typo.caption" Class="d-block">@context.PlanName</MudText>
+                                }
+                            }
+                            else
+                            {
+                                <span>—</span>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Credits" Style="text-align:right">
+                            <span style="color:red;font-weight:bold">−@context.Quantity</span>
+                        </MudTd>
+                        <MudTd DataLabel="Reference">@ReferenceLabel(context)</MudTd>
                     </RowTemplate>
                     <FooterContent>
-                        <MudTd colspan="4">
+                        <MudTd colspan="5">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                <MudText Typo="Typo.caption">@_consumptionTotal vouchers billed total</MudText>
+                                <MudText Typo="Typo.caption">@_consumptionTotalQuantity credits consumed in total (@_consumptionTotal records)</MudText>
                                 <MudStack Row="true" Spacing="1">
                                     <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="_consumptionPage <= 1" OnClick="PrevConsumptionPage" />
                                     <MudText Typo="Typo.body2" Class="align-self-center">Page @_consumptionPage</MudText>
@@ -173,10 +230,6 @@
                         </MudTd>
                     </FooterContent>
                 </MudTable>
-            }
-            else
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadConsumptions">Load usage history</MudButton>
             }
         </MudTabPanel>
     </MudTabs>
@@ -210,6 +263,9 @@
     private List<CreditConsumptionDto>? _consumptions;
     private int _consumptionPage = 1;
     private int _consumptionTotal = 0;
+    private int _consumptionTotalQuantity = 0;
+
+    private CreditSummaryDto? _summary;
 
     protected override async Task OnInitializedAsync()
     {
@@ -218,6 +274,8 @@
         await LoadPricing();
         await LoadExpiring();
         await LoadBatches();
+        await LoadSummary();
+        await LoadConsumptions();
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url)
@@ -278,6 +336,20 @@
         }
     }
 
+    private async Task LoadSummary()
+    {
+        try
+        {
+            var resp = await SendAsync(HttpMethod.Get, "api/v1/credits/summary");
+            if (resp.IsSuccessStatusCode)
+                _summary = await resp.Content.ReadFromJsonAsync<CreditSummaryDto>();
+        }
+        catch
+        {
+            // Reconciliation strip is informational only — ignore failures.
+        }
+    }
+
     private async Task LoadBatches()
     {
         _loadingBatches = true;
@@ -320,6 +392,7 @@
                 var result = await resp.Content.ReadFromJsonAsync<CreditConsumptionListDto>();
                 _consumptions = result?.Consumptions ?? new();
                 _consumptionTotal = result?.TotalCount ?? 0;
+                _consumptionTotalQuantity = result?.TotalQuantity ?? 0;
             }
             else
             {
@@ -389,21 +462,34 @@
         public Guid? BatchId { get; set; }
         public Guid? VoucherDetailId { get; set; }
         public Guid? PlanId { get; set; }
+        public string? PlanName { get; set; }
+        public string? VoucherSerialNo { get; set; }
         public int Quantity { get; set; } = 1;
         public string? Reference { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
-    private static string SourceLabel(CreditConsumptionDto c)
+    private static string ReferenceLabel(CreditConsumptionDto c)
     {
-        if (c.VoucherDetailId.HasValue) return c.VoucherDetailId.Value.ToString()[..8] + "…";
-        if (c.PlanId.HasValue) return "Plan " + c.PlanId.Value.ToString()[..8] + "…";
-        return "—";
+        if (string.IsNullOrWhiteSpace(c.Reference)) return "—";
+        // Plan-level rows store "Plan approval {planId}" — the Plan column already links it.
+        if (c.PlanId.HasValue && c.Reference.StartsWith("Plan approval", StringComparison.OrdinalIgnoreCase))
+            return "Plan approval";
+        return c.Reference;
     }
 
     private class CreditConsumptionListDto
     {
         public List<CreditConsumptionDto> Consumptions { get; set; } = new();
         public int TotalCount { get; set; }
+        public int TotalQuantity { get; set; }
+    }
+
+    private class CreditSummaryDto
+    {
+        public Guid BrandId { get; set; }
+        public int Balance { get; set; }
+        public int TotalGranted { get; set; }
+        public int TotalConsumed { get; set; }
     }
 }

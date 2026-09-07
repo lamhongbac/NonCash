@@ -34,7 +34,8 @@ public class ConsoleNotificationService : INotificationService
     public Task NotifyVoucherReceivedAsync(VoucherReceivedNotification notification, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[NOTIFICATION] Voucher '{notification.VoucherName}' ({notification.FaceValue:N0}) delivered to {notification.PhoneNumber} " +
-                          $"(email: {notification.Email ?? "n/a"}) via {notification.Channels}. Expires {notification.ExpiryDate:yyyy-MM-dd}.");
+                          $"(email: {notification.Email ?? "n/a"}) via {notification.Channels}. Expires {notification.ExpiryDate:yyyy-MM-dd}." +
+                          (notification.MagicLinkUrl != null ? $" Magic link: {notification.MagicLinkUrl}" : ""));
 
         if (notification.Channels.HasFlag(NotificationChannel.Email))
         {
@@ -134,7 +135,8 @@ public class ConsoleNotificationService : INotificationService
     public Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"[NOTIFICATION] Voucher transfer: {notification.VoucherCount} voucher(s) from {notification.SenderName} to {notification.RecipientName} " +
-                          $"(phone: {notification.RecipientPhone}, email: {notification.RecipientEmail ?? "n/a"}).");
+                          $"(phone: {notification.RecipientPhone}, email: {notification.RecipientEmail ?? "n/a"})." +
+                          (notification.MagicLinkUrl != null ? $" Magic link: {notification.MagicLinkUrl}" : ""));
         return Task.CompletedTask;
     }
 

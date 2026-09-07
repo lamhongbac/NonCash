@@ -34,6 +34,8 @@ public record CreditConsumptionDto(
     Guid? BatchId,
     Guid? VoucherDetailId,
     Guid? PlanId,
+    string? PlanName,
+    string? VoucherSerialNo,
     int Quantity,
     string? Reference,
     DateTime CreatedAt
@@ -42,8 +44,17 @@ public record CreditConsumptionDto(
 public record CreditConsumptionListResponse(
     IReadOnlyList<CreditConsumptionDto> Consumptions,
     int TotalCount,
+    int TotalQuantity,
     int Page,
     int PageSize
+);
+
+/// <summary>Reconciliation strip: granted vs consumed vs usable balance.</summary>
+public record CreditSummaryResponse(
+    Guid BrandId,
+    int Balance,
+    int TotalGranted,
+    int TotalConsumed
 );
 
 /// <summary>Purchase top-up: admin verified bank money-in first; evidence image required by flow.</summary>

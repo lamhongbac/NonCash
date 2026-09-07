@@ -27,6 +27,11 @@ public class VoucherUsageConfiguration : IEntityTypeConfiguration<VoucherUsage>
         builder.Property(u => u.SponsorBrandId);
         builder.Property(u => u.RedeemBrandId);
 
+        // CR-2026-09-07-18 (C): optional POS operator attribution (client-reported; same
+        // trust level as real POS cashier IDs).
+        builder.Property(u => u.PosNo).HasMaxLength(50);
+        builder.Property(u => u.OperatorId).HasMaxLength(100);
+
         builder.HasOne(u => u.SponsorBrand)
             .WithMany()
             .HasForeignKey(u => u.SponsorBrandId)

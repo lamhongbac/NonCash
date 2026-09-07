@@ -27,4 +27,15 @@ public class OutletRepository : Repository<Outlet>, IOutletRepository
         return await _context.Outlets
             .CountAsync(o => o.BrandId == brandId, cancellationToken);
     }
+
+    public async Task<Outlet?> GetByCodeAsync(Guid brandId, string code, CancellationToken cancellationToken = default)
+    {
+        return await _context.Outlets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.BrandId == brandId
+                                   && o.Code != null
+                                   && o.Code.ToLower() == code.ToLower()
+                                   && o.Status == OutletStatus.Active,
+                                   cancellationToken);
+    }
 }

@@ -60,6 +60,8 @@ The system automatically assigns the Outlet to your Brand and generates an `ApiK
 
 Customer identities are global on the NonCash platform — one customer may hold vouchers from multiple Brands — but you only see the customers **mapped to your brand**. A mapping is created when you add or import the customer, or automatically when the customer receives one of your promotions, buys one of your plans, or receives a voucher transfer from your brand. Customers who have never interacted with your brand are not visible to you.
 
+> **Fill-empty-only rule:** your brand is a *contributor* to the shared record, not its owner. Add, Import, and Edit can only fill details that are still **empty** (including placeholder rows where the name is just the phone number) — values that already exist are never overwritten. To correct existing details, contact the platform admin; admin edits are recorded in an audit trail.
+
 ### 3.1 Create a Customer
 
 1. Go to **Customers**.
@@ -71,6 +73,8 @@ Customer identities are global on the NonCash platform — one customer may hold
 4. Click **Save**.
 
 The system normalizes the phone number before storage (non-digit characters are stripped), and the new customer is automatically mapped to your brand.
+
+If the phone number already exists on the platform (added by another brand or self-registered), the customer is **linked** to your brand instead of being duplicated — existing name/email are kept, and any details you entered only fill fields that were still empty. Adding a phone your brand is already linked to returns an "already exists in your customer list" message.
 
 ### 3.2 Block a Customer (this brand)
 
@@ -95,7 +99,7 @@ It does **not** affect their relationship with other brands, and it does not sto
 4. Review the parsed preview.
 5. Click **Confirm Import**.
 
-The system uses upsert logic: existing customers are matched by phone number and updated if the name or email changed. Every imported row is mapped to **your brand** — re-importing the same file never duplicates mappings.
+The system matches rows by phone number: new phone numbers create new customers; existing customers are **linked** to your brand. Writes follow the fill-empty-only rule — the file's name/email are stored **only where the platform record is still empty**; existing values are always kept. After the import, the result summary shows how many rows were **skipped** because your values differed from the existing record, and you can **download the skipped-rows log (CSV)** to review them. Re-importing the same file never duplicates mappings.
 
 ### 3.4 Search Customers
 
@@ -237,11 +241,37 @@ Brands connected to an external Loyalty App (integration partner) can have vouch
 
 ---
 
-## 6. Voucher Transfer Oversight
+## 6. Voucher Redemption at POS
+
+Customers redeem vouchers in store by presenting a code from their member wallet (**My Vouchers** → select voucher). The code is signed per voucher and is valid for **120 seconds** from the moment it is displayed — if it expires at the till, ask the customer to close and re-open the voucher to show a fresh code.
+
+### 6.1 Redeem with the Web POS Screen
+
+1. Open **POS Redeem** (`/pos/redeem`) — requires a BrandManager account.
+2. Select the **outlet** and enter the **bill number** from your till.
+3. Scan the customer's code (a barcode/QR scanner acts as keyboard input) or paste/type it in full.
+4. Click **Verify** — the screen shows the voucher's face value, status, and validity. This step changes nothing.
+5. Click **Lock** to reserve the voucher against the bill while the customer pays (the lock auto-expires after 10 minutes if not committed or rolled back).
+6. After payment is taken, click **Commit** to complete the redemption. If the sale is cancelled, click **Rollback** to release the voucher back to the customer.
+
+### 6.2 Rules and Failure Modes
+
+- The outlet must be in the voucher plan's scope (for sponsored campaigns this may include another brand's outlets); otherwise verification returns `OutletNotAuthorized`.
+- A voucher soft-locked by a pending member-to-member **transfer** cannot be redeemed until the transfer resolves (§7.2).
+- Already-used, expired, or forged codes are rejected with the reason shown on screen; forged attempts are logged for audit.
+- Each redemption of a Complimentary voucher consumes 1 platform credit (§9); Gift vouchers were already charged at sale, and customer-facing redemption is never blocked by credit balance.
+
+### 6.3 POS System Integration
+
+If your stores run their own POS software, integrate it with the platform's POS API (`verify` / `lock` / `commit` / `rollback`, authenticated per outlet via an `X-API-Key`) instead of the web screen — see the [POS Integration Guide](../pos-integration-guide.md).
+
+---
+
+## 7. Voucher Transfer Oversight
 
 Members can transfer vouchers to each other through the member portal. Brand staff have read-only visibility.
 
-### 6.1 View Transfer Activity
+### 7.1 View Transfer Activity
 
 1. Go to **Transfers**.
 2. The list shows transfers involving vouchers from your Brand.
@@ -252,15 +282,15 @@ Members can transfer vouchers to each other through the member portal. Brand sta
    - `Cancelled` — sender cancelled before recipient action.
    - `Expired` — recipient did not act within 7 days.
 
-### 6.2 Voucher Lock During Transfer
+### 7.2 Voucher Lock During Transfer
 
 While a transfer is `PendingAcceptance`, the voucher is soft-locked. It cannot be redeemed at POS until the transfer is Accepted, Rejected, Cancelled, or Expired.
 
 ---
 
-## 7. Reports and Tracking
+## 8. Reports and Tracking
 
-### 7.1 Distribution Tracking Dashboard
+### 8.1 Distribution Tracking Dashboard
 
 Go to **Reports > Distribution Tracking** to view:
 
@@ -269,32 +299,32 @@ Go to **Reports > Distribution Tracking** to view:
 - Distribution method breakdown (Promotion, Sale, Transfer).
 - Per-Outlet redemption totals.
 
-### 7.2 Cross-Tenant Redemptions and Settlement
+### 8.2 Cross-Tenant Redemptions and Settlement
 
 If your vouchers can be redeemed at outlets belonging to another Brand (sponsored campaigns), each cross-tenant redemption automatically creates a **settlement entry** recording which Brand owes which. The platform Admin reconciles these balances periodically using the settlement ledger and netting report — no action is needed from Brand staff, but redemption reports show sponsor and redeeming Brand attribution per usage.
 
-### 7.3 Export Data
+### 8.3 Export Data
 
 Use the export buttons on list pages to download current filtered results as CSV or Excel.
 
 ---
 
-## 8. Credits (Platform Usage Fee)
+## 9. Credits (Platform Usage Fee)
 
 Your Brand prepays **credits** to use the platform. The charging rule is one sentence: **each voucher consumes exactly 1 credit, once in its lifetime** — a Gift voucher when it is sold (payment confirmed), a Complimentary voucher when it is redeemed at POS. Gift redemptions and member transfers are free (the Gift voucher was already charged at sale).
 
-### 8.1 Welcome Credits
+### 9.1 Welcome Credits
 
 When your Brand is activated, it automatically receives a welcome grant of credits (free period) — you can start issuing vouchers immediately.
 
-### 8.2 Check Your Balance and Ledger
+### 9.2 Check Your Balance and Ledger
 
 - `GET /api/v1/credits/balance` — returns your Brand's current balance.
 - `GET /api/v1/credits/ledger` — returns your Brand's credit history (grants, purchases, consumptions, adjustments), with optional `type`, `from`/`to`, and pagination filters.
 
 Both endpoints are automatically scoped to your own Brand.
 
-### 8.3 What Happens at Zero Balance
+### 9.3 What Happens at Zero Balance
 
 Customer-facing redemption is **never blocked** — vouchers already in circulation keep working at POS even if your balance reaches 0 (the balance may go slightly negative). However, while your balance is ≤ 0, the following actions are blocked with an `InsufficientCredits` error:
 
@@ -302,13 +332,13 @@ Customer-facing redemption is **never blocked** — vouchers already in circulat
 - Batch and partner distribution.
 - New self-purchase orders from customers (your catalog shows "temporarily unavailable").
 
-### 8.4 How to Top Up
+### 9.4 How to Top Up
 
 Pay by bank transfer, then contact the platform Admin with the transfer reference. Once payment is confirmed, the Admin records the top-up and the blocked actions resume automatically. Keep an eye on your balance before large campaigns.
 
 ---
 
-## 9. Common Tasks Quick Reference
+## 10. Common Tasks Quick Reference
 
 | Task | Path | Role |
 | --- | --- | --- |
@@ -322,6 +352,7 @@ Pay by bank transfer, then contact the platform Admin with the transfer referenc
 | Approve/Reject Plan | Approvals | Approver |
 | Generate Vouchers | Plans > Open Approved Plan | Planner / BrandManager |
 | Run Batch Promotion | Distribution > Batch Promotion | BrandManager |
+| Redeem a voucher at store | POS Redeem (`/pos/redeem`) | BrandManager |
 | Upload voucher cover image | API: `POST /api/v1/upload/image` | BrandManager / Planner |
 | View Transfer Activity | Transfers | BrandManager |
 | View Distribution Reports | Reports > Distribution Tracking | BrandManager / Planner |
@@ -330,7 +361,7 @@ Pay by bank transfer, then contact the platform Admin with the transfer referenc
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Issue | Cause | Resolution |
 | --- | --- | --- |
@@ -343,4 +374,6 @@ Pay by bank transfer, then contact the platform Admin with the transfer referenc
 | Image upload returns 400 | Missing `entity`/`uniqueCode` field, file > 5 MB, or invalid format | Include both form fields and use JPG/PNG/WebP/GIF under 5 MB. |
 | Voucher card shows no image | `CoverImageUrl` not set on the plan | Upload a cover image and set the display fields. |
 | Generation/distribution fails with `InsufficientCredits` | Credit balance ≤ 0 | Top up via bank transfer and Admin confirmation; redemption of existing vouchers is unaffected. |
+| POS rejects a code as expired | Voucher codes expire 120 seconds after being displayed | Ask the customer to close and re-open the voucher in **My Vouchers**, then scan the fresh code. |
+| Voucher cannot be redeemed at POS | Voucher is soft-locked by a pending member transfer | Wait for the transfer to be accepted, rejected, cancelled, or expired. |
 

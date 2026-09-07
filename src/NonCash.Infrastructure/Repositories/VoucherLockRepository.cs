@@ -84,6 +84,8 @@ public class VoucherLockRepository : IVoucherLockRepository
         DateTime expiryCutoff,
         Guid? sponsorBrandId = null,
         Guid? redeemBrandId = null,
+        string? posNo = null,
+        string? operatorId = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the locked voucher detail by LockId.
@@ -145,7 +147,10 @@ public class VoucherLockRepository : IVoucherLockRepository
                 CreatedAt = now,
                 // Epic 7.1: Cross-tenant settlement attribution
                 SponsorBrandId = sponsorBrandId,
-                RedeemBrandId = redeemBrandId
+                RedeemBrandId = redeemBrandId,
+                // CR-2026-09-07-18 (C): optional operator attribution
+                PosNo = posNo,
+                OperatorId = operatorId
             };
             _context.Set<VoucherUsage>().Add(usage);
             await _context.SaveChangesAsync(cancellationToken);

@@ -1,0 +1,121 @@
+@page "/login"
+@page "/"
+@layout NonCash.Pos.Layout.PosLayout
+
+<PageTitle>Staff Login — NonCash POS</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall">
+    <MudPaper Class="pa-6 mt-8" Elevation="3">
+        <MudText Typo="Typo.h5" Class="mb-2" Align="Align.Center">Staff Login</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4" Align="Align.Center">
+            Sign in to start your shift
+        </MudText>
+
+        @if (_outletName is not null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" Icon="@Icons.Material.Filled.Store">
+                @_outletName <strong>(@_storeCode)</strong>
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+        }
+
+        <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined"
+                      Placeholder="e.g. cashier1" Class="mb-3"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" />
+
+        <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined"
+                      InputType="InputType.Password" Class="mb-3"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock" />
+
+        <MudTextField @bind-Value="_posNo" Label="POS Terminal No. (optional)" Variant="Variant.Outlined"
+                      Placeholder="e.g. POS-01" Class="mb-4"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Computer" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleLogin"
+                   Disabled="@_loading" FullWidth="true" Size="Size.Large">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Start Shift
+        </MudButton>
+    </MudPaper>
+
+    <MudText Typo="Typo.caption" Class="mt-4" Align="Align.Center" Color="Color.Secondary">
+        <MudLink Href="#" OnClick="ResetTerminal" Color="Color.Secondary">Reset Terminal</MudLink>
+    </MudText>
+</MudContainer>
+
+@code {
+    [Inject] private PosAuthService Auth { get; set; } = default!;
+    [Inject] private ProvisioningService Provisioning { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string _username = string.Empty;
+    private string _storeCode = string.Empty;
+    private string? _outletName;
+    private string _password = string.Empty;
+    private string _posNo = string.Empty;
+    private string? _error;
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // If not provisioned, redirect to provisioning
+        if (!await Provisioning.IsProvisionedAsync())
+        {
+            Nav.NavigateTo("/provision");
+            return;
+        }
+
+        // If already logged in, redirect to payment
+        if (Auth.IsLoggedIn)
+        {
+            Nav.NavigateTo("/payment");
+            return;
+        }
+
+        // Pre-fill store code from provisioning
+        var outlet = await Provisioning.GetOutletAsync();
+        if (outlet is not null)
+        {
+            _storeCode = outlet.StoreCode;
+            _outletName = outlet.OutletName;
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Username and password are required.";
+            return;
+        }
+
+        _loading = true;
+        var posNo = string.IsNullOrWhiteSpace(_posNo) ? null : _posNo.Trim();
+        var (success, error) = await Auth.LoginAsync(_username.Trim(), _storeCode.Trim(), _password, posNo);
+        _loading = false;
+
+        if (success)
+        {
+            Nav.NavigateTo("/payment");
+        }
+        else
+        {
+            _error = error;
+        }
+    }
+
+    private async Task ResetTerminal()
+    {
+        await Provisioning.ClearAsync();
+        Nav.NavigateTo("/provision");
+    }
+}

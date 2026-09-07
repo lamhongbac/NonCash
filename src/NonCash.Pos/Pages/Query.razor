@@ -1,0 +1,187 @@
+@page "/query"
+@layout NonCash.Pos.Layout.PosLayout
+
+<PageTitle>Query — NonCash POS</PageTitle>
+
+@if (!Auth.IsLoggedIn)
+{
+    <MudAlert Severity="Severity.Warning">Session expired. Please log in again.</MudAlert>
+}
+else
+{
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />Voucher Query
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Verify a voucher without locking it. Use this to check validity before starting a payment.
+            </MudText>
+
+            <MudTextField @bind-Value="_voucherCode" Label="Scan or paste voucher code"
+                          Variant="Variant.Outlined" Immediate="true"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
+                          Placeholder="Paste the full voucher code here..."
+                          Class="mb-3" />
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-3" Dense="true">@_error</MudAlert>
+            }
+
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="HandleQuery"
+                           Disabled="@IsVerifyDisabled">
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Verify
+                </MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ClearResult">
+                    Clear
+                </MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/payment"
+                           Disabled="@IsProceedDisabled">
+                    Proceed to Payment
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        @if (_verifyResult is not null)
+        {
+            <MudPaper Class="pa-4 mb-3" Elevation="2" Style="@GetResultCardStyle()">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@GetStatusIcon()" Color="@GetStatusColor()" Class="mr-2" />
+                    @_verifyResult.Status
+                </MudText>
+                @if (_verifyResult.Reason is not null)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Reason: @_verifyResult.Reason</MudText>
+                }
+                @if (_verifyResult.VoucherInfo is not null)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <BodyContent>
+                            <MudTr>
+                                <MudTd>Brand</MudTd>
+                                <MudTd><strong>@_verifyResult.VoucherInfo.BrandName</strong></MudTd>
+                            </MudTr>
+                            <MudTr>
+                                <MudTd>Serial No</MudTd>
+                                <MudTd><strong>@_verifyResult.VoucherInfo.SerialNo</strong></MudTd>
+                            </MudTr>
+                            <MudTr>
+                                <MudTd>Face Value</MudTd>
+                                <MudTd><strong>@_verifyResult.VoucherInfo.FaceValue.ToString("N0") VND</strong></MudTd>
+                            </MudTr>
+                            <MudTr>
+                                <MudTd>Type</MudTd>
+                                <MudTd>@_verifyResult.VoucherInfo.ValueType</MudTd>
+                            </MudTr>
+                            <MudTr>
+                                <MudTd>Expiry</MudTd>
+                                <MudTd>@_verifyResult.VoucherInfo.ExpiryDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+                            </MudTr>
+                        </BodyContent>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+        }
+
+        @* ── Shift summary ── *@
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">
+                Shift Summary (@Auth.CurrentShift!.Transactions.Count transactions)
+            </MudText>
+            @if (Auth.CurrentShift.Transactions.Count > 0)
+            {
+                <MudText Typo="Typo.body2">
+                    Total redeemed: <strong>@Auth.CurrentShift.Transactions
+                        .Where(t => t.Status == "Committed")
+                        .Sum(t => t.AmountUsed).ToString("N0") VND</strong>
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Rolled back: <strong>@Auth.CurrentShift.Transactions
+                        .Count(t => t.Status == "RolledBack")</strong>
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No transactions this shift.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+}
+
+@code {
+    [Inject] private PosAuthService Auth { get; set; } = default!;
+    [Inject] private PosApiClient PosApi { get; set; } = default!;
+    [Inject] private ProvisioningService Provisioning { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string _voucherCode = string.Empty;
+    private string? _error;
+    private bool _loading;
+    private PosVerifyResponse? _verifyResult;
+
+    private bool IsVerifyDisabled => _loading || string.IsNullOrWhiteSpace(_voucherCode);
+    private bool IsProceedDisabled => _verifyResult?.Status != "Valid";
+
+    protected override void OnInitialized()
+    {
+        if (!Auth.IsLoggedIn) Nav.NavigateTo("/login");
+    }
+
+    private async Task HandleQuery()
+    {
+        _error = null;
+        _verifyResult = null;
+        _loading = true;
+
+        try
+        {
+            var outlet = await Provisioning.GetOutletAsync();
+            if (outlet is null) { _error = "Terminal not provisioned."; return; }
+
+            _verifyResult = await PosApi.VerifyAsync(_voucherCode.Trim(), outlet.OutletId);
+            if (_verifyResult is null) _error = "No response from server.";
+        }
+        catch (Exception ex) { _error = $"Error: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private void ClearResult()
+    {
+        _voucherCode = string.Empty;
+        _verifyResult = null;
+        _error = null;
+    }
+
+    private string GetResultCardStyle() => _verifyResult?.Status switch
+    {
+        "Valid" => "border-left: 4px solid #4caf50;",
+        "Invalid" => "border-left: 4px solid #f44336;",
+        _ => ""
+    };
+
+    private string GetStatusIcon() => _verifyResult?.Status switch
+    {
+        "Valid" => Icons.Material.Filled.CheckCircle,
+        "Invalid" => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.Help
+    };
+
+    private Color GetStatusColor() => _verifyResult?.Status switch
+    {
+        "Valid" => Color.Success,
+        "Invalid" => Color.Error,
+        _ => Color.Default
+    };
+}

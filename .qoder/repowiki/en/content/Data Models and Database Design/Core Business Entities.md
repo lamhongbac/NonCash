@@ -7,22 +7,26 @@
 - [Brand.cs](file://src/NonCash.Core/Entities/Brand.cs)
 - [WelcomeGrantPolicy.cs](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs)
 - [CreditBatch.cs](file://src/NonCash.Core/Entities/CreditBatch.cs)
+- [CreditConsumption.cs](file://src/NonCash.Core/Entities/CreditConsumption.cs)
+- [VoucherDistributionBatch.cs](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs)
+- [VoucherPlanHeader.cs](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs)
 - [CreditConfig.cs](file://src/NonCash.Core/Configuration/CreditConfig.cs)
 - [IWelcomePolicyService.cs](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs)
+- [INotificationService.cs](file://src/NonCash.Core/Interfaces/INotificationService.cs)
 - [WelcomePolicyService.cs](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs)
+- [VoucherDistributionBatchConfiguration.cs](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs)
+- [20260905085731_AddVoucherDistributionBatches.cs](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs)
 - [migration-split-welcome-policy.sql](file://tools/migration-split-welcome-policy.sql)
-- [20260814050918_SplitWelcomePolicy.cs](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs)
 - [BaseEntity.cs](file://src/NonCash.Core/Entities/Base/BaseEntity.cs)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added new WelcomeGrantPolicy entity for business-scoped welcome credit policies
-- Updated CreditBatch entity with welcome_policy_id foreign key relationship
-- Enhanced Business entity with comprehensive tenant management capabilities
-- Introduced time-based policy activation system with effective date ranges
-- Migrated from brand-scoped to business-scoped welcome credit policies
-- Added comprehensive policy resolution service with configuration fallback
+- Added new VoucherDistributionBatch entity for batch distribution operation tracking with recipient counts, distributed amounts, and detailed skip reasons stored as JSON
+- Enhanced CreditConsumption entity with plan_id and quantity columns for plan-level credit consumption tracking
+- Updated entity relationships to support batch distribution workflows and plan-level credit charges
+- Added comprehensive audit trail capabilities for voucher distribution operations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -37,16 +41,15 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document defines the core business entities that underpin the NonCash platform's enhanced voucher lifecycle and tenant-aware operations. The platform now features an improved production planning model with detailed approval workflows, comprehensive member-based voucher management, and sophisticated welcome credit policy management. The core entities include:
+This document defines the core business entities that underpin the NonCash platform's enhanced voucher lifecycle and tenant-aware operations. The platform now features an improved production planning model with detailed approval workflows, comprehensive member-based voucher management, sophisticated welcome credit policy management, and advanced batch distribution tracking. The core entities include:
 
 - **Business** (Multi-tenant organization)
 - **Brand** (Organization within a business)
+- **VoucherPlanHeader** (Campaign master)
+- **VoucherDistributionBatch** (Batch distribution operations)
+- **CreditConsumption** (Credit usage tracking with plan-level support)
 - **WelcomeGrantPolicy** (Business-scoped welcome credit policies)
 - **CreditBatch** (Prepaid credit batches with policy tracking)
-- **ProductionPlan** (Enhanced Production Planning)
-- **PlanDetail** (Individual Voucher Records)
-- **ApprovalTransaction** (Approval workflow tracking)
-- **UsageTransaction** (POS redemption tracking)
 - **Outlet** (POS locations)
 - **UserAccount** (back-office users)
 - **Customer** (end-users)
@@ -61,8 +64,9 @@ The enhanced data model and business context are documented across multiple file
 - **src/NonCash.Core/Configuration/**: Configuration classes including CreditConfig
 - **src/NonCash.Core/Interfaces/**: Service interfaces including IWelcomePolicyService
 - **src/NonCash.Infrastructure/Services/**: Service implementations including WelcomePolicyService
+- **src/NonCash.Infrastructure/Data/Configurations/**: Entity configurations including VoucherDistributionBatchConfiguration
+- **src/NonCash.Infrastructure/Migrations/**: Entity Framework migrations for new entities
 - **tools/**: Database migration scripts including welcome policy migration
-- **src/NonCash.Infrastructure/Migrations/**: Entity Framework migrations
 
 ```mermaid
 graph TB
@@ -71,24 +75,37 @@ BE["Business.cs"]
 BR["Brand.cs"]
 WGP["WelcomeGrantPolicy.cs"]
 CB["CreditBatch.cs"]
-CC["CreditConfig.cs"]
+CC["CreditConsumption.cs"]
+VDB["VoucherDistributionBatch.cs"]
+VPH["VoucherPlanHeader.cs"]
+CCFG["CreditConfig.cs"]
 IWS["IWelcomePolicyService.cs"]
 WPS["WelcomePolicyService.cs"]
-MIG["migration-split-welcome-policy.sql"]
+VDBC["VoucherDistributionBatchConfiguration.cs"]
+MIG1["20260905085731_AddVoucherDistributionBatches.cs"]
+MIG2["20260905042430_AddCreditConsumptionPlanCharge.cs"]
 BASE["BaseEntity.cs"]
 DM --- BE
 DM --- BR
 DM --- WGP
 DM --- CB
+DM --- CC
+DM --- VDB
+DM --- VPH
 BE --- BASE
 BR --- BASE
 WGP --- BASE
 CB --- BASE
-WGP --- CC
+CC --- BASE
+VDB --- BASE
+VPH --- BASE
+WGP --- CCFG
 IWS --- WGP
 WPS --- WGP
-WPS --- CC
-MIG --- WGP
+WPS --- CCFG
+VDBC --- VDB
+MIG1 --- VDB
+MIG2 --- CC
 ```
 
 **Diagram sources**
@@ -97,10 +114,15 @@ MIG --- WGP
 - [Brand.cs:1-19](file://src/NonCash.Core/Entities/Brand.cs#L1-L19)
 - [WelcomeGrantPolicy.cs:1-37](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L37)
 - [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
 - [CreditConfig.cs:1-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L1-L35)
 - [IWelcomePolicyService.cs:1-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L1-L37)
 - [WelcomePolicyService.cs:1-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L75)
-- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
+- [VoucherDistributionBatchConfiguration.cs:10-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L10-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:9-116](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L9-L116)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:9-123](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L9-L123)
 
 **Section sources**
 - [data-models.md:1-113](file://docs/data-models.md#L1-L113)
@@ -108,61 +130,128 @@ MIG --- WGP
 - [Brand.cs:1-19](file://src/NonCash.Core/Entities/Brand.cs#L1-L19)
 - [WelcomeGrantPolicy.cs:1-37](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L1-L37)
 - [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
 - [CreditConfig.cs:1-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L1-L35)
 - [IWelcomePolicyService.cs:1-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L1-L37)
 - [WelcomePolicyService.cs:1-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L1-L75)
-- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
+- [VoucherDistributionBatchConfiguration.cs:10-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L10-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:9-116](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L9-L116)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:9-123](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L9-L123)
 
 ## Core Components
 This section summarizes each entity's purpose, attributes, and constraints as defined in the enhanced repository materials.
 
-### Welcome Grant Policy System
+### Batch Distribution Tracking System
 
-**WelcomeGrantPolicy** (Business-Scoped Welcome Credit Policies)
-- **Purpose**: Versioned, time-bound welcome-grant policy attached to a Business for managing welcome credits for new brands
+**VoucherDistributionBatch** (Batch Distribution Operations)
+- **Purpose**: Captures every batch distribution operation with comprehensive audit trail including recipient counts, distributed amounts, and detailed skip reasons
 - **Primary Key**: Id (GUID)
-- **Foreign Key**: BusinessId (Business)
-- **Attributes and Types**: Name (String), BusinessId (GUID), WelcomeCredits (Integer), WelcomeCreditExpiryMonths (Integer?), EffectiveFrom (DateTime), EffectiveTo (DateTime?), IsActive (Boolean), CreatedBy (GUID?)
+- **Foreign Keys**: PlanId (VoucherPlanHeader), BrandId (Brand), CreatedById (UserAccount)
+- **Attributes and Types**: 
+  - PlanId (GUID) - Reference to the voucher plan being distributed
+  - BrandId (GUID) - Brand responsible for the distribution
+  - CreatedById (GUID?) - Staff user who executed the run, null for API-triggered runs
+  - NotifyChannel (NotificationChannel) - Notification channel requested for this run
+  - RecipientCount (Integer) - Number of valid (eligible) recipients attempted
+  - DistributedCount (Integer) - Vouchers actually assigned in this run
+  - SkippedCount (Integer) - Recipients skipped before distribution
+  - SkippedRecords (List<BatchSkippedRecipient>) - Detailed skip reasons stored as JSON
+- **Navigation Properties**: Plan (VoucherPlanHeader), CreatedBy (UserAccount)
 - **Business Constraints**:
-  - Time-based activation with EffectiveFrom and EffectiveTo date ranges
-  - Business-scoped policies apply uniformly to all brands under a business
-  - Most recent active policy takes precedence based on EffectiveFrom ordering
-  - Fallback to CreditConfig defaults when no matching policy exists
-  - Supports versioning through multiple policy records per business
+  - One row per batch distribution run for complete auditability
+  - Individual voucher rows link back via VoucherDistribution.BatchId
+  - Single-voucher flows (sale, transfer) do NOT create batch rows
+  - JSON storage of skip records provides flexible failure tracking
 
-**Updated** New entity introduced to replace brand-scoped welcome credits with business-scoped approach
+**New Entity** Added to capture comprehensive batch distribution operations with detailed audit trail
 
 Validation Rules:
-- BusinessId must reference an existing Business
-- WelcomeCredits must be non-negative integer
-- WelcomeCreditExpiryMonths must be positive or null (never expires)
-- EffectiveFrom must be before EffectiveTo (when both provided)
-- IsActive controls policy availability
-- EffectiveFrom defaults to current UTC time
+- PlanId must reference an existing VoucherPlanHeader
+- BrandId must reference an existing Brand
+- CreatedById must reference an existing UserAccount (when provided)
+- RecipientCount ≥ 0
+- DistributedCount ≤ RecipientCount
+- SkippedCount = RecipientCount - DistributedCount
+- NotifyChannel must be valid enum value (Email, Zalo, Both, None)
 
 Sample Data Example:
 - Id: [GUID]
-- Name: "[Policy Name]"
-- BusinessId: [GUID]
-- WelcomeCredits: [Integer]
-- WelcomeCreditExpiryMonths: [Integer or null]
-- EffectiveFrom: [DateTime]
-- EffectiveTo: [DateTime or null]
-- IsActive: true or false
-- CreatedBy: [GUID or null]
+- PlanId: [GUID]
+- BrandId: [GUID]
+- CreatedById: [GUID or null]
+- NotifyChannel: Email or Zalo or Both or None
+- RecipientCount: [Integer]
+- DistributedCount: [Integer]
+- SkippedCount: [Integer]
+- SkippedRecords: [{"PhoneNumber": "[Phone]", "Reason": "[Skip reason]"}]
 
 **Section sources**
-- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [VoucherDistributionBatchConfiguration.cs:28-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L28-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:21-55](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L21-L55)
 
-**ResolvedWelcomePolicy** (Policy Resolution Result)
-- **Purpose**: Resolved welcome policy values after applying business policy → CreditConfig fallback logic
-- **Type**: Record with PolicyId, Name, WelcomeCredits, WelcomeCreditExpiryMonths
-- **Business Logic**: Represents the effective policy values for a business at a given time
+**BatchSkippedRecipient** (Skip Record Detail)
+- **Purpose**: Represents individual recipients skipped during batch distribution with specific failure reasons
+- **Attributes and Types**: PhoneNumber (String), Reason (String)
+- **Storage**: Serialized into VoucherDistributionBatch.SkippedRecords as JSON
+- **Use Cases**: Invalid phone numbers, blacklisted customers, brand-blocked recipients, etc.
 
-**New Type** Added to encapsulate resolved policy values for consumption
+**New Type** Added to provide detailed skip reason tracking for batch distributions
+
+Validation Rules:
+- PhoneNumber must be non-empty string
+- Reason must be descriptive skip reason (e.g., "Invalid phone", "Blacklisted", "Brand blocked")
+
+Sample Data Example:
+- PhoneNumber: "[Phone Number]"
+- Reason: "[Skip reason such as 'Invalid phone', 'Blacklisted', 'Brand blocked']"
 
 **Section sources**
-- [IWelcomePolicyService.cs:28-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L28-L37)
+- [VoucherDistributionBatch.cs:39-44](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L39-L44)
+
+### Enhanced Credit Consumption Tracking
+
+**CreditConsumption** (Credit Usage with Plan-Level Support)
+- **Purpose**: Comprehensive credit charge ledger supporting both per-voucher and plan-level consumption tracking
+- **Primary Key**: Id (GUID)
+- **Foreign Keys**: BatchId (CreditBatch), BrandId (Brand), VoucherDetailId (nullable), PlanId (nullable)
+- **Attributes and Types**: 
+  - BatchId (GUID?) - Source credit batch (null for plan-level charges)
+  - BrandId (GUID) - Brand consuming credits
+  - VoucherDetailId (GUID?) - Per-voucher charge reference (unique when set)
+  - PlanId (GUID?) - Plan-level approval charge reference (unique when set)
+  - Quantity (Integer) - Credits consumed: 1 for per-voucher, N for plan-level approval
+  - Reference (String?) - Context identifier (e.g., "plan-approval", "gift-sold", "complimentary-redeemed")
+- **Navigation Properties**: Batch (CreditBatch), Brand (Brand)
+- **Business Logic**:
+  - Two shapes: Per-voucher (VoucherDetailId set, Quantity=1) and Plan-level (PlanId set, Quantity=N)
+  - Unique constraints ensure one charge per voucher detail or per plan
+  - FIFO draw spans batches for plan-level charges; balance lives on batches
+
+**Updated** Enhanced with plan_id and quantity columns for plan-level credit consumption tracking
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- Either VoucherDetailId or PlanId must be set (mutually exclusive)
+- VoucherDetailId unique constraint when set
+- PlanId unique constraint when set
+- Quantity must be positive integer
+- BatchId must reference existing CreditBatch (when set)
+
+Sample Data Example:
+- Id: [GUID]
+- BatchId: [GUID or null]
+- BrandId: [GUID]
+- VoucherDetailId: [GUID or null]
+- PlanId: [GUID or null]
+- Quantity: [Integer - 1 for per-voucher, N for plan-level]
+- Reference: "[Context like 'plan-approval' or 'gift-sold']"
+
+**Section sources**
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:37-67](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L37-L67)
 
 ### Enhanced Business Management
 
@@ -225,6 +314,59 @@ Sample Data Example:
 
 **Section sources**
 - [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+
+### Campaign and Distribution Management
+
+**VoucherPlanHeader** (Campaign Master)
+- **Purpose**: Central hub for voucher campaign management with versioning, sponsorship, and display configuration
+- **Primary Key**: Id (GUID)
+- **Foreign Keys**: CreatorId (UserAccount), ApproverId (UserAccount), BrandId (Brand), SponsorBrandId (Brand), PreviousVersionId (VoucherPlanHeader)
+- **Attributes and Types**: 
+  - PlanDate (DateTime), CreatorId (GUID), ApproverId (GUID?)
+  - BrandId (GUID), VoucherType (Enum), ImageUrl/IconUrl (String?)
+  - ValueType (Enum), FaceValue/NetValue (Decimal)
+  - ExpiryDate/PublishDate/ValidFrom/ValidTo (DateTime?)
+  - TargetQuantity (Integer), Budget (Decimal), TargetDistributed/TargetUsed (Integer)
+  - ApprovalStatus (Enum), VersionNumber (Integer), PreviousVersionId (GUID?)
+  - SponsorBrandId (GUID?), CoverImageUrl/TermsAndConditions/BrandColor/DisplayName/ShortDescription/ValidDaysOfWeek (String?)
+  - Scope (VoucherScope) - Hierarchical applicability scope
+- **Navigation Properties**: Creator, Approver, Brand, SponsorBrand, PreviousVersion
+- **Business Constraints**:
+  - Versioning through PreviousVersionId and VersionNumber
+  - Cross-tenant sponsorship via SponsorBrandId
+  - Display configuration for customer-facing presentation
+  - Scope-based applicability control
+
+**Updated** Enhanced with comprehensive campaign management features and display configuration
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- FaceValue ≥ 0, NetValue ≥ 0
+- ExpiryDate ≥ PublishDate (when both provided)
+- ValidFrom ≤ ValidTo (when both provided)
+- TargetQuantity ≥ 0, Budget ≥ 0
+- ApprovalStatus must be Pending/Approved/Rejected
+
+Sample Data Example:
+- Id: [GUID]
+- PlanDate: [DateTime]
+- CreatorId: [GUID]
+- BrandId: [GUID]
+- VoucherType: Complimentary or Gift
+- ValueType: Value or Percentage
+- FaceValue: [Decimal]
+- NetValue: [Decimal]
+- ExpiryDate: [DateTime]
+- PublishDate: [DateTime]
+- ValidFrom: [DateTime or null]
+- ValidTo: [DateTime or null]
+- TargetQuantity: [Integer]
+- Budget: [Decimal]
+- ApprovalStatus: Pending or Approved or Rejected
+- VersionNumber: [Integer]
+
+**Section sources**
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
 
 ### Enhanced Credit Management
 
@@ -289,144 +431,6 @@ Sample Data Example:
 - [CreditConfig.cs:7-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L7-L35)
 
 ### Core Business Entities
-
-**ProductionPlan** (Enhanced Production Planning)
-- **Purpose**: Comprehensive voucher production planning with approval workflows and detailed campaign management
-- **Primary Key**: ID (GUID)
-- **Foreign Key**: BusinessId (Business)
-- **Attributes and Types**: PlanName (String), BusinessId (GUID), VoucherType (Enum), ImageUrl/IconUrl (String), TermsAndConditions (String), ValueType (Enum), FaceValue/NetValue/Price (Decimal), ExpiryDate/PublishDate/ValidFrom/ValidTo (DateTime?), AllowedLocations (String), PlannedQuantity (Integer), TotalBudget (Decimal), TargetDistributionQuantity/TargetUsageQuantity (Integer), ApprovalStatus (Enum)
-- **Business Constraints**:
-  - ApprovalStatus governs lifecycle transitions (Pending → Approved/Rejected)
-  - PublishDate controls availability; ExpiryDate enforces hard expiry
-  - Budget and quantity targets support financial planning
-  - Navigation properties link to PlanDetail and ApprovalTransaction collections
-
-**Updated** Enhanced from VoucherPlanHeader with comprehensive approval workflow and detailed operational fields
-
-Validation Rules:
-- BusinessId must reference an existing Business
-- FaceValue ≥ 0, NetValue ≥ 0, Price ≥ 0
-- ExpiryDate ≥ PublishDate (when both provided)
-- ValidFrom ≤ ValidTo (when both provided)
-- PlannedQuantity ≥ 0
-- TotalBudget ≥ 0
-- TargetDistributionQuantity ≥ 0
-- TargetUsageQuantity ≥ 0
-
-Sample Data Example:
-- ID: [GUID]
-- PlanName: "[Campaign Name]"
-- BusinessId: [GUID]
-- VoucherType: Complimentary or Gift
-- ValueType: Value or Percentage
-- FaceValue: [Decimal]
-- NetValue: [Decimal]
-- Price: [Decimal]
-- ExpiryDate: [DateTime or null]
-- PublishDate: [DateTime or null]
-- ValidFrom: [DateTime or null]
-- ValidTo: [DateTime or null]
-- AllowedLocations: "[JSON/CSV string]"
-- PlannedQuantity: [Integer]
-- TotalBudget: [Decimal]
-- TargetDistributionQuantity: [Integer]
-- TargetUsageQuantity: [Integer]
-- ApprovalStatus: Pending or Approved or Rejected
-
-**Section sources**
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-
-**PlanDetail** (Individual Voucher Records)
-- **Purpose**: Detailed individual voucher instance with comprehensive status tracking and member ownership
-- **Primary Key**: ID (GUID)
-- **Foreign Keys**: ProductionPlanId (ProductionPlan), MemberId (Member)
-- **Attributes and Types**: SerialNo (String), DynamicVoucherCode (String), MemberId (GUID?), Status (Enum), UsedDate (DateTime?)
-- **Business Constraints**:
-  - Status drives lifecycle (Pending → In-Use → Complete)
-  - MemberId links ownership to either Customer or Organization members
-  - DynamicVoucherCode enables secure redemption with flexible encoding
-
-**Updated** Enhanced from VoucherPlanDetail with improved status tracking and member ownership
-
-Validation Rules:
-- ProductionPlanId must reference an existing ProductionPlan
-- MemberId must reference an existing Member (when assigned)
-- Status must be Pending/In-Use/Complete
-- UsedDate must be present when Status is Complete
-- SerialNo must be unique within ProductionPlan scope
-
-Sample Data Example:
-- ID: [GUID]
-- ProductionPlanId: [GUID]
-- SerialNo: "[Unique String]"
-- DynamicVoucherCode: "[Dynamic Code]"
-- MemberId: [GUID or null]
-- Status: Pending or In-Use or Complete
-- UsedDate: [DateTime or null]
-
-**Section sources**
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-
-**ApprovalTransaction** (Approval Workflow Tracking)
-- **Purpose**: Detailed audit trail of approval decisions and reviewer actions
-- **Primary Key**: ID (GUID)
-- **Foreign Keys**: ProductionPlanId (ProductionPlan), ReviewerId (UserAccount)
-- **Attributes and Types**: ReviewerId (GUID), ReviewDate (DateTime), ReviewNotes (String), Status (Enum), PublishDate (DateTime?)
-- **Business Constraints**:
-  - Maintains historical record of all approval decisions
-  - Supports traceability for rejected plans requiring resubmission
-  - Enables audit trail for compliance and reporting
-
-**New Entity** Added to track detailed approval workflows and decision history
-
-Validation Rules:
-- ProductionPlanId must reference an existing ProductionPlan
-- ReviewerId must reference an existing UserAccount
-- ReviewDate defaults to current UTC time
-- Status must be Pending/Approved/Rejected
-- PublishDate can only be set for Approved statuses
-
-Sample Data Example:
-- ID: [GUID]
-- ProductionPlanId: [GUID]
-- ReviewerId: [GUID]
-- ReviewDate: [DateTime]
-- ReviewNotes: "[Reviewer comments]"
-- Status: Pending or Approved or Rejected
-- PublishDate: [DateTime or null]
-
-**Section sources**
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-
-**UsageTransaction** (POS Redemption Tracking)
-- **Purpose**: Comprehensive POS transaction logging for redemption monitoring
-- **Primary Key**: ID (GUID)
-- **Foreign Keys**: PlanDetailId (PlanDetail), PosSystemId (Outlet)
-- **Attributes and Types**: PlanDetailId (GUID), PosSystemId (GUID), UsedAmount (Decimal), TransactionDate (DateTime), PosReferenceNumber (String)
-- **Business Constraints**:
-  - Links POS transactions to specific voucher instances
-  - Supports reconciliation and audit requirements
-  - Enables real-time redemption monitoring
-
-**New Entity** Added to track detailed POS redemption activities
-
-Validation Rules:
-- PlanDetailId must reference an existing PlanDetail
-- PosSystemId must reference an existing Outlet
-- UsedAmount must be positive and ≤ PlanDetail.FaceValue
-- TransactionDate defaults to current UTC time
-- PosReferenceNumber must be unique per transaction
-
-Sample Data Example:
-- ID: [GUID]
-- PlanDetailId: [GUID]
-- PosSystemId: [GUID]
-- UsedAmount: [Decimal]
-- TransactionDate: [DateTime]
-- PosReferenceNumber: "[POS Reference]"
-
-**Section sources**
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
 
 **Outlet** (Point of Sale / Store)
 - **Purpose**: Physical or digital store under a Business eligible to accept vouchers
@@ -508,7 +512,7 @@ Sample Data Example:
 - [data-models.md:91-97](file://docs/data-models.md#L91-L97)
 
 ## Architecture Overview
-The enhanced entities form a comprehensive domain model supporting advanced multi-tenancy, detailed approval workflows, comprehensive voucher lifecycle management, and sophisticated welcome credit policy management.
+The enhanced entities form a comprehensive domain model supporting advanced multi-tenancy, detailed approval workflows, comprehensive voucher lifecycle management, sophisticated welcome credit policy management, and advanced batch distribution tracking.
 
 ```mermaid
 erDiagram
@@ -555,54 +559,56 @@ string Reference
 guid AdjustmentRequestId
 guid CreatedBy
 }
-PRODUCTIONPLAN {
+CREDITCONSUMPTION {
 guid ID PK
-string PlanName
-guid BusinessId FK
+guid BatchId FK
+guid BrandId FK
+guid VoucherDetailId FK
+guid PlanId FK
+int Quantity
+string Reference
+}
+VOUCHERPLANHEADER {
+guid ID PK
+datetime PlanDate
+guid CreatorId FK
+guid ApproverId FK
+guid BrandId FK
 enum VoucherType
 string ImageUrl
 string IconUrl
-string TermsAndConditions
 enum ValueType
 decimal FaceValue
 decimal NetValue
-decimal Price
 datetime ExpiryDate
 datetime PublishDate
 datetime ValidFrom
 datetime ValidTo
-string AllowedLocations
-int PlannedQuantity
-decimal TotalBudget
-int TargetDistributionQuantity
-int TargetUsageQuantity
+int TargetQuantity
+decimal Budget
+int TargetDistributed
+int TargetUsed
 enum ApprovalStatus
+guid PreviousVersionId
+int VersionNumber
+guid SponsorBrandId
+string CoverImageUrl
+string TermsAndConditions
+string BrandColor
+string DisplayName
+string ShortDescription
+string ValidDaysOfWeek
 }
-PLANDetail {
+VOUCHERDISTRIBUTIONBATCH {
 guid ID PK
-guid ProductionPlanId FK
-string SerialNo
-string DynamicVoucherCode
-guid MemberId FK
-enum Status
-datetime UsedDate
-}
-APPROVALTRANSACTION {
-guid ID PK
-guid ProductionPlanId FK
-guid ReviewerId FK
-datetime ReviewDate
-string ReviewNotes
-enum Status
-datetime PublishDate
-}
-USAGETRANSACTION {
-guid ID PK
-guid PlanDetailId FK
-guid PosSystemId FK
-decimal UsedAmount
-datetime TransactionDate
-string PosReferenceNumber
+guid PlanId FK
+guid BrandId FK
+guid CreatedById FK
+enum NotifyChannel
+int RecipientCount
+int DistributedCount
+int SkippedCount
+json SkippedRecords
 }
 OUTLET {
 guid ID PK
@@ -629,16 +635,14 @@ enum Status
 }
 BUSINESS ||--o{ BRAND : "owns"
 BUSINESS ||--o{ WELCOMEGRANTPOLICY : "has_policies"
-BUSINESS ||--o{ PRODUCTIONPLAN : "creates"
 BUSINESS ||--o{ OUTLET : "owns"
 BUSINESS ||--o{ USERACCOUNT : "employs"
 BRAND ||--o{ CREDITBATCH : "receives"
-BRAND ||--o{ PLANDetail : "owns_vouchers"
+BRAND ||--o{ CREDITCONSUMPTION : "consumes"
+BRAND ||--o{ VOUCHERDISTRIBUTIONBATCH : "distributes"
 WELCOMEGRANTPOLICY ||--o{ CREDITBATCH : "grants_welcome"
-PRODUCTIONPLAN ||--o{ PLANDetail : "generates"
-PRODUCTIONPLAN ||--o{ APPROVALTRANSACTION : "approved_by"
-PLANDetail ||--o{ USAGETRANSACTION : "redeemed_in"
-OUTLET ||--o{ USAGETRANSACTION : "accepts"
+VOUCHERPLANHEADER ||--o{ VOUCHERDISTRIBUTIONBATCH : "distributed_by"
+USERACCOUNT ||--o{ VOUCHERDISTRIBUTIONBATCH : "creates"
 ```
 
 **Diagram sources**
@@ -646,76 +650,119 @@ OUTLET ||--o{ USAGETRANSACTION : "accepts"
 - [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
 - [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
 - [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
 
 ## Detailed Component Analysis
 
-### Welcome Grant Policy System
+### Batch Distribution Tracking System
 
-#### WelcomeGrantPolicy (Business-Scoped Welcome Credit Policies)
-- **Purpose**: Versioned, time-bound welcome-grant policy attached to a Business for managing welcome credits for new brands
+#### VoucherDistributionBatch (Batch Distribution Operations)
+- **Purpose**: Captures every batch distribution operation with comprehensive audit trail including recipient counts, distributed amounts, and detailed skip reasons
 - **Key Fields**:
   - Id (Primary Key)
-  - BusinessId (Foreign Key to Business)
-  - Name (Policy description)
-  - WelcomeCredits (Free credits granted to each new brand)
-  - WelcomeCreditExpiryMonths (Months until welcome batch expires)
-  - EffectiveFrom/EffectiveTo (Time-based activation)
-  - IsActive (Policy availability flag)
-  - CreatedBy (Admin who created the policy)
+  - PlanId (Foreign Key to VoucherPlanHeader)
+  - BrandId (Foreign Key to Brand)
+  - CreatedById (Foreign Key to UserAccount, nullable)
+  - NotifyChannel (NotificationChannel enum)
+  - RecipientCount (Integer) - Number of valid recipients attempted
+  - DistributedCount (Integer) - Vouchers actually assigned
+  - SkippedCount (Integer) - Recipients skipped before distribution
+  - SkippedRecords (List<BatchSkippedRecipient>) - JSON array of skip details
+- **Navigation Properties**: Plan (VoucherPlanHeader), CreatedBy (UserAccount)
 - **Business Logic**:
-  - Business-scoped policies apply uniformly to all brands under a business
-  - Time-based activation with effective date ranges
-  - Most recent active policy takes precedence based on EffectiveFrom ordering
-  - Fallback to CreditConfig defaults when no matching policy exists
-  - Supports versioning through multiple policy records per business
+  - One row per batch distribution run for complete auditability
+  - Individual voucher rows link back via VoucherDistribution.BatchId
+  - JSON storage of skip records provides flexible failure tracking
+  - Supports notification channel selection for batch completion alerts
 
-**Updated** New entity introduced to replace brand-scoped welcome credits with business-scoped approach
+**New Entity** Added to capture comprehensive batch distribution operations with detailed audit trail
 
 Validation Rules:
-- BusinessId must reference an existing Business
-- WelcomeCredits must be non-negative integer
-- WelcomeCreditExpiryMonths must be positive or null (never expires)
-- EffectiveFrom must be before EffectiveTo (when both provided)
-- IsActive controls policy availability
-- EffectiveFrom defaults to current UTC time
+- PlanId must reference an existing VoucherPlanHeader
+- BrandId must reference an existing Brand
+- CreatedById must reference an existing UserAccount (when provided)
+- RecipientCount ≥ 0
+- DistributedCount ≤ RecipientCount
+- SkippedCount = RecipientCount - DistributedCount
+- NotifyChannel must be valid enum value (Email, Zalo, Both, None)
 
 Sample Data Example:
 - Id: [GUID]
-- Name: "[Policy Name]"
-- BusinessId: [GUID]
-- WelcomeCredits: [Integer]
-- WelcomeCreditExpiryMonths: [Integer or null]
-- EffectiveFrom: [DateTime]
-- EffectiveTo: [DateTime or null]
-- IsActive: true or false
-- CreatedBy: [GUID or null]
+- PlanId: [GUID]
+- BrandId: [GUID]
+- CreatedById: [GUID or null]
+- NotifyChannel: Email or Zalo or Both or None
+- RecipientCount: [Integer]
+- DistributedCount: [Integer]
+- SkippedCount: [Integer]
+- SkippedRecords: [{"PhoneNumber": "[Phone]", "Reason": "[Skip reason]"}]
 
 **Section sources**
-- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [VoucherDistributionBatchConfiguration.cs:28-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L28-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:21-55](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L21-L55)
 
-#### WelcomePolicyService (Policy Resolution and Management)
-- **Purpose**: Service layer for welcome policy management and resolution logic
-- **Methods**: ResolveForBusinessAsync, GetPoliciesAsync, GetPolicyAsync, CreatePolicyAsync, UpdatePolicyAsync, DeactivatePolicyAsync
-- **Business Logic**:
-  - Resolves most recent active, in-effect policy for a business
-  - Falls back to CreditConfig defaults when no DB policy matches
-  - Supports CRUD operations for policy management
-  - Handles time-based policy activation and deactivation
+#### BatchSkippedRecipient (Skip Record Detail)
+- **Purpose**: Represents individual recipients skipped during batch distribution with specific failure reasons
+- **Key Fields**: PhoneNumber (String), Reason (String)
+- **Storage**: Serialized into VoucherDistributionBatch.SkippedRecords as JSON
+- **Use Cases**: Invalid phone numbers, blacklisted customers, brand-blocked recipients, etc.
 
-**New Service** Added to manage welcome policy lifecycle and resolution
+**New Type** Added to provide detailed skip reason tracking for batch distributions
 
 Validation Rules:
-- Policy resolution follows business policy → CreditConfig fallback pattern
-- Time-based queries use EffectiveFrom and EffectiveTo for filtering
-- Most recent policy wins based on EffectiveFrom ordering
+- PhoneNumber must be non-empty string
+- Reason must be descriptive skip reason (e.g., "Invalid phone", "Blacklisted", "Brand blocked")
+
+Sample Data Example:
+- PhoneNumber: "[Phone Number]"
+- Reason: "[Skip reason such as 'Invalid phone', 'Blacklisted', 'Brand blocked']"
 
 **Section sources**
-- [IWelcomePolicyService.cs:12-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L12-L37)
-- [WelcomePolicyService.cs:14-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L14-L75)
+- [VoucherDistributionBatch.cs:39-44](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L39-L44)
+
+### Enhanced Credit Consumption Tracking
+
+#### CreditConsumption (Credit Usage with Plan-Level Support)
+- **Purpose**: Comprehensive credit charge ledger supporting both per-voucher and plan-level consumption tracking
+- **Key Fields**:
+  - Id (Primary Key)
+  - BatchId (Foreign Key to CreditBatch, nullable)
+  - BrandId (Foreign Key to Brand)
+  - VoucherDetailId (Foreign Key to VoucherPlanDetail, nullable, unique when set)
+  - PlanId (Foreign Key to VoucherPlanHeader, nullable, unique when set)
+  - Quantity (Integer) - Credits consumed: 1 for per-voucher, N for plan-level approval
+  - Reference (String?) - Context identifier (e.g., "plan-approval", "gift-sold", "complimentary-redeemed")
+- **Navigation Properties**: Batch (CreditBatch), Brand (Brand)
+- **Business Logic**:
+  - Two shapes: Per-voucher (VoucherDetailId set, Quantity=1) and Plan-level (PlanId set, Quantity=N)
+  - Unique constraints ensure one charge per voucher detail or per plan
+  - FIFO draw spans batches for plan-level charges; balance lives on batches
+
+**Updated** Enhanced with plan_id and quantity columns for plan-level credit consumption tracking
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- Either VoucherDetailId or PlanId must be set (mutually exclusive)
+- VoucherDetailId unique constraint when set
+- PlanId unique constraint when set
+- Quantity must be positive integer
+- BatchId must reference existing CreditBatch (when set)
+
+Sample Data Example:
+- Id: [GUID]
+- BatchId: [GUID or null]
+- BrandId: [GUID]
+- VoucherDetailId: [GUID or null]
+- PlanId: [GUID or null]
+- Quantity: [Integer - 1 for per-voucher, N for plan-level]
+- Reference: "[Context like 'plan-approval' or 'gift-sold']"
+
+**Section sources**
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:37-67](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L37-L67)
 
 ### Enhanced Business Management
 
@@ -783,6 +830,58 @@ Sample Data Example:
 
 **Section sources**
 - [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
+
+### Campaign and Distribution Management
+
+#### VoucherPlanHeader (Campaign Master)
+- **Purpose**: Central hub for voucher campaign management with versioning, sponsorship, and display configuration
+- **Key Fields**:
+  - Id (Primary Key)
+  - PlanDate (DateTime), CreatorId (GUID), ApproverId (GUID?)
+  - BrandId (GUID), VoucherType (Enum), ImageUrl/IconUrl (String?)
+  - ValueType (Enum), FaceValue/NetValue (Decimal)
+  - ExpiryDate/PublishDate/ValidFrom/ValidTo (DateTime?)
+  - TargetQuantity (Integer), Budget (Decimal), TargetDistributed/TargetUsed (Integer)
+  - ApprovalStatus (Enum), VersionNumber (Integer), PreviousVersionId (GUID?)
+  - SponsorBrandId (GUID?), CoverImageUrl/TermsAndConditions/BrandColor/DisplayName/ShortDescription/ValidDaysOfWeek (String?)
+  - Scope (VoucherScope) - Hierarchical applicability scope
+- **Navigation Properties**: Creator, Approver, Brand, SponsorBrand, PreviousVersion
+- **Business Logic**:
+  - Versioning through PreviousVersionId and VersionNumber
+  - Cross-tenant sponsorship via SponsorBrandId
+  - Display configuration for customer-facing presentation
+  - Scope-based applicability control
+
+**Updated** Enhanced with comprehensive campaign management features and display configuration
+
+Validation Rules:
+- BrandId must reference an existing Brand
+- FaceValue ≥ 0, NetValue ≥ 0
+- ExpiryDate ≥ PublishDate (when both provided)
+- ValidFrom ≤ ValidTo (when both provided)
+- TargetQuantity ≥ 0, Budget ≥ 0
+- ApprovalStatus must be Pending/Approved/Rejected
+
+Sample Data Example:
+- Id: [GUID]
+- PlanDate: [DateTime]
+- CreatorId: [GUID]
+- BrandId: [GUID]
+- VoucherType: Complimentary or Gift
+- ValueType: Value or Percentage
+- FaceValue: [Decimal]
+- NetValue: [Decimal]
+- ExpiryDate: [DateTime]
+- PublishDate: [DateTime]
+- ValidFrom: [DateTime or null]
+- ValidTo: [DateTime or null]
+- TargetQuantity: [Integer]
+- Budget: [Decimal]
+- ApprovalStatus: Pending or Approved or Rejected
+- VersionNumber: [Integer]
+
+**Section sources**
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
 
 ### Enhanced Credit Management
 
@@ -852,171 +951,6 @@ Sample Data Example:
 - [CreditConfig.cs:7-35](file://src/NonCash.Core/Configuration/CreditConfig.cs#L7-L35)
 
 ### Core Business Entities
-
-#### ProductionPlan (Enhanced Production Planning)
-- **Purpose**: Comprehensive voucher production planning encompassing strategy, approval workflows, and operational details
-- **Key Fields**:
-  - ID (Primary Key)
-  - BusinessId (Foreign Key to Business)
-  - PlanName (Unique campaign identifier)
-  - VoucherType (Enum: Complimentary, Gift)
-  - ValueType (Enum: Value, Percentage)
-  - FaceValue/NetValue/Price (Decimal values)
-  - ExpiryDate/PublishDate/ValidFrom/ValidTo (DateTime ranges)
-  - AllowedLocations (JSON/string containing outlet restrictions)
-  - PlannedQuantity/TotalBudget (Integers/Decimals)
-  - TargetDistributionQuantity/TargetUsageQuantity (Integers)
-  - ApprovalStatus (Enum: Pending, Approved, Rejected)
-- **Business Logic**:
-  - Central hub for voucher campaign management
-  - ApprovalStatus governs plan progression and distribution eligibility
-  - Time-based constraints control campaign availability and validity
-  - Financial targets support budget planning and ROI tracking
-  - Navigation properties enable comprehensive reporting and audit trails
-
-**Updated** Enhanced from VoucherPlanHeader with comprehensive approval workflow and detailed operational fields
-
-Validation Rules:
-- BusinessId must reference an existing Business
-- FaceValue ≥ 0, NetValue ≥ 0, Price ≥ 0
-- ExpiryDate ≥ PublishDate (when both provided)
-- ValidFrom ≤ ValidTo (when both provided)
-- PlannedQuantity ≥ 0
-- TotalBudget ≥ 0
-- TargetDistributionQuantity ≥ 0
-- TargetUsageQuantity ≥ 0
-
-Sample Data Example:
-- ID: [GUID]
-- PlanName: "[Campaign Name]"
-- BusinessId: [GUID]
-- VoucherType: Complimentary or Gift
-- ValueType: Value or Percentage
-- FaceValue: [Decimal]
-- NetValue: [Decimal]
-- Price: [Decimal]
-- ExpiryDate: [DateTime or null]
-- PublishDate: [DateTime or null]
-- ValidFrom: [DateTime or null]
-- ValidTo: [DateTime or null]
-- AllowedLocations: "[JSON/CSV string]"
-- PlannedQuantity: [Integer]
-- TotalBudget: [Decimal]
-- TargetDistributionQuantity: [Integer]
-- TargetUsageQuantity: [Integer]
-- ApprovalStatus: Pending or Approved or Rejected
-
-**Section sources**
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-
-#### PlanDetail (Individual Voucher Records)
-- **Purpose**: Detailed individual voucher instance with comprehensive status tracking and member ownership
-- **Key Fields**:
-  - ID (Primary Key)
-  - ProductionPlanId (Foreign Key to ProductionPlan)
-  - SerialNo (Unique external identifier)
-  - DynamicVoucherCode (Secure dynamic code for redemption)
-  - MemberId (Foreign Key to Member, nullable)
-  - Status (Enum: Pending, In-Use, Complete)
-  - UsedDate (DateTime, nullable)
-- **Business Logic**:
-  - Lifecycle: Pending → In-Use → Complete based on Status
-  - MemberId assignment enables ownership tracking for both customers and organizations
-  - DynamicVoucherCode supports secure, time-limited redemption codes
-  - Status changes trigger business rule validations and notifications
-
-**Updated** Enhanced from VoucherPlanDetail with improved status tracking and member ownership
-
-Validation Rules:
-- ProductionPlanId must reference an existing ProductionPlan
-- MemberId must reference an existing Member (when assigned)
-- Status must be Pending/In-Use/Complete
-- UsedDate must be present when Status is Complete
-- SerialNo must be unique within ProductionPlan scope
-
-Sample Data Example:
-- ID: [GUID]
-- ProductionPlanId: [GUID]
-- SerialNo: "[Unique String]"
-- DynamicVoucherCode: "[Dynamic Code]"
-- MemberId: [GUID or null]
-- Status: Pending or In-Use or Complete
-- UsedDate: [DateTime or null]
-
-**Section sources**
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-
-#### ApprovalTransaction (Approval Workflow Tracking)
-- **Purpose**: Comprehensive audit trail of approval decisions and reviewer actions
-- **Key Fields**:
-  - ID (Primary Key)
-  - ProductionPlanId (Foreign Key to ProductionPlan)
-  - ReviewerId (GUID)
-  - ReviewDate (DateTime)
-  - ReviewNotes (String)
-  - Status (Enum: Pending, Approved, Rejected)
-  - PublishDate (DateTime, nullable for adjustments)
-- **Business Logic**:
-  - Maintains immutable approval history for compliance
-  - Supports traceability for rejected plans requiring resubmission
-  - Enables audit trail for regulatory and internal reviews
-  - Allows publish date adjustments for approved plans
-
-**New Entity** Added to track detailed approval workflows and decision history
-
-Validation Rules:
-- ProductionPlanId must reference an existing ProductionPlan
-- ReviewerId must reference an existing UserAccount
-- ReviewDate defaults to current UTC time
-- Status must be Pending/Approved/Rejected
-- PublishDate can only be set for Approved statuses
-
-Sample Data Example:
-- ID: [GUID]
-- ProductionPlanId: [GUID]
-- ReviewerId: [GUID]
-- ReviewDate: [DateTime]
-- ReviewNotes: "[Reviewer comments]"
-- Status: Pending or Approved or Rejected
-- PublishDate: [DateTime or null]
-
-**Section sources**
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-
-#### UsageTransaction (POS Redemption Tracking)
-- **Purpose**: Detailed POS transaction logging for comprehensive redemption monitoring
-- **Key Fields**:
-  - ID (Primary Key)
-  - PlanDetailId (Foreign Key to PlanDetail)
-  - PosSystemId (GUID)
-  - UsedAmount (Decimal)
-  - TransactionDate (DateTime)
-  - PosReferenceNumber (String)
-- **Business Logic**:
-  - Links POS transactions to specific voucher instances
-  - Supports reconciliation and audit requirements
-  - Enables real-time redemption monitoring and reporting
-  - Provides POS system integration points
-
-**New Entity** Added to track detailed POS redemption activities
-
-Validation Rules:
-- PlanDetailId must reference an existing PlanDetail
-- PosSystemId must reference an existing Outlet
-- UsedAmount must be positive and ≤ PlanDetail.FaceValue
-- TransactionDate defaults to current UTC time
-- PosReferenceNumber must be unique per transaction
-
-Sample Data Example:
-- ID: [GUID]
-- PlanDetailId: [GUID]
-- PosSystemId: [GUID]
-- UsedAmount: [Decimal]
-- TransactionDate: [DateTime]
-- PosReferenceNumber: "[POS Reference]"
-
-**Section sources**
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
 
 #### Outlet (Enhanced POS Locations)
 - **Purpose**: Physical or digital store under a Business eligible to accept vouchers
@@ -1107,173 +1041,165 @@ Sample Data Example:
 - [data-models.md:91-97](file://docs/data-models.md#L91-L97)
 
 ## Dependency Analysis
-Enhanced entity relationships and comprehensive referential integrity constraints including the new welcome policy system:
+Enhanced entity relationships and comprehensive referential integrity constraints including the new batch distribution and credit consumption systems:
 
 ```mermaid
 graph LR
-BusinessId["BusinessId (Business)"] --> WelcomePolicyBusiness["WelcomeGrantPolicy.BusinessId"]
-BusinessId --> BrandBusiness["Brand.BusinessId"]
-BusinessId --> ProductionPlanBusiness["ProductionPlan.BusinessId"]
+BusinessId["BusinessId (Business)"] --> BrandBusiness["Brand.BusinessId"]
 BusinessId --> OutletBusiness["Outlet.BusinessId"]
 BusinessId --> UserAccountBusiness["UserAccount.BusinessId"]
-UserID["UserID (UserAccount)"] --> ApprovalTransactionReviewer["ApprovalTransaction.ReviewerId"]
-ProductionPlanId["ProductionPlanId (ProductionPlan)"] --> PlanDetailProductionPlan["PlanDetail.ProductionPlanId"]
-ProductionPlanId --> ApprovalTransactionProductionPlan["ApprovalTransaction.ProductionPlanId"]
-MemberId["MemberId (Member)"] --> PlanDetailMember["PlanDetail.MemberId"]
-PlanDetailId["PlanDetailId (PlanDetail)"] --> UsageTransactionPlanDetail["UsageTransaction.PlanDetailId"]
-PosSystemId["PosSystemId (Outlet)"] --> UsageTransactionPosSystem["UsageTransaction.PosSystemId"]
-BrandId["BrandId (Brand)"] --> CreditBatchBrand["CreditBatch.BrandId"]
-WelcomePolicyId["WelcomePolicyId (WelcomeGrantPolicy)"] --> CreditBatchWelcome["CreditBatch.WelcomePolicyId"]
+UserID["UserID (UserAccount)"] --> VoucherDistributionCreatedBy["VoucherDistributionBatch.CreatedById"]
+PlanId["PlanId (VoucherPlanHeader)"] --> VoucherDistributionPlan["VoucherDistributionBatch.PlanId"]
+PlanId --> CreditConsumptionPlan["CreditConsumption.PlanId"]
+BrandId["BrandId (Brand)"] --> VoucherDistributionBrand["VoucherDistributionBatch.BrandId"]
+BrandId --> CreditConsumptionBrand["CreditConsumption.BrandId"]
+BrandId --> CreditBatchBrand["CreditBatch.BrandId"]
+BatchId["BatchId (CreditBatch)"] --> CreditConsumptionBatch["CreditConsumption.BatchId"]
+VoucherDetailId["VoucherDetailId (VoucherPlanDetail)"] --> CreditConsumptionVoucher["CreditConsumption.VoucherDetailId"]
 ```
 
-**Updated** Enhanced dependency graph to include new welcome policy entities and relationships
+**Updated** Enhanced dependency graph to include new batch distribution and credit consumption entities
 
 **Diagram sources**
-- [WelcomeGrantPolicy.cs:15-16](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L15-L16)
+- [VoucherDistributionBatch.cs:13-17](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L13-L17)
+- [CreditConsumption.cs:11-19](file://src/NonCash.Core/Entities/CreditConsumption.cs#L11-L19)
 - [Brand.cs:12-13](file://src/NonCash.Core/Entities/Brand.cs#L12-L13)
-- [ProductionPlan.cs:14-15](file://src/NonCash.Core/Entities/ProductionPlan.cs#L14-L15)
-- [PlanDetail.cs:10-21](file://src/NonCash.Core/Entities/PlanDetail.cs#L10-L21)
-- [ApprovalTransaction.cs:9-13](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L9-L13)
-- [UsageTransaction.cs:9-12](file://src/NonCash.Core/Entities/UsageTransaction.cs#L9-L12)
-- [CreditBatch.cs:70-72](file://src/NonCash.Core/Entities/CreditBatch.cs#L70-L72)
+- [VoucherPlanHeader.cs:24-27](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L24-L27)
+- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
 
 **Section sources**
-- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
 - [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
+- [VoucherPlanHeader.cs:22-72](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L22-L72)
 - [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
 
 ## Performance Considerations
-Enhanced indexing recommendations for the expanded entity model including welcome policy optimizations:
+Enhanced indexing recommendations for the expanded entity model including batch distribution and credit consumption optimizations:
 
+- **VoucherDistributionBatch**: PlanId, BrandId, CreatedById, NotifyChannel
+- **CreditConsumption**: BrandId, PlanId (unique filter), VoucherDetailId (unique filter), BatchId, Reference
 - **WelcomeGrantPolicy**: BusinessId, IsActive, EffectiveFrom, EffectiveTo, CreatedBy
 - **CreditBatch**: BrandId, PolicyId, WelcomePolicyId, CreatedAt, ExpiresAt
 - **Business**: BusinessName, TaxCode, IsActive
 - **Brand**: BusinessId, TaxCode, Status
-- **ProductionPlan**: BusinessId, ApprovalStatus, PublishDate, ExpiryDate, VoucherType, ValueType
-- **PlanDetail**: ProductionPlanId, MemberId, Status, SerialNo
-- **ApprovalTransaction**: ProductionPlanId, ReviewerId, Status, ReviewDate
-- **UsageTransaction**: PlanDetailId, PosSystemId, TransactionDate, UsedAmount
+- **VoucherPlanHeader**: BrandId, ApprovalStatus, PublishDate, ExpiryDate, VoucherType, ValueType
 - **Outlet**: BusinessId, Status, Name
 - **UserAccount**: BusinessId, Role, Status, Username
 - **Customer**: PhoneNumber, Status, Name
 
 Query patterns:
-- Welcome policy resolution by Business and time range
-- Credit batch generation based on welcome policies
-- Production plan reporting by Business and time range
-- Redemption analytics by Outlet and POS system
-- Distribution funnel analysis by Member type and transaction type
-- Approval workflow tracking and audit reporting
+- Batch distribution reporting by PlanId and BrandId
+- Credit consumption analysis by BrandId and Reference type
+- Skip reason analytics from JSON stored in SkippedRecords
+- Plan-level credit consumption aggregation using Quantity field
+- Distribution funnel analysis comparing RecipientCount vs DistributedCount vs SkippedCount
+- Audit trail queries for batch distribution operations
 
 Data partitioning:
-- Consider partitioning by BusinessId for multi-tenant isolation
-- Implement time-based partitioning for UsageTransaction historical data
-- Separate approval workflow data for compliance retention
-- Partition welcome policy history for efficient querying
+- Consider partitioning by BrandId for multi-tenant isolation
+- Implement time-based partitioning for VoucherDistributionBatch historical data
+- Separate credit consumption data for compliance retention
+- Partition batch distribution history for efficient querying
 
 ## Troubleshooting Guide
-Enhanced troubleshooting for the expanded entity model including welcome policy issues:
+Enhanced troubleshooting for the expanded entity model including batch distribution and credit consumption issues:
 
-### Welcome Policy Issues
-- **No Matching Policy Found**
-  - Symptom: Welcome credits not applied to new brand
-  - Resolution: Verify WelcomeGrantPolicy exists with correct BusinessId, IsActive=true, and effective date range includes current time
-- **Policy Not Taking Effect**
-  - Symptom: Wrong welcome credits applied
-  - Resolution: Check EffectiveFrom and EffectiveTo dates, ensure most recent policy has highest priority
-- **Migration Data Loss**
-  - Symptom: Missing welcome policies after migration
-  - Resolution: Verify migration script ran successfully and brand-scoped policies were properly migrated
+### Batch Distribution Issues
+- **No Batch Records Created**
+  - Symptom: Batch distribution not tracked
+  - Resolution: Verify single-voucher flows don't create batch rows; check if flow is batch-based
+- **Incorrect Skip Counts**
+  - Symptom: SkippedCount doesn't match expected values
+  - Resolution: Verify SkippedRecords JSON contains accurate skip reasons and counts
+- **JSON Storage Issues**
+  - Symptom: SkippedRecords not properly serialized
+  - Resolution: Check VoucherDistributionBatchConfiguration JSON converter settings
 
-### Business and Brand Issues
-- **Invalid Business Association**
-  - Symptom: Brand cannot receive welcome credits
-  - Resolution: Confirm Business.IsActive and proper BusinessId assignment
-- **Duplicate Tax Codes**
-  - Symptom: Brand creation fails
-  - Resolution: Verify TaxCode uniqueness within business scope
+### Credit Consumption Issues
+- **Duplicate Plan Charges**
+  - Symptom: Multiple CreditConsumption rows for same PlanId
+  - Resolution: Verify unique constraint on PlanId when set; check for duplicate plan approvals
+- **Invalid Quantity Values**
+  - Symptom: Quantity not matching expected consumption amount
+  - Resolution: Ensure Quantity=1 for per-voucher charges, Quantity=N for plan-level charges
+- **Missing Batch References**
+  - Symptom: Plan-level charges without BatchId
+  - Resolution: Verify BatchId is null for plan-level charges; check FIFO draw logic
 
-### Credit Batch Issues
-- **Welcome Grant Already Exists**
-  - Symptom: Duplicate welcome grant prevented
-  - Resolution: Check for existing CreditBatch with same BrandId and WelcomePolicyId
-- **Policy Resolution Failures**
-  - Symptom: Credits not applied correctly
-  - Resolution: Verify WelcomePolicyId references valid WelcomeGrantPolicy
+### Migration and Data Integrity Issues
+- **Migration Failures**
+  - Symptom: Database schema updates fail
+  - Resolution: Verify migration scripts ran successfully; check foreign key constraints
+- **Constraint Violations**
+  - Symptom: Data insertion fails due to constraints
+  - Resolution: Check unique constraints on PlanId and VoucherDetailId; verify mutual exclusivity
 
-### Production Planning Issues
-- **Invalid ApprovalStatus Transition**
-  - Symptom: Plan cannot proceed beyond Pending
-  - Resolution: Ensure ApprovalTransaction exists with Approved status and ReviewDate set
-- **Plan Outside AllowedLocations**
-  - Symptom: Voucher cannot be used at selected POS
-  - Resolution: Verify Outlet ID exists and is included in ProductionPlan.AllowedLocations
-- **ExpiryDate Before PublishDate**
-  - Symptom: Plan invalid or distribution blocked
-  - Resolution: Set ExpiryDate ≥ PublishDate (when both provided)
-
-### Voucher Lifecycle Issues
-- **Invalid Status Transition**
-  - Symptom: Voucher cannot change state
-  - Resolution: Ensure proper ApprovalTransaction approval and valid status progression
-- **Member Ownership Conflicts**
-  - Symptom: Voucher transfer or redemption blocked
-  - Resolution: Verify Member.Type matches intended usage pattern (Customer vs Organization)
-- **POS Redemption Failures**
-  - Symptom: POS transaction not recorded
-  - Resolution: Confirm UsageTransaction.PosReferenceNumber uniqueness and PlanDetail.Status validation
+### Performance Issues
+- **Slow Batch Queries**
+  - Symptom: Performance degradation on batch distribution reports
+  - Resolution: Verify indexes on PlanId, BrandId, CreatedById; consider query optimization
+- **JSON Query Performance**
+  - Symptom: Slow queries on SkippedRecords
+  - Resolution: Use appropriate JSON operators; consider denormalization for frequent queries
 
 **Section sources**
-- [WelcomeGrantPolicy.cs:11-36](file://src/NonCash.Core/Entities/WelcomeGrantPolicy.cs#L11-L36)
-- [WelcomePolicyService.cs:25-52](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L25-L52)
-- [migration-split-welcome-policy.sql:31-52](file://tools/migration-split-welcome-policy.sql#L31-L52)
-- [Business.cs:6-16](file://src/NonCash.Core/Entities/Business.cs#L6-L16)
-- [Brand.cs:10-19](file://src/NonCash.Core/Entities/Brand.cs#L10-L19)
-- [CreditBatch.cs:55-74](file://src/NonCash.Core/Entities/CreditBatch.cs#L55-L74)
-- [ProductionPlan.cs:8-68](file://src/NonCash.Core/Entities/ProductionPlan.cs#L8-L68)
-- [PlanDetail.cs:7-27](file://src/NonCash.Core/Entities/PlanDetail.cs#L7-L27)
-- [ApprovalTransaction.cs:7-22](file://src/NonCash.Core/Entities/ApprovalTransaction.cs#L7-L22)
-- [UsageTransaction.cs:6-20](file://src/NonCash.Core/Entities/UsageTransaction.cs#L6-L20)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [VoucherDistributionBatchConfiguration.cs:28-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L28-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:21-55](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L21-L55)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:37-67](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L37-L67)
 
 ## Conclusion
-The NonCash platform's enhanced core entities define a comprehensive, multi-tenant domain model for advanced voucher lifecycle management with sophisticated welcome credit policy management. The new WelcomeGrantPolicy entity provides business-scoped welcome credit policies with time-based activation, replacing the previous brand-scoped approach. The enhanced Business and Brand entities enable unified tenant and customer management with flexible ownership models. The updated CreditBatch entity integrates with the welcome policy system to track welcome credit grants. The comprehensive data model, combined with robust validation rules and business constraints, ensures data consistency, supports accurate reporting, and maintains compliance across all operational aspects of the voucher ecosystem.
+The NonCash platform's enhanced core entities define a comprehensive, multi-tenant domain model for advanced voucher lifecycle management with sophisticated welcome credit policy management, advanced batch distribution tracking, and enhanced credit consumption monitoring. The new VoucherDistributionBatch entity provides comprehensive audit trail capabilities for batch distribution operations with detailed skip reason tracking stored as JSON. The enhanced CreditConsumption entity supports both per-voucher and plan-level credit consumption tracking with proper quantity management. The updated entity relationships ensure data integrity and support complex business workflows across the entire voucher ecosystem.
 
 ## Appendices
 
 ### Business Objectives and Scope
-- **Enhanced Welcome Policy Management**: Business-scoped welcome credit policies with time-based activation and versioning
+- **Advanced Batch Distribution Tracking**: Comprehensive audit trail for batch distribution operations with detailed skip reason tracking
+- **Enhanced Credit Consumption Monitoring**: Support for both per-voucher and plan-level credit charges with proper quantity management
+- **Sophisticated Welcome Policy Management**: Business-scoped welcome credit policies with time-based activation and versioning
 - **Advanced Multi-Tenancy**: Comprehensive business and brand hierarchy with isolated resource management
 - **Detailed Audit Trails**: Complete approval and transaction tracking for compliance
 - **POS Integration**: Real-time redemption monitoring and reconciliation
-- **Flexible Credit Management**: Support for both purchased credits and welcome grants with expiration tracking
 
 ### Migration Details
-The welcome policy migration introduces several key changes:
-- **New Table**: `welcome_grant_policies` with business-scoped policy management
-- **Schema Changes**: Added `welcome_policy_id` foreign key to `credit_batches` table
-- **Data Migration**: Automatic migration of brand-scoped welcome credits to business-scoped policies
-- **Index Optimization**: Added indexes for efficient policy resolution queries
+The recent migrations introduce several key changes:
+
+**VoucherDistributionBatch Migration (20260905085731)**:
+- **New Table**: `voucher_distribution_batches` with comprehensive batch tracking fields
+- **Schema Changes**: Added `batch_id` foreign key to `voucher_distributions` table
+- **JSON Storage**: `skipped_records` column stores detailed skip reasons as JSONB
+- **Index Optimization**: Added indexes for efficient batch distribution queries
 - **Constraint Updates**: Foreign key relationships ensure data integrity
 
-### API Integration Examples
-The new welcome policy system integrates seamlessly with existing services:
+**CreditConsumption Enhancement (20260905042430)**:
+- **Schema Changes**: Added `plan_id` and `quantity` columns to `credit_consumptions` table
+- **Unique Constraints**: Added unique constraints on PlanId and VoucherDetailId (when set)
+- **Data Migration**: Updated existing records to support plan-level consumption tracking
+- **Index Optimization**: Added indexes for efficient credit consumption queries
 
-**Welcome Policy APIs**:
-- Policy resolution through IWelcomePolicyService.ResolveForBusinessAsync
-- CRUD operations for policy management
-- Automatic fallback to CreditConfig defaults
+### API Integration Examples
+The enhanced entities integrate seamlessly with existing services:
+
+**Batch Distribution APIs**:
+- Batch creation through VoucherDistributionBatch entity
+- Skip reason tracking via JSON serialization
+- Notification channel selection for batch completion alerts
+
+**Credit Consumption APIs**:
+- Plan-level credit charges through CreditConsumption with Quantity field
+- Per-voucher consumption tracking with proper quantity management
+- FIFO draw logic for plan-level charges across multiple batches
 
 **Enhanced Business Logic**:
-- Welcome credit grants automatically resolve business policies
-- CreditBatch creation tracks which policy generated the grant
-- Time-based policy activation ensures correct policy application
+- Batch distribution operations create comprehensive audit trails
+- Credit consumption tracks both individual voucher and plan-level charges
+- JSON storage provides flexible skip reason tracking for batch operations
 
 **Section sources**
-- [IWelcomePolicyService.cs:12-37](file://src/NonCash.Core/Interfaces/IWelcomePolicyService.cs#L12-L37)
-- [WelcomePolicyService.cs:14-75](file://src/NonCash.Infrastructure/Services/WelcomePolicyService.cs#L14-L75)
-- [migration-split-welcome-policy.sql:1-62](file://tools/migration-split-welcome-policy.sql#L1-L62)
-- [20260814050918_SplitWelcomePolicy.cs:27-79](file://src/NonCash.Infrastructure/Migrations/20260814050918_SplitWelcomePolicy.cs#L27-L79)
+- [VoucherDistributionBatch.cs:11-37](file://src/NonCash.Core/Entities/VoucherDistributionBatch.cs#L11-L37)
+- [CreditConsumption.cs:9-30](file://src/NonCash.Core/Entities/CreditConsumption.cs#L9-L30)
+- [VoucherDistributionBatchConfiguration.cs:28-57](file://src/NonCash.Infrastructure/Data/Configurations/VoucherDistributionBatchConfiguration.cs#L28-L57)
+- [20260905085731_AddVoucherDistributionBatches.cs:21-55](file://src/NonCash.Infrastructure/Migrations/20260905085731_AddVoucherDistributionBatches.cs#L21-L55)
+- [20260905042430_AddCreditConsumptionPlanCharge.cs:37-67](file://src/NonCash.Infrastructure/Migrations/20260905042430_AddCreditConsumptionPlanCharge.cs#L37-L67)

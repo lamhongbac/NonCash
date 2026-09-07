@@ -209,6 +209,48 @@
 
 ---
 
+## 5. Voucher Code Security Posture (assessed 2026-09-06)
+
+Assessment of the voucher-code solution against forgery, theft, and misuse. Verified against code (`VoucherCodeService`, `PosService`, `MembersController`, `ApiKeyMiddleware`).
+
+### 5.1 Verified design
+
+- Code format: `base64(payload: voucher id + issued-at + expiry) . base64(HMAC-SHA256(payload, perVoucherSecret))` — a long opaque string, **not** a short human-readable code.
+- Per-voucher random 256-bit secret stored server-side; the code itself is **never persisted** — minted fresh on each wallet view, dead after **120 seconds**.
+- Constant-time HMAC comparison; forged attempts are logged with verify result `Forged`.
+- Spend integrity: atomic `Pending → InUse → Complete` transitions with idempotency keys, compensating rollback, and auto-expiring 10-minute locks; a pending member-to-member transfer soft-locks the voucher against redemption.
+- Verify enforces outlet scope (the outlet must belong to the plan's brand or be in scope via a sponsored campaign) and plan expiry.
+- POS auth: per-outlet API keys (`X-API-Key` header, outlet resolved from the key). Wallet auth: member JWT with an ownership check.
+
+### 5.2 Verdicts
+
+| Threat | Posture |
+|---|---|
+| Forgery | Strong — per-voucher secret + HMAC + constant-time compare |
+| Double-spend | Strong — atomic status transitions + idempotency |
+| Code theft (shoulder-surf / screenshot within the 120s window) | Moderate — the code is a bearer token; mitigated only by the TTL |
+| Member account takeover | Weak — password-only member login, no OTP |
+| Outlet key compromise | Weak — outlet keys are matched on plaintext prefix (dev-grade; `integration_partners` keys are stored hashed, outlet keys are not) and there is no rotation procedure |
+| Customer data enumeration | Weak — customer search is `[AllowAnonymous]`; no rate limiting on auth/POS endpoints |
+
+### 5.3 Optimization backlog (CR registry)
+
+Sorted by implementation ease (easy → hard), decoupled from risk ranking. Each item is a registered CR — implementation starts only on the `[CR]` command (see the Work-Type Protocol in `BMAD_STRUCTURE.md`).
+
+| CR ID | Item | Effort | Status |
+|---|---|---|---|
+| CR-2026-09-06-01 | Restrict POS rollback to the lock-owning outlet (closes cross-outlet DoS) | ~1–2h | Registered — pending decision |
+| CR-2026-09-06-02 | Remove `[AllowAnonymous]` from customer search (require an authenticated brand/admin role) | ~2h | ✅ Verified 2026-09-07 (docs-only re-check: no `[AllowAnonymous]` remains on any customer endpoint — `CustomersController` is class-level `[Authorize(Roles = "BrandManager,Admin")]`; remaining anonymous endpoints are login / self-register / public catalog / payment callbacks by design) |
+| CR-2026-09-06-03 | Doc gaps: brand-guide POS-redeem section + admin-guide "success = SMTP-accepted, not delivered" caveat | ~1–2h | ✅ Verified 2026-09-06 (docs-only; user review = verification) |
+| CR-2026-09-06-04 | Rate limiting on `/api/v1/auth/*` + `/api/v1/pos/verify` (ASP.NET Core RateLimiter middleware) | ~0.5d | Registered — pending decision |
+| CR-2026-09-06-05 | Outlet API key hashing + rotation endpoint (align with the `integration_partners` hash+prefix pattern) | ~1d | Registered — pending decision |
+| CR-2026-09-06-06 | Mint-on-tap: mint the code on demand per tap instead of eagerly for the whole wallet (also fixes the 120s demo gotcha) | ~1d | Registered — pending decision |
+| CR-2026-09-06-07 | Shrink code TTL 120s → 60s (only after CR-2026-09-06-06) | ~2h | Registered — pending decision |
+| CR-2026-09-06-08 | Member OTP login (closes the biggest residual risk; needs SMS/email OTP infrastructure) | ~2–3d | Registered — pending decision |
+| CR-2026-09-06-09 | Optional deep defense (device binding, per-outlet velocity checks, alerting on bursts of `Forged` results) | TBD | Registered — pending decision |
+
+---
+
 ## Priority Legend
 
 | Priority | Meaning | Timeline |

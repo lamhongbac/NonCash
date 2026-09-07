@@ -132,7 +132,8 @@ public class EmailNotificationService : INotificationService
             ["VoucherName"] = notification.VoucherName ?? "NonCash voucher",
             ["FaceValue"] = notification.FaceValue.ToString("N0"),
             ["ExpiryDate"] = notification.ExpiryDate.ToString("yyyy-MM-dd"),
-            ["PhoneNumber"] = notification.PhoneNumber
+            ["PhoneNumber"] = notification.PhoneNumber,
+            ["MagicLinkUrl"] = notification.MagicLinkUrl
         }, cancellationToken);
 
         await SendAsync(notification.Email, subject, body, cancellationToken, "VoucherReceived", "VoucherDistribution");
@@ -454,7 +455,8 @@ public class EmailNotificationService : INotificationService
             ["RecipientName"] = notification.RecipientName,
             ["SenderName"] = notification.SenderName,
             ["VoucherCount"] = notification.VoucherCount.ToString(),
-            ["TransferredAt"] = notification.TransferredAt.ToString("yyyy-MM-dd HH:mm")
+            ["TransferredAt"] = notification.TransferredAt.ToString("yyyy-MM-dd HH:mm"),
+            ["MagicLinkUrl"] = notification.MagicLinkUrl
         }, cancellationToken);
 
         await SendAsync(notification.RecipientEmail, subject, body, cancellationToken, "VoucherTransferInitiated", "VoucherTransfer");

@@ -7,7 +7,9 @@ public enum UserRole
     Planner,
     Approver,
     /// <summary>Approves maker-checker credit adjustments (Epic 10). Cannot self-approve.</summary>
-    FinancialController
+    FinancialController,
+    /// <summary>POS terminal cashier (CR-2026-09-07-18). BrandId is mandatory; access is scoped to assigned outlets via user_outlet_assignments.</summary>
+    StoreStaff
 }
 
 public enum UserStatus

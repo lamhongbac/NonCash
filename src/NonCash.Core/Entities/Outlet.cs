@@ -9,6 +9,8 @@ public enum OutletStatus
 public class Outlet : BaseEntity
 {
     public Guid BrandId { get; set; }
+    /// <summary>Short, human-typed store code used at POS app login (unique within a brand).</summary>
+    public string? Code { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Address { get; set; }
     public OutletStatus Status { get; set; } = OutletStatus.Active;

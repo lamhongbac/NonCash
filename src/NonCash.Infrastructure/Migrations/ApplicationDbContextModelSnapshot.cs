@@ -960,6 +960,52 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("customers", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.CustomerAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("field");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("old_value");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("customer_audit_logs", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.EmailLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1219,6 +1265,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("brand_id");
 
+                    b.Property<string>("Code")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1246,6 +1297,10 @@ namespace NonCash.Infrastructure.Migrations
                     b.HasIndex("BrandId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("BrandId", "Code")
+                        .IsUnique()
+                        .HasFilter("code IS NOT NULL");
 
                     b.ToTable("outlets", "public");
                 });
@@ -1624,6 +1679,39 @@ namespace NonCash.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("user_accounts", "public");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.UserOutlet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OutletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("outlet_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutletId");
+
+                    b.HasIndex("UserId", "OutletId")
+                        .IsUnique();
+
+                    b.ToTable("user_outlet_assignments", "public");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherDistribution", b =>
@@ -2206,9 +2294,19 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("OperatorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("operator_id");
+
                     b.Property<Guid>("PosId")
                         .HasColumnType("uuid")
                         .HasColumnName("pos_id");
+
+                    b.Property<string>("PosNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("pos_no");
 
                     b.Property<Guid?>("RedeemBrandId")
                         .HasColumnType("uuid")
@@ -2657,6 +2755,15 @@ namespace NonCash.Infrastructure.Migrations
                     b.Navigation("BrandGroup");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.CustomerAuditLog", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Customer", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.MemberAccount", b =>
                 {
                     b.HasOne("NonCash.Core.Entities.Customer", "Customer")
@@ -2787,6 +2894,25 @@ namespace NonCash.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Brand");
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.UserOutlet", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.Outlet", "Outlet")
+                        .WithMany()
+                        .HasForeignKey("OutletId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.UserAccount", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Outlet");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.VoucherDistribution", b =>

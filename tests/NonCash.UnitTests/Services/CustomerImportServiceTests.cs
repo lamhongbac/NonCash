@@ -11,6 +11,7 @@ public class CustomerImportServiceTests
 {
     private readonly ICustomerRepository _customerRepository = Substitute.For<ICustomerRepository>();
     private readonly IBrandCustomerRepository _brandCustomerRepository = Substitute.For<IBrandCustomerRepository>();
+    private readonly IRepository<CustomerAuditLog> _auditLogRepository = Substitute.For<IRepository<CustomerAuditLog>>();
     private readonly List<Customer> _added = new();
     private readonly CsvCustomerImportService _sut;
 
@@ -24,7 +25,7 @@ public class CustomerImportServiceTests
                 return customer;
             });
 
-        _sut = new CsvCustomerImportService(new CustomerService(_customerRepository, _brandCustomerRepository));
+        _sut = new CsvCustomerImportService(new CustomerService(_customerRepository, _brandCustomerRepository, _auditLogRepository));
     }
 
     private static Stream Csv(string content) => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));

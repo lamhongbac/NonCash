@@ -38,6 +38,15 @@ public class OutletConfiguration : IEntityTypeConfiguration<Outlet>
 
         builder.HasIndex(o => o.ApiKeyPrefix);
 
+        // CR-2026-09-07-18: short store code for POS app login. Nullable initially to allow
+        // backfill; unique per brand so two outlets in the same brand cannot share a code.
+        builder.Property(o => o.Code)
+            .HasMaxLength(20);
+
+        builder.HasIndex(o => new { o.BrandId, o.Code })
+            .IsUnique()
+            .HasFilter("code IS NOT NULL");
+
         builder.Property(o => o.CreatedAt)
             .IsRequired();
 

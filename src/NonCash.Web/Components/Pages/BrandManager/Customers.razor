@@ -92,10 +92,26 @@ else if (_customers is not null)
         <MudText Typo="Typo.h6">@(_isEdit ? "Edit Customer" : "Create Customer")</MudText>
     </TitleContent>
     <DialogContent>
+        @if (_isEdit)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                Customer records are shared platform-wide. You can only fill in empty details —
+                existing values are kept. For corrections, contact the platform admin.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                If this phone already exists on the platform, the customer is linked to your brand;
+                existing name/email are kept — only empty details are filled.
+            </MudAlert>
+        }
         <MudForm @ref="_form" Model="_model">
             <MudTextField @bind-Value="_model.PhoneNumber" Label="Phone Number" Required="true" RequiredError="Phone is required" Disabled="_isEdit" />
-            <MudTextField @bind-Value="_model.FullName" Label="Full Name" Required="true" RequiredError="Name is required" />
-            <MudTextField @bind-Value="_model.Email" Label="Email" />
+            <MudTextField @bind-Value="_model.FullName" Label="Full Name" Required="true" RequiredError="Name is required" Disabled="@(_isEdit && _nameLocked)"
+                          HelperText="@(_isEdit && _nameLocked ? "Set platform-wide — only the platform admin can change it." : null)" />
+            <MudTextField @bind-Value="_model.Email" Label="Email" Disabled="@(_isEdit && _emailLocked)"
+                          HelperText="@(_isEdit && _emailLocked ? "Set platform-wide — only the platform admin can change it." : null)" />
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -128,11 +144,31 @@ else if (_customers is not null)
         }
         @if (_importResult is not null)
         {
-            var successCount = _importResult.Created + _importResult.Updated;
             <MudAlert Severity="@(_importResult.ErrorCount == 0 ? Severity.Success : Severity.Warning)" Class="mt-4">
-                Import finished — <b>@successCount</b> succeeded (@_importResult.Created created, @_importResult.Updated updated),
+                Import finished — <b>@_importResult.Created</b> created, <b>@_importResult.Updated</b> updated,
+                <b>@_importResult.Unchanged</b> unchanged, <b>@_importResult.SkippedCount</b> row(s) kept existing values,
                 <b>@_importResult.ErrorCount</b> error(s).
             </MudAlert>
+            @if (_importResult.Skipped.Any())
+            {
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudButton Color="Color.Warning" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadSkippedLog">
+                        Download skipped log (CSV)
+                    </MudButton>
+                    <MudText Typo="Typo.caption">Rows where your values differed from the platform record — existing values were kept (fill-empty-only).</MudText>
+                </MudStack>
+                <MudList T="string" Dense="true" Class="mt-2" Style="max-height: 200px; overflow-y: auto;">
+                    @foreach (var skip in _importResult.Skipped.Take(10))
+                    {
+                        var skipText = $"Row {skip.Row}: {skip.Message} — {skip.PhoneNumber} / {skip.FullName}";
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.SyncAlt" IconColor="Color.Warning" Text="@skipText" />
+                    }
+                </MudList>
+                @if (_importResult.SkippedCount > 10)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">… and @(_importResult.SkippedCount - 10) more — see the CSV log.</MudText>
+                }
+            }
             @if (_importResult.Errors.Any())
             {
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
@@ -172,6 +208,8 @@ else if (_customers is not null)
 
     private bool _showDialog = false;
     private bool _isEdit = false;
+    private bool _nameLocked = false;
+    private bool _emailLocked = false;
     private MudForm? _form;
     private CustomerFormModel _model = new();
     private readonly DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true };
@@ -245,6 +283,8 @@ else if (_customers is not null)
     {
         _isEdit = false;
         _model = new CustomerFormModel();
+        _nameLocked = false;
+        _emailLocked = false;
         _showDialog = true;
     }
 
@@ -258,6 +298,10 @@ else if (_customers is not null)
             FullName = customer.FullName,
             Email = customer.Email
         };
+        // CR-2026-09-06-11 fill-empty-only (mirrors the API): fields with real values are
+        // locked for brands; placeholder rows (name == phone) and empty emails stay editable.
+        _nameLocked = !string.IsNullOrWhiteSpace(customer.FullName) && customer.FullName != customer.PhoneNumber;
+        _emailLocked = !string.IsNullOrWhiteSpace(customer.Email);
         _showDialog = true;
     }
 
@@ -319,8 +363,9 @@ else if (_customers is not null)
             {
                 _importResult = await response.Content.ReadFromJsonAsync<CustomerImportResultDto>();
                 var succeeded = (_importResult?.Created ?? 0) + (_importResult?.Updated ?? 0);
+                var skipped = _importResult?.SkippedCount ?? 0;
                 var failed = _importResult?.ErrorCount ?? 0;
-                Snackbar.Add($"Import finished: {succeeded} succeeded, {failed} error(s).", failed == 0 ? Severity.Success : Severity.Warning);
+                Snackbar.Add($"Import finished: {succeeded} succeeded, {skipped} kept existing values, {failed} error(s).", failed == 0 ? Severity.Success : Severity.Warning);
                 await LoadCustomers();
             }
             else
@@ -369,22 +414,30 @@ else if (_customers is not null)
     private async Task DownloadErrorLog()
     {
         if (_importResult == null || _importResult.Errors.Count == 0) return;
+        await DownloadRows("customer-import-errors", "Row,PhoneNumber,FullName,Email,ErrorMessage",
+            _importResult.Errors.Select(e => RowCsv(e.Row, e.PhoneNumber, e.FullName, e.Email, e.Message)));
+    }
 
+    private async Task DownloadSkippedLog()
+    {
+        if (_importResult == null || _importResult.Skipped.Count == 0) return;
+        await DownloadRows("customer-import-skipped", "Row,PhoneNumber,FullName,Email,Reason",
+            _importResult.Skipped.Select(s => RowCsv(s.Row, s.PhoneNumber, s.FullName, s.Email, s.Message)));
+    }
+
+    private static string RowCsv(int row, string phone, string name, string? email, string message)
+        => string.Join(",", row.ToString(), CsvEscape(phone), CsvEscape(name), CsvEscape(email), CsvEscape(message));
+
+    private async Task DownloadRows(string filePrefix, string header, IEnumerable<string> lines)
+    {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Row,PhoneNumber,FullName,Email,ErrorMessage");
-        foreach (var e in _importResult.Errors)
-        {
-            sb.AppendLine(string.Join(",",
-                e.Row.ToString(),
-                CsvEscape(e.PhoneNumber),
-                CsvEscape(e.FullName),
-                CsvEscape(e.Email),
-                CsvEscape(e.Message)));
-        }
+        sb.AppendLine(header);
+        foreach (var line in lines)
+            sb.AppendLine(line);
 
         // UTF-8 BOM so Excel opens the file with correct encoding
         var bytes = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
-        var fileName = $"customer-import-errors-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+        var fileName = $"{filePrefix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
         await JS.InvokeVoidAsync("downloadFromBase64", fileName, "text/csv", Convert.ToBase64String(bytes));
     }
 
@@ -547,8 +600,20 @@ else if (_customers is not null)
     {
         public int Created { get; set; }
         public int Updated { get; set; }
+        public int Unchanged { get; set; }
+        public int SkippedCount { get; set; }
+        public List<CustomerImportSkipItem> Skipped { get; set; } = new();
         public int ErrorCount { get; set; }
         public List<CustomerImportErrorItem> Errors { get; set; } = new();
+    }
+
+    public class CustomerImportSkipItem
+    {
+        public int Row { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 
     public class CustomerImportErrorItem

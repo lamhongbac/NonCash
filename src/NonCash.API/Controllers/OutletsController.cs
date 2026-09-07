@@ -69,6 +69,7 @@ public class OutletsController : ControllerBase
             var outlet = await _outletService.CreateAsync(
                 request.Name,
                 request.Address,
+                request.Code,
                 cancellationToken);
 
             return CreatedAtAction(nameof(GetOutlet), new { id = outlet.Id }, MapToResponse(outlet));
@@ -88,7 +89,7 @@ public class OutletsController : ControllerBase
     {
         try
         {
-            var outlet = await _outletService.UpdateAsync(id, request.Name, request.Address, cancellationToken);
+            var outlet = await _outletService.UpdateAsync(id, request.Name, request.Address, request.Code, cancellationToken);
             return Ok(MapToResponse(outlet));
         }
         catch (KeyNotFoundException)
@@ -122,6 +123,7 @@ public class OutletsController : ControllerBase
             outlet.BrandId,
             outlet.Name,
             outlet.Address,
+            outlet.Code,
             outlet.Status.ToString(),
             outlet.ApiKeyPrefix,
             outlet.CreatedAt,

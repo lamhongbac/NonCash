@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
@@ -16,6 +17,8 @@ public class PromotionService : IPromotionService
     private readonly INotificationService _notificationService;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
     private readonly IRepository<VoucherDistributionBatch> _batchRepository;
+    private readonly IJwtTokenService _jwtTokenService;
+    private readonly IConfiguration _configuration;
 
     private static readonly System.Text.RegularExpressions.Regex _emailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
@@ -32,7 +35,9 @@ public class PromotionService : IPromotionService
         IRepository<Outlet> outletRepository,
         INotificationService notificationService,
         IBrandCustomerRepository brandCustomerRepository,
-        IRepository<VoucherDistributionBatch> batchRepository)
+        IRepository<VoucherDistributionBatch> batchRepository,
+        IJwtTokenService jwtTokenService,
+        IConfiguration configuration)
     {
         _planRepository = planRepository;
         _detailRepository = detailRepository;
@@ -45,6 +50,8 @@ public class PromotionService : IPromotionService
         _notificationService = notificationService;
         _brandCustomerRepository = brandCustomerRepository;
         _batchRepository = batchRepository;
+        _jwtTokenService = jwtTokenService ?? throw new ArgumentNullException(nameof(jwtTokenService));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
     public async Task<PromotionResult> DistributeAsync(
@@ -282,10 +289,15 @@ public class PromotionService : IPromotionService
         // Notify recipients on the requested channels; delivery failures never fail the distribution.
         if (notifyChannels != NotificationChannel.None)
         {
-            foreach (var (phone, _, email, name) in eligibleMembers)
+            foreach (var (phone, memberId, email, name) in eligibleMembers)
             {
                 try
                 {
+                    // CR-2026-09-07-19: Generate magic link for passwordless access
+                    var magicToken = _jwtTokenService.GenerateMagicLinkToken(memberId);
+                    var webBaseUrl = _configuration["WebBaseUrl"]?.TrimEnd('/') ?? "https://localhost:7162";
+                    var magicLinkUrl = $"{webBaseUrl}/member/welcome?token={Uri.EscapeDataString(magicToken)}";
+
                     await _notificationService.NotifyVoucherReceivedAsync(
                         new VoucherReceivedNotification(
                             email,
@@ -294,7 +306,8 @@ public class PromotionService : IPromotionService
                             plan.DisplayName,
                             plan.FaceValue,
                             plan.ExpiryDate,
-                            notifyChannels),
+                            notifyChannels,
+                            magicLinkUrl),
                         cancellationToken);
                 }
                 catch
