@@ -15,15 +15,21 @@ public class MembersController : ControllerBase
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
     private readonly IVoucherPlanRepository _planRepository;
     private readonly IVoucherCodeService _voucherCodeService;
+    private readonly IBrandRepository _brandRepository;
+    private readonly IOutletRepository _outletRepository;
 
     public MembersController(
         IRepository<VoucherPlanDetail> detailRepository,
         IVoucherPlanRepository planRepository,
-        IVoucherCodeService voucherCodeService)
+        IVoucherCodeService voucherCodeService,
+        IBrandRepository brandRepository,
+        IOutletRepository outletRepository)
     {
         _detailRepository = detailRepository;
         _planRepository = planRepository;
         _voucherCodeService = voucherCodeService;
+        _brandRepository = brandRepository;
+        _outletRepository = outletRepository;
     }
 
     private Guid GetCurrentMemberId()
@@ -58,11 +64,43 @@ public class MembersController : ControllerBase
                 plans[pid] = plan;
         }
 
+        // Resolve brand names and applicable store names per plan (empty Scope.Outlets = whole brand).
+        var brandNames = new Dictionary<Guid, string>();
+        var planStoreNames = new Dictionary<Guid, List<string>>();
+        var brandIds = plans.Values.Select(p => p.BrandId).Distinct().ToList();
+        foreach (var brandId in brandIds)
+        {
+            var brand = await _brandRepository.GetByIdAsync(brandId, cancellationToken);
+            if (brand != null)
+                brandNames[brandId] = brand.Name;
+        }
+
+        foreach (var plan in plans.Values)
+        {
+            IReadOnlyList<Outlet> outlets;
+            if (plan.Scope.Outlets.Count == 0)
+                outlets = (await _outletRepository.FindAsync(o => o.BrandId == plan.BrandId, cancellationToken)).ToList();
+            else
+                outlets = (await _outletRepository.FindAsync(o => plan.Scope.Outlets.Contains(o.Id), cancellationToken)).ToList();
+
+            planStoreNames[plan.Id] = outlets
+                .Select(o => o.Name)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         var result = detailList
             .OrderByDescending(d => d.CreatedAt)
             .Select(d =>
             {
                 plans.TryGetValue(d.ParentId, out var plan);
+                var brandName = plan != null && brandNames.TryGetValue(plan.BrandId, out var bn) ? bn : string.Empty;
+                var storeNames = plan != null && planStoreNames.TryGetValue(plan.Id, out var sn) ? sn : new List<string>();
+                var scopeSummary = plan == null
+                    ? string.Empty
+                    : plan.Scope.Outlets.Count == 0
+                        ? (string.IsNullOrWhiteSpace(brandName) ? "All stores of the brand" : $"All stores of {brandName}")
+                        : $"{plan.Scope.Outlets.Count} selected store(s)";
                 return new MemberVoucherResponse(
                     d.Id,
                     d.SerialNo,
@@ -72,7 +110,10 @@ public class MembersController : ControllerBase
                     plan?.ValueType.ToString() ?? string.Empty,
                     plan?.ExpiryDate,
                     plan?.ImageUrl,
-                    _voucherCodeService.GenerateCode(d.Id, d.VoucherCodeSecret));
+                    _voucherCodeService.GenerateCode(d.Id, d.VoucherCodeSecret),
+                    brandName,
+                    scopeSummary,
+                    storeNames);
             })
             .ToList();
 
@@ -89,4 +130,7 @@ public record MemberVoucherResponse(
     string ValueType,
     DateTime? ExpiryDate,
     string? ImageUrl,
-    string VoucherCode);
+    string VoucherCode,
+    string BrandName,
+    string ScopeSummary,
+    IReadOnlyList<string> ApplicableStores);

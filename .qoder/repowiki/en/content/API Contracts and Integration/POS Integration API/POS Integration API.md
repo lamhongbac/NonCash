@@ -8,6 +8,14 @@
 - [SettlementEntry.cs](file://src/NonCash.Core/Entities/SettlementEntry.cs)
 - [VoucherPlanHeader.cs](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs)
 - [VoucherUsage.cs](file://src/NonCash.Core/Entities/VoucherUsage.cs)
+- [AuthController.cs](file://src/NonCash.API/Controllers/AuthController.cs)
+- [StoreStaffController.cs](file://src/NonCash.API/Controllers/StoreStaffController.cs)
+- [StoreStaffService.cs](file://src/NonCash.Core/Services/StoreStaffService.cs)
+- [PosAuthService.cs](file://src/NonCash.Pos/Services/PosAuthService.cs)
+- [PosApiModels.cs](file://src/NonCash.Pos/Models/PosApiModels.cs)
+- [Login.razor](file://src/NonCash.Pos/Pages/Login.razor)
+- [Payment.razor](file://src/NonCash.Pos/Pages/Payment.razor)
+- [Query.razor](file://src/NonCash.Pos/Pages/Query.razor)
 - [api-contracts.md](file://docs/api-contracts.md)
 - [architecture.md](file://docs/architecture.md)
 - [data-models.md](file://docs/data-models.md)
@@ -24,6 +32,11 @@
 - Enhanced error handling and transaction tracking capabilities
 - Updated API request/response schemas to include new fields
 - Added settlement ledger integration details
+- **New**: Integrated Blazor WebAssembly POS application with complete user interface
+- **New**: Enhanced authentication system with staff login and JWT token management
+- **New**: Store staff management system with CRUD operations and outlet assignments
+- **New**: Shift session management with transaction tracking and audit trails
+- **New**: Rate limiting and security enhancements for staff authentication
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -32,34 +45,39 @@
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
 6. [Cross-Tenant Settlement Processing](#cross-tenant-settlement-processing)
-7. [Dependency Analysis](#dependency-analysis)
-8. [Performance Considerations](#performance-considerations)
-9. [Troubleshooting Guide](#troubleshooting-guide)
-10. [Conclusion](#conclusion)
-11. [Appendices](#appendices)
+7. [Blazor POS Application](#blazor-pos-application)
+8. [Staff Authentication and Management](#staff-authentication-and-management)
+9. [Dependency Analysis](#dependency-analysis)
+10. [Performance Considerations](#performance-considerations)
+11. [Troubleshooting Guide](#troubleshooting-guide)
+12. [Conclusion](#conclusion)
+13. [Appendices](#appendices)
 
 ## Introduction
 This document provides comprehensive API documentation for the POS Integration API focused on voucher verification, locking, redemption, and rollback operations. It covers the four core endpoints:
 - POST /pos/verify for voucher validation
 - POST /pos/lock for preventing double-spending  
-- POST /pos/redeem (now /pos/commit) for committing transactions
+- POST /pos/commit for committing transactions
 - POST /pos/rollback for releasing locked vouchers
 
 The system now includes **automatic settlement entry creation** for cross-tenant redemptions, enhanced error handling, improved transaction tracking, and automatic credit consumption for complimentary vouchers.
+
+**Updated**: The platform now features a complete Blazor WebAssembly POS application with staff authentication, shift management, and comprehensive transaction tracking capabilities.
 
 It also documents authentication requirements using API keys and JWT tokens, error handling strategies, transaction security considerations, and practical implementation guidance for POS system integration, including lockID management, transactionID correlation, and rollback mechanisms. Performance optimization, rate limiting, and debugging approaches are addressed for POS integration scenarios.
 
 ## Project Structure
 The NonCash platform is a SaaS solution structured with a 3-layer architecture:
-- Frontend (Blazor)
+- Frontend (Blazor WebAssembly POS Application)
 - Business Logic Layer (Microservices)
 - Data Access Layer (PostgreSQL via Entity Framework)
 
-The POS Integration API resides in the API layer and exposes REST endpoints for POS systems to integrate securely.
+The POS Integration API resides in the API layer and exposes REST endpoints for POS systems to integrate securely, complemented by a full-featured Blazor WebAssembly application for direct POS operations.
 
 ```mermaid
 graph TB
 POS["POS System"] --> API["NonCash.API<br/>Controllers, DTOs, Middleware"]
+BLAZOR["Blazor POS App<br/>WebAssembly Client"] --> API
 API --> BLL["NonCash.Core<br/>Services, Entities, Specifications"]
 BLL --> DAL["NonCash.Infrastructure<br/>Repositories, DbContext, Migrations"]
 DAL --> DB["PostgreSQL"]
@@ -124,7 +142,7 @@ Operational note: Verification does not change the voucher's usage status.
 
 **Section sources**
 - [PosController.cs:18-52](file://src/NonCash.API/Controllers/PosController.cs#L18-L52)
-- [PosService.cs:39-49](file://src/NonCash.Core/Services/PosService.cs#L39-L49)
+- [PosService.cs:45-55](file://src/NonCash.Core/Services/PosService.cs#L45-L55)
 - [api-contracts.md:14-34](file://docs/api-contracts.md#L14-L34)
 - [Key Functionalities.txt:135-146](file://Key Functionalities.txt#L135-L146)
 
@@ -137,6 +155,8 @@ Purpose: Sets voucher to In-Use status to prevent double-spending during a trans
     - voucherCode: string (required)
     - outletID: string (required)
     - billNumber: string (required)
+    - posNo: string (optional)
+    - operatorId: string (optional)
 - Response
   - Fields:
     - status: string (example: "Locked")
@@ -148,7 +168,9 @@ Example request
 {
   "voucherCode": "DYNAMIC_CODE_HERE",
   "outletID": "STORE_001",
-  "billNumber": "BILL_12345"
+  "billNumber": "BILL_12345",
+  "posNo": "POS-01",
+  "operatorId": "STAFF_USER_ID"
 }
 
 Example response
@@ -169,7 +191,7 @@ Operational note: Locking transitions the voucher to In-Use and associates the l
 
 **Section sources**
 - [PosController.cs:54-95](file://src/NonCash.API/Controllers/PosController.cs#L54-L95)
-- [PosService.cs:51-101](file://src/NonCash.Core/Services/PosService.cs#L51-L101)
+- [PosService.cs:57-107](file://src/NonCash.Core/Services/PosService.cs#L57-L107)
 - [api-contracts.md:36-52](file://docs/api-contracts.md#L36-L52)
 - [Key Functionalities.txt:135-146](file://Key Functionalities.txt#L135-L146)
 - [epics.md:278-291](file://_bmad-output/planning-artifacts/epics.md#L278-L291)
@@ -183,6 +205,8 @@ Purpose: Finalizes the usage of the voucher after the POS transaction is success
     - lockID: string (required, GUID)
     - transactionID: string (required)
     - amountUsed: number (required, must be >= 0)
+    - posNo: string (optional)
+    - operatorId: string (optional)
 - Response
   - Fields:
     - status: string (example: "Success")
@@ -193,7 +217,9 @@ Example request
 {
   "lockID": "GUID_LOCK_ID",
   "transactionID": "POS_TRANS_12345",
-  "amountUsed": 100000
+  "amountUsed": 100000,
+  "posNo": "POS-01",
+  "operatorId": "STAFF_USER_ID"
 }
 
 Example response
@@ -206,8 +232,8 @@ Example response
 Operational note: Commit permanently marks the voucher as used and records usage details. For cross-tenant redemptions, automatic settlement entries are created. For complimentary vouchers, automatic credit consumption occurs.
 
 **Section sources**
-- [PosController.cs:97-135](file://src/NonCash.API/Controllers/PosController.cs#L97-L135)
-- [PosService.cs:103-187](file://src/NonCash.Core/Services/PosService.cs#L103-L187)
+- [PosController.cs:97-137](file://src/NonCash.API/Controllers/PosController.cs#L97-L137)
+- [PosService.cs:109-212](file://src/NonCash.Core/Services/PosService.cs#L109-L212)
 - [api-contracts.md:54-70](file://docs/api-contracts.md#L54-L70)
 - [Key Functionalities.txt:135-146](file://Key Functionalities.txt#L135-L146)
 - [epics.md:292-303](file://_bmad-output/planning-artifacts/epics.md#L292-L303)
@@ -241,8 +267,8 @@ Example response
 Operational note: Rollback returns the voucher to Pending without recording a completed usage. The endpoint is idempotent and handles already-released locks gracefully.
 
 **Section sources**
-- [PosController.cs:137-167](file://src/NonCash.API/Controllers/PosController.cs#L137-L167)
-- [PosService.cs:189-208](file://src/NonCash.Core/Services/PosService.cs#L189-L208)
+- [PosController.cs:139-169](file://src/NonCash.API/Controllers/PosController.cs#L139-L169)
+- [PosService.cs:214-233](file://src/NonCash.Core/Services/PosService.cs#L214-L233)
 - [api-contracts.md:72-87](file://docs/api-contracts.md#L72-L87)
 - [Key Functionalities.txt:135-146](file://Key Functionalities.txt#L135-L146)
 - [epics.md:305-317](file://_bmad-output/planning-artifacts/epics.md#L305-L317)
@@ -254,6 +280,7 @@ The POS Integration API is part of the NonCash.API layer and integrates with the
 graph TB
 subgraph "External Integrations"
 POS["POS System"]
+BLAZOR["Blazor POS App"]
 APP["Member App"]
 end
 subgraph "NonCash.API"
@@ -276,6 +303,7 @@ subgraph "Data"
 PG["PostgreSQL"]
 end
 POS --> AUTH
+BLAZOR --> AUTH
 AUTH --> CTRL_VERIFY
 AUTH --> CTRL_LOCK
 AUTH --> CTRL_COMMIT
@@ -308,6 +336,7 @@ The POS redemption process follows a transactional pattern: verify, lock, commit
 ```mermaid
 sequenceDiagram
 participant POS as "POS System"
+participant BLAZOR as "Blazor POS App"
 participant API as "POS Integration API"
 participant SVC as "Pos Service"
 participant DB as "PostgreSQL"
@@ -318,12 +347,12 @@ SVC->>DB : Query VoucherPlanDetail
 DB-->>SVC : Voucher record
 SVC-->>API : {status : "Valid", voucherInfo}
 API-->>POS : Response
-POS->>API : POST /pos/lock {voucherCode, outletID, billNumber}
+BLAZOR->>API : POST /pos/lock {voucherCode, outletID, billNumber}
 API->>SVC : Lock voucher (Pending → InUse)
 SVC->>DB : Update UsageStatus = In-Use
 DB-->>SVC : OK
 SVC-->>API : {status : "Locked", lockID}
-API-->>POS : Response
+API-->>BLAZOR : Response
 POS->>API : POST /pos/commit {lockID, transactionID, amountUsed}
 API->>SVC : Commit usage
 SVC->>DB : Update UsageStatus = Complete, insert VoucherUsage
@@ -349,13 +378,13 @@ API-->>POS : Response
 ```
 
 **Diagram sources**
-- [PosController.cs:18-167](file://src/NonCash.API/Controllers/PosController.cs#L18-L167)
-- [PosService.cs:39-208](file://src/NonCash.Core/Services/PosService.cs#L39-L208)
+- [PosController.cs:18-169](file://src/NonCash.API/Controllers/PosController.cs#L18-L169)
+- [PosService.cs:45-233](file://src/NonCash.Core/Services/PosService.cs#L45-L233)
 - [SettlementService.cs:20-48](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L20-L48)
 
 **Section sources**
-- [PosController.cs:18-167](file://src/NonCash.API/Controllers/PosController.cs#L18-L167)
-- [PosService.cs:39-208](file://src/NonCash.Core/Services/PosService.cs#L39-L208)
+- [PosController.cs:18-169](file://src/NonCash.API/Controllers/PosController.cs#L18-L169)
+- [PosService.cs:45-233](file://src/NonCash.Core/Services/PosService.cs#L45-L233)
 - [data-models.md:34-53](file://docs/data-models.md#L34-L53)
 - [epics.md:278-317](file://_bmad-output/planning-artifacts/epics.md#L278-L317)
 
@@ -441,6 +470,7 @@ SETTLEMENT_ENTRY }o--|| VOICE_USAGE : "usage"
 - Dynamic Security: Vouchers use rotating dynamic codes to prevent reuse and unauthorized scanning.
 - Multi-tenancy: BrandID isolates data between businesses; POS integrations are locked to specific ranges defined in planning.
 - Outlet Authorization: Each endpoint validates that the API key matches the requested outlet.
+- **Enhanced**: Staff authentication with rate limiting and secure credential handling.
 
 **Section sources**
 - [PosController.cs:8-38](file://src/NonCash.API/Controllers/PosController.cs#L8-L38)
@@ -452,6 +482,7 @@ SETTLEMENT_ENTRY }o--|| VOICE_USAGE : "usage"
 - VoucherUsage logging: Captures POSID, TransactionID, UsageDate, AmountUsed, SponsorBrandId, and RedeemBrandId upon successful commit.
 - Rollback behavior: Returns voucher to Pending without creating a completed usage record.
 - Idempotency: All endpoints handle duplicate requests gracefully with appropriate status codes.
+- **Enhanced**: Shift session tracking with transaction audit trails.
 
 **Section sources**
 - [implementation-readiness-report-2026-04-17.md:41-47](file://_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-17.md#L41-L47)
@@ -490,10 +521,90 @@ For complimentary vouchers, the system automatically consumes 1 credit from the 
 - Gift vouchers were already charged at sale time, so no additional charge
 
 **Section sources**
-- [PosService.cs:125-177](file://src/NonCash.Core/Services/PosService.cs#L125-L177)
+- [PosService.cs:133-183](file://src/NonCash.Core/Services/PosService.cs#L133-L183)
 - [SettlementService.cs:20-48](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L20-L48)
 - [SettlementEntry.cs:1-49](file://src/NonCash.Core/Entities/SettlementEntry.cs#L1-L49)
 - [VoucherPlanHeader.cs:48-49](file://src/NonCash.Core/Entities/VoucherPlanHeader.cs#L48-L49)
+
+## Blazor POS Application
+
+### Overview
+The Blazor WebAssembly POS application provides a complete user interface for POS operations, including staff authentication, voucher verification, locking, commitment, and rollback functionality.
+
+### Staff Authentication System
+The POS application implements a robust staff authentication system with JWT token management and shift session tracking.
+
+**Authentication Flow:**
+1. Staff logs in with username, store code, and password
+2. System validates credentials against store staff database
+3. JWT token is issued with outlet-specific context
+4. Shift session is created with transaction tracking capabilities
+
+**Session Management:**
+- Shift sessions track all transactions performed during a staff member's work period
+- Automatic session expiration based on JWT token expiry
+- Transaction audit trail maintained for each shift
+- Support for multiple POS terminals per staff member
+
+### User Interface Features
+The POS application provides an intuitive interface with:
+- **Login Page**: Staff authentication with optional POS terminal identification
+- **Payment Page**: Complete voucher redemption workflow with real-time feedback
+- **Query Page**: Standalone voucher verification without locking
+- **Shift Summary**: Real-time transaction tracking and reporting
+
+### Transaction Tracking
+Each shift maintains a comprehensive audit trail of all transactions:
+- Bill numbers and voucher serial numbers
+- Amounts used and transaction statuses
+- Timestamps and operator information
+- Success/failure rates and totals
+
+**Section sources**
+- [Login.razor:1-122](file://src/NonCash.Pos/Pages/Login.razor#L1-L122)
+- [Payment.razor:1-363](file://src/NonCash.Pos/Pages/Payment.razor#L1-L363)
+- [Query.razor:1-188](file://src/NonCash.Pos/Pages/Query.razor#L1-L188)
+- [PosAuthService.cs:1-88](file://src/NonCash.Pos/Services/PosAuthService.cs#L1-L88)
+- [PosApiModels.cs:1-83](file://src/NonCash.Pos/Models/PosApiModels.cs#L1-L83)
+
+## Staff Authentication and Management
+
+### Staff Login Endpoint
+A new staff authentication endpoint has been added to support the Blazor POS application with enhanced security measures.
+
+**Endpoint**: POST /api/v1/auth/staff-login
+**Request**:
+- username: string (required)
+- storeCode: string (required) 
+- password: string (required)
+
+**Response**:
+- token: string (JWT token)
+- expiresAt: DateTime (token expiry)
+- user: object (user details)
+- outletId: Guid (assigned outlet)
+
+### Store Staff Management System
+A comprehensive staff management system allows brand managers to create, update, and manage store staff accounts with outlet assignments.
+
+**Management Capabilities:**
+- Create store staff accounts with password and outlet assignments
+- Update staff information and passwords
+- Lock/unlock staff accounts for security
+- Delete staff accounts when no longer needed
+- View staff lists with outlet assignments
+
+**Security Features:**
+- Role-based access control (Admin and BrandManager roles)
+- Brand-scoped operations to prevent cross-brand access
+- Rate limiting on authentication endpoints to prevent brute force attacks
+- Generic error messages to prevent information disclosure
+
+**Section sources**
+- [AuthController.cs:89-107](file://src/NonCash.API/Controllers/AuthController.cs#L89-L107)
+- [StoreStaffController.cs:1-241](file://src/NonCash.API/Controllers/StoreStaffController.cs#L1-L241)
+- [StoreStaffService.cs:1-175](file://src/NonCash.Core/Services/StoreStaffService.cs#L1-L175)
+- [StoreStaffDtos.cs:1-46](file://src/NonCash.API/DTOs/StoreStaffDtos.cs#L1-L46)
 
 ## Dependency Analysis
 The POS Integration API depends on the Pos Service for business logic and repositories for persistence. The Pos Service coordinates with the database to enforce transactional integrity and integrates with the Settlement Service for cross-tenant processing.
@@ -507,9 +618,11 @@ ROLLBACK["Rollback Endpoint"] --> POS_SVC
 POS_SVC --> REPO["Repository Pattern"]
 POS_SVC --> SETTLEMENT["Settlement Service"]
 POS_SVC --> CREDIT["Credit Service"]
+POS_SVC --> EVENTS["Event Publisher"]
 REPO --> DB["PostgreSQL"]
 SETTLEMENT --> DB
 CREDIT --> DB
+EVENTS --> DB
 ```
 
 **Diagram sources**
@@ -528,8 +641,10 @@ CREDIT --> DB
 - Implement short-lived locks to minimize contention; release locks promptly on rollback.
 - Employ asynchronous processing for non-blocking IO and reduce latency.
 - Monitor and tune PostgreSQL for high-throughput POS scenarios.
-- **New**: Settlement entry creation is optimized with idempotency checks to prevent duplicate entries.
-- **New**: Credit consumption operations are designed to be lightweight and non-blocking.
+- **Enhanced**: Settlement entry creation is optimized with idempotency checks to prevent duplicate entries.
+- **Enhanced**: Credit consumption operations are designed to be lightweight and non-blocking.
+- **New**: Blazor WebAssembly client reduces server load through client-side validation and caching.
+- **New**: Staff authentication rate limiting prevents brute force attacks while maintaining performance.
 
 [No sources needed since this section provides general guidance]
 
@@ -548,20 +663,30 @@ Common issues and resolutions for POS integration:
 - Rollback does not release the voucher
   - Ensure the correct lockID is used and the voucher is still In-Use.
   - Verify that rollback was invoked before the lock expired or timed out.
-- **New**: Settlement entries not created
+- **Enhanced**: Settlement entries not created
   - Verify that sponsor brand differs from redeem brand.
   - Check that the voucher plan has proper sponsor brand configuration.
-- **New**: Credit consumption failures
+- **Enhanced**: Credit consumption failures
   - Ensure the sponsor brand has sufficient credits available.
   - Verify that the voucher type is correctly identified as complimentary.
+- **New**: Staff authentication issues
+  - Verify staff account is active and assigned to the correct outlet.
+  - Check rate limiting limits if experiencing authentication failures.
+  - Ensure JWT token is properly configured and not expired.
+- **New**: Blazor POS application connectivity
+  - Verify API key configuration in the POS terminal provisioning.
+  - Check network connectivity between POS device and API server.
+  - Review browser console for JavaScript errors in the Blazor application.
 
 Debugging tips:
 - Enable structured logging for POS requests/responses.
 - Correlate transactionID across POS logs, API gateway logs, and backend logs.
 - Use monitoring dashboards to track endpoint latencies and error rates.
 - Validate JWT and API Key headers at the middleware level.
-- **New**: Monitor settlement ledger for cross-tenant redemption tracking.
-- **New**: Track credit consumption events for complimentary vouchers.
+- **Enhanced**: Monitor settlement ledger for cross-tenant redemption tracking.
+- **Enhanced**: Track credit consumption events for complimentary vouchers.
+- **New**: Monitor staff authentication attempts and session management.
+- **New**: Track Blazor application performance and error rates.
 
 **Section sources**
 - [PosController.cs:27-38](file://src/NonCash.API/Controllers/PosController.cs#L27-L38)
@@ -572,7 +697,9 @@ Debugging tips:
 ## Conclusion
 The POS Integration API provides a secure, transactional foundation for voucher redemption at point-of-sale systems with enhanced cross-tenant settlement processing. By adhering to the documented endpoints, authentication, and operational semantics—especially around lockID management, transactionID correlation, and automatic settlement creation—POS systems can reliably verify, lock, redeem, and rollback vouchers while maintaining data integrity and auditability.
 
-The system now automatically handles complex cross-tenant scenarios by creating settlement entries and managing credit consumption for complimentary vouchers, providing a complete solution for multi-brand voucher ecosystems.
+**Enhanced**: The platform now includes a complete Blazor WebAssembly POS application with staff authentication, shift management, and comprehensive transaction tracking capabilities. The addition of a robust staff management system enables brand managers to efficiently manage store staff accounts and their outlet assignments.
+
+The system automatically handles complex cross-tenant scenarios by creating settlement entries and managing credit consumption for complimentary vouchers, providing a complete solution for multi-brand voucher ecosystems. The enhanced security measures, including rate limiting and role-based access control, ensure the system remains secure while supporting high-volume POS operations.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -588,15 +715,23 @@ The system now automatically handles complex cross-tenant scenarios by creating 
 - Rollback mechanisms
   - Implement automatic rollback on POS failure or cancellation.
   - Ensure rollback is idempotent and safe to retry.
-- **New**: Settlement tracking
+- **Enhanced**: Settlement tracking
   - Monitor settlement ledger for cross-tenant redemptions.
   - Implement settlement reconciliation processes for financial reporting.
-- **New**: Credit management
+- **Enhanced**: Credit management
   - Monitor credit balances for brands offering complimentary vouchers.
   - Implement alerts for low credit situations.
+- **New**: Staff authentication integration
+  - Implement staff login flow with JWT token management.
+  - Handle session expiration and automatic re-authentication.
+  - Track staff activity and generate audit reports.
+- **New**: Blazor POS application deployment
+  - Configure POS terminal provisioning with API keys and outlet information.
+  - Set up staff accounts and assign appropriate outlet permissions.
+  - Monitor application performance and user experience metrics.
 
 **Section sources**
-- [PosController.cs:170-192](file://src/NonCash.API/Controllers/PosController.cs#L170-L192)
+- [PosController.cs:170-195](file://src/NonCash.API/Controllers/PosController.cs#L170-L195)
 - [PosService.cs:117-123](file://src/NonCash.Core/Services/PosService.cs#L117-L123)
 - [SettlementService.cs:20-48](file://src/NonCash.Infrastructure/Services/SettlementService.cs#L20-L48)
 - [epics.md:278-317](file://_bmad-output/planning-artifacts/epics.md#L278-L317)
@@ -624,6 +759,36 @@ Rollback --> Released{"Released?"}
 Released --> |Yes| Complete
 Reject --> End(["End"])
 Retry --> End
+```
+
+[No sources needed since this diagram shows conceptual workflow, not actual code structure]
+
+### Blazor POS Application Workflow
+```mermaid
+flowchart TD
+StaffLogin["Staff Login"] --> AuthCheck{"Authenticated?"}
+AuthCheck --> |No| ShowError["Show Error Message"]
+AuthCheck --> |Yes| CreateSession["Create Shift Session"]
+CreateSession --> NavigateToPayment["Navigate to Payment Page"]
+NavigateToPayment --> EnterVoucher["Enter Voucher Code"]
+EnterVoucher --> VerifyVoucher["Verify Voucher"]
+VerifyVoucher --> Valid{"Valid?"}
+Valid --> |No| DisplayError["Display Error"]
+Valid --> |Yes| LockVoucher["Lock Voucher"]
+LockVoucher --> LockSuccess{"Locked?"}
+LockSuccess --> |No| ShowLockError["Show Lock Error"]
+LockSuccess --> |Yes| CommitTransaction["Commit Transaction"]
+CommitTransaction --> CommitSuccess{"Committed?"}
+CommitSuccess --> |No| RollbackAttempt["Attempt Rollback"]
+CommitSuccess --> |Yes| RecordTransaction["Record in Shift History"]
+RecordTransaction --> Complete(["Complete"])
+RollbackAttempt --> RollbackSuccess{"Rolled Back?"}
+RollbackSuccess --> |Yes| Complete
+RollbackSuccess --> |No| ShowRollbackError["Show Rollback Error"]
+ShowError --> StaffLogin
+DisplayError --> EnterVoucher
+ShowLockError --> EnterVoucher
+ShowRollbackError --> EnterVoucher
 ```
 
 [No sources needed since this diagram shows conceptual workflow, not actual code structure]

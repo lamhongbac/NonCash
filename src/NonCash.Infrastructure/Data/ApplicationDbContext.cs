@@ -25,6 +25,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<VoucherPlanHeader> VoucherPlanHeaders => Set<VoucherPlanHeader>();
     public DbSet<VoucherPlanDetail> VoucherPlanDetails => Set<VoucherPlanDetail>();
     public DbSet<VoucherTransfer> VoucherTransfers => Set<VoucherTransfer>();
+    public DbSet<GiftMessage> GiftMessages => Set<GiftMessage>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<VoucherUsage> VoucherUsages => Set<VoucherUsage>();
     public DbSet<VoucherDistribution> VoucherDistributions => Set<VoucherDistribution>();

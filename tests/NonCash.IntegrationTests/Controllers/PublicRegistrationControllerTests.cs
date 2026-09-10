@@ -20,8 +20,8 @@ public class PublicRegistrationControllerTests
         var brandRepository = new FakeBrandRepository();
         var userAccountRepository = new FakeUserAccountRepository();
         _requestRepository = new FakeBusinessRegistrationRequestRepository();
-        var notificationService = new ConsoleNotificationService();
-        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService, new FakeCustomerRepository(), new FakeOutletRepository(), new FakeUserOutletRepository());
+        var notificationService = new FileNotificationService();
+        var authService = new AuthService(userAccountRepository, new FakeMemberAccountRepository(), new FakeJwtTokenService(), notificationService, new FakeCustomerRepository(), new FakeOutletRepository(), new FakeUserOutletRepository(), Fixtures.TestJwtConfig.Create());
 
         _registrationService = new RegistrationService(
             new FakeBusinessRepository(),
@@ -205,14 +205,15 @@ public class PublicRegistrationControllerTests
             new FakeUserAccountRepository(),
             memberRepository,
             new FakeJwtTokenService(),
-            new ConsoleNotificationService(),
+            new FileNotificationService(),
             customerRepository,
             new FakeOutletRepository(),
-            new FakeUserOutletRepository());
+            new FakeUserOutletRepository(),
+            Fixtures.TestJwtConfig.Create());
         var customerService = new CustomerService(customerRepository, new FakeBrandCustomerRepository(), new FakeCustomerAuditLogRepository());
-        var controller = new MemberRegistrationController(customerService, customerRepository, memberRepository, authService);
+        var controller = new MemberRegistrationController(customerService, customerRepository, memberRepository, authService, new Fixtures.StubVoucherTransferService());
 
-        var request = new MemberRegisterRequest("bannedmember", "Password@123", "Banned Customer", phone, "banned@example.com");
+        var request = new MemberRegisterRequest("Password@123", "Banned Customer", phone, "banned@example.com");
 
         // Act
         var result = await controller.Register(request, CancellationToken.None);
@@ -321,14 +322,15 @@ public class PublicRegistrationControllerTests
         public string GenerateToken(UserAccount user, Guid outletId) => "fake-staff-token";
         public string GenerateToken(MemberAccount member) => "fake-member-token";
         public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(1);
+        public string GenerateMagicLinkToken(Guid memberAccountId) => "fake-magic-link-token";
+        public string GenerateSignInLinkToken(Guid memberAccountId) => "fake-sign-in-link-token";
+        public Guid? ValidateMagicLinkToken(string token) => null;
     }
 
     private class FakeMemberAccountRepository : IMemberAccountRepository
     {
         public List<MemberAccount> Added { get; } = new();
 
-        public Task<MemberAccount?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
-        public Task<bool> UsernameExistsAsync(string username, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<MemberAccount?> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
         public Task<MemberAccount?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<MemberAccount?>(null);
         public Task<IEnumerable<MemberAccount>> GetAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<IEnumerable<MemberAccount>>(new List<MemberAccount>());

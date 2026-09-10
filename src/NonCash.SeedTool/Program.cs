@@ -27,7 +27,7 @@ services.AddScoped<ICustomerRepository, CustomerRepository>();
 services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 services.AddScoped<IMemberAccountRepository, MemberAccountRepository>();
 services.AddScoped<IAuthService, AuthService>();
-services.AddScoped<INotificationService, ConsoleNotificationService>();
+services.AddScoped<INotificationService, FileNotificationService>();
 services.AddScoped<IVoucherCodeService, VoucherCodeService>();
 services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
 services.AddScoped<IJwtTokenService, StubJwtTokenService>();
@@ -178,11 +178,11 @@ var bobMemberId = Guid.Parse("d0000000-0000-0000-0000-000000000002");
 
 var memberAccounts = new[]
 {
-    (aliceMemberId, "alice", "Alice Sender", aliceId),
-    (bobMemberId, "bob", "Bob Receiver", bobId)
+    (aliceMemberId, "Alice Sender", aliceId),
+    (bobMemberId, "Bob Receiver", bobId)
 };
 
-foreach (var (id, username, fullName, customerId) in memberAccounts)
+foreach (var (id, fullName, customerId) in memberAccounts)
 {
     var member = await context.MemberAccounts.FindAsync(id);
     if (member == null)
@@ -191,21 +191,19 @@ foreach (var (id, username, fullName, customerId) in memberAccounts)
         {
             Id = id,
             CustomerId = customerId,
-            Username = username,
             PasswordHash = passwordHash,
             FullName = fullName,
             Status = MemberAccountStatus.Active
         };
         context.MemberAccounts.Add(member);
-        Console.WriteLine($"  ✓ Created member account: {username} (password: {testPassword})");
+        Console.WriteLine($"  ✓ Created member account: {fullName} (password: {testPassword})");
     }
     else
     {
         member.CustomerId = customerId;
-        member.Username = username;
         member.FullName = fullName;
         context.MemberAccounts.Update(member);
-        Console.WriteLine($"  - {username} already exists, updated link");
+        Console.WriteLine($"  - {fullName} already exists, updated link");
     }
 }
 await context.SaveChangesAsync();
@@ -372,4 +370,7 @@ class StubJwtTokenService : IJwtTokenService
     public string GenerateToken(UserAccount user, Guid outletId) => "stub-token";
     public string GenerateToken(MemberAccount member) => "stub-token";
     public DateTime GetTokenExpiry() => DateTime.UtcNow.AddHours(8);
+    public string GenerateMagicLinkToken(Guid memberAccountId) => "stub-magic-link";
+    public string GenerateSignInLinkToken(Guid memberAccountId) => "stub-sign-in-link";
+    public Guid? ValidateMagicLinkToken(string token) => null;
 }

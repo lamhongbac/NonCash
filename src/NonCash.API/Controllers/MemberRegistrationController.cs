@@ -16,17 +16,20 @@ public class MemberRegistrationController : ControllerBase
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IAuthService _authService;
+    private readonly IVoucherTransferService _voucherTransferService;
 
     public MemberRegistrationController(
         CustomerService customerService,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
-        IAuthService authService)
+        IAuthService authService,
+        IVoucherTransferService voucherTransferService)
     {
         _customerService = customerService ?? throw new ArgumentNullException(nameof(customerService));
         _customerRepository = customerRepository ?? throw new ArgumentNullException(nameof(customerRepository));
         _memberRepository = memberRepository ?? throw new ArgumentNullException(nameof(memberRepository));
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+        _voucherTransferService = voucherTransferService ?? throw new ArgumentNullException(nameof(voucherTransferService));
     }
 
     /// <summary>
@@ -38,13 +41,12 @@ public class MemberRegistrationController : ControllerBase
         MemberRegisterRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Username)
-            || string.IsNullOrWhiteSpace(request.Password)
+        if (string.IsNullOrWhiteSpace(request.Password)
             || string.IsNullOrWhiteSpace(request.PhoneNumber)
             || string.IsNullOrWhiteSpace(request.FullName)
             || string.IsNullOrWhiteSpace(request.Email))
         {
-            return BadRequest(new { error = "Username, password, phone number, full name, and email are required." });
+            return BadRequest(new { error = "Password, phone number, full name, and email are required." });
         }
 
         // Email is mandatory: it is the primary voucher notification channel.
@@ -55,14 +57,10 @@ public class MemberRegistrationController : ControllerBase
         if (request.Password.Length < 8)
             return BadRequest(new { error = "Password must be at least 8 characters." });
 
-        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
         var normalizedPhone = Customer.NormalizePhoneNumber(request.PhoneNumber);
 
-        if (string.IsNullOrEmpty(normalizedPhone))
-            return BadRequest(new { error = "Invalid phone number." });
-
-        if (await _memberRepository.UsernameExistsAsync(normalizedUsername, cancellationToken))
-            return Conflict(new { error = "Username is already taken." });
+        if (normalizedPhone.Length is < 9 or > 15)
+            return BadRequest(new { error = "Invalid phone number. Enter the number you will sign in with, for example 0913660575." });
 
         try
         {
@@ -103,21 +101,23 @@ public class MemberRegistrationController : ControllerBase
                 if (!string.IsNullOrEmpty(existingMember.PasswordHash))
                     return Conflict(new { error = "A member account is already registered for this phone number." });
 
-                existingMember.Username = normalizedUsername;
                 existingMember.PasswordHash = _authService.HashPassword(request.Password);
                 existingMember.FullName = request.FullName.Trim();
                 existingMember.Status = MemberAccountStatus.Active;
                 _memberRepository.Update(existingMember);
                 await _memberRepository.SaveChangesAsync(cancellationToken);
 
-                var activationAuthResult = await _authService.LoginMemberAsync(normalizedUsername, request.Password, cancellationToken);
+                var activationAuthResult = await _authService.LoginMemberAsync(normalizedPhone, request.Password, cancellationToken);
                 if (!activationAuthResult.Success || activationAuthResult.Member == null)
                     return StatusCode(500, new { error = "Activation succeeded but login failed." });
+
+                // CR-2026-09-10-30 row 3: gifts held for this phone while it was a placeholder
+                // are emailed with their accept link now that the account has an email address.
+                await _voucherTransferService.NotifyPendingGiftsAsync(existingMember.Id, cancellationToken);
 
                 var activationResponse = new MemberRegistrationResponse(
                     existingMember.Id,
                     customer.Id,
-                    existingMember.Username,
                     existingMember.FullName,
                     activationAuthResult.Token!,
                     activationAuthResult.ExpiresAt!.Value);
@@ -128,7 +128,6 @@ public class MemberRegistrationController : ControllerBase
             // Create linked member account
             var member = new MemberAccount
             {
-                Username = normalizedUsername,
                 PasswordHash = _authService.HashPassword(request.Password),
                 FullName = request.FullName.Trim(),
                 CustomerId = customer.Id,
@@ -139,14 +138,13 @@ public class MemberRegistrationController : ControllerBase
             await _memberRepository.SaveChangesAsync(cancellationToken);
 
             // Auto-login after registration
-            var authResult = await _authService.LoginMemberAsync(normalizedUsername, request.Password, cancellationToken);
+            var authResult = await _authService.LoginMemberAsync(normalizedPhone, request.Password, cancellationToken);
             if (!authResult.Success || authResult.Member == null)
                 return StatusCode(500, new { error = "Registration succeeded but login failed." });
 
             var response = new MemberRegistrationResponse(
                 member.Id,
                 customer.Id,
-                member.Username,
                 member.FullName,
                 authResult.Token!,
                 authResult.ExpiresAt!.Value);
@@ -165,7 +163,6 @@ public class MemberRegistrationController : ControllerBase
 }
 
 public record MemberRegisterRequest(
-    string Username,
     string Password,
     string FullName,
     string PhoneNumber,
@@ -174,7 +171,6 @@ public record MemberRegisterRequest(
 public record MemberRegistrationResponse(
     Guid MemberAccountId,
     Guid CustomerId,
-    string Username,
     string FullName,
     string Token,
     DateTime ExpiresAt);

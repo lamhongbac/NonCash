@@ -1,0 +1,23 @@
+@inject IJSRuntime JSRuntime
+
+<svg id="@SvgId" style="@($"width: 100%; height: {HeightPx}px;")"></svg>
+
+@code {
+    [Parameter] public string SvgId { get; set; } = "voucher-barcode";
+    [Parameter] public string Code { get; set; } = "";
+    [Parameter] public int HeightPx { get; set; } = 110;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("renderBarcode", SvgId, Code);
+        }
+        catch
+        {
+            // JS interop is unavailable during prerender; the code text below still identifies the voucher.
+        }
+    }
+}

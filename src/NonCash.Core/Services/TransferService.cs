@@ -1,50 +1,41 @@
-using Microsoft.Extensions.Configuration;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 
 namespace NonCash.Core.Services;
 
+/// <summary>
+/// Bulk gift sending. CR-2026-09-10-30: this no longer moves voucher ownership — every gift goes
+/// through <see cref="IVoucherTransferService.InitiateAsync"/>, which reserves the voucher, records
+/// it in voucher_transfers and tells the sender honestly whether the recipient was emailed.
+/// Ownership changes only when the recipient accepts.
+/// </summary>
 public class TransferService : ITransferService
 {
     private readonly IRepository<VoucherPlanDetail> _detailRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly IMemberAccountRepository _memberRepository;
     private readonly IRepository<VoucherDistribution> _distributionRepository;
-    private readonly INotificationService _notificationService;
-    private readonly IVoucherEventPublisher _eventPublisher;
-    private readonly IBrandCustomerRepository _brandCustomerRepository;
-    private readonly IVoucherPlanRepository _planRepository;
-    private readonly IJwtTokenService _jwtTokenService;
-    private readonly IConfiguration _configuration;
+    private readonly IVoucherTransferService _voucherTransferService;
 
     public TransferService(
         IRepository<VoucherPlanDetail> detailRepository,
         ICustomerRepository customerRepository,
         IMemberAccountRepository memberRepository,
         IRepository<VoucherDistribution> distributionRepository,
-        INotificationService notificationService,
-        IVoucherEventPublisher eventPublisher,
-        IBrandCustomerRepository brandCustomerRepository,
-        IVoucherPlanRepository planRepository,
-        IJwtTokenService jwtTokenService,
-        IConfiguration configuration)
+        IVoucherTransferService voucherTransferService)
     {
         _detailRepository = detailRepository;
         _customerRepository = customerRepository;
         _memberRepository = memberRepository;
         _distributionRepository = distributionRepository;
-        _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
-        _eventPublisher = eventPublisher;
-        _brandCustomerRepository = brandCustomerRepository;
-        _planRepository = planRepository;
-        _jwtTokenService = jwtTokenService ?? throw new ArgumentNullException(nameof(jwtTokenService));
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _voucherTransferService = voucherTransferService ?? throw new ArgumentNullException(nameof(voucherTransferService));
     }
 
     public async Task<TransferResult> TransferAsync(
         Guid fromMemberId,
         IReadOnlyList<Guid> voucherIds,
         IReadOnlyList<string> recipientPhones,
+        string? note = null,
         CancellationToken cancellationToken = default)
     {
         if (voucherIds == null || voucherIds.Count == 0)
@@ -53,6 +44,13 @@ public class TransferService : ITransferService
         if (recipientPhones == null || recipientPhones.Count == 0)
             return new TransferResult(false, ErrorCode: "EmptyList", ErrorMessage: "Recipient phone list is empty.");
 
+        // One note travels with every gift in this send, so it is judged once, before anything is reserved.
+        if (note?.Length > GiftMessagePolicy.MaxBodyLength)
+            return new TransferResult(
+                false,
+                ErrorCode: "Validation",
+                ErrorMessage: $"Your message is longer than {GiftMessagePolicy.MaxBodyLength} characters, so no gift was sent. Shorten it and send the gifts again.");
+
         // AC3: 1-to-1 mapping required
         if (voucherIds.Count != recipientPhones.Count)
             return new TransferResult(
@@ -60,7 +58,7 @@ public class TransferService : ITransferService
                 ErrorCode: "MismatchedCounts",
                 ErrorMessage: $"Voucher count ({voucherIds.Count}) must equal recipient phone count ({recipientPhones.Count}).");
 
-        // Matrix row 8 (gap #3): a blacklisted sender cannot start transfers.
+        // Matrix row 8 (gap #3): a blacklisted sender cannot send gifts.
         var senderMember = await _memberRepository.GetByIdAsync(fromMemberId, cancellationToken);
         var senderCustomer = senderMember != null
             ? await _customerRepository.GetByIdAsync(senderMember.CustomerId, cancellationToken)
@@ -85,131 +83,57 @@ public class TransferService : ITransferService
             loaded.Add(detail);
         }
 
-        // Normalize phones, preserve order (1-to-1 mapping)
-        var normalized = recipientPhones
-            .Select(p => Customer.NormalizePhoneNumber(p ?? string.Empty))
-            .ToList();
-
         var skipped = new List<TransferSkipped>();
-        var transfers = new List<(VoucherPlanDetail Detail, Guid RecipientMemberId, string Phone)>();
+        var deliveries = new List<GiftDelivery>();
 
         for (var i = 0; i < loaded.Count; i++)
         {
-            var phone = normalized[i];
+            var rawPhone = recipientPhones[i] ?? string.Empty;
             var voucher = loaded[i];
 
-            if (string.IsNullOrEmpty(phone))
+            if (string.IsNullOrEmpty(Customer.NormalizePhoneNumber(rawPhone)))
             {
-                skipped.Add(new TransferSkipped(recipientPhones[i] ?? string.Empty, voucher.Id, "InvalidPhoneNumber"));
+                skipped.Add(new TransferSkipped(rawPhone, voucher.Id, "InvalidPhoneNumber"));
                 continue;
             }
 
-            var member = await ResolveOrCreateMemberAccountByPhoneAsync(phone, cancellationToken);
-            if (member == null)
+            var initiated = await _voucherTransferService.InitiateAsync(
+                fromMemberId, voucher.Id, rawPhone, recipientMemberId: null, note: note, cancellationToken);
+
+            if (!initiated.Success)
             {
-                skipped.Add(new TransferSkipped(phone, voucher.Id, "RecipientNotFound"));
+                skipped.Add(new TransferSkipped(rawPhone, voucher.Id, initiated.ErrorCode ?? "Rejected"));
                 continue;
             }
 
-            var customer = await _customerRepository.GetByIdAsync(member.CustomerId, cancellationToken);
-            if (customer == null || customer.Status == CustomerStatus.Blacklisted)
-            {
-                skipped.Add(new TransferSkipped(phone, voucher.Id, "Blacklisted"));
-                continue;
-            }
-
-            if (member.Id == fromMemberId)
-            {
-                skipped.Add(new TransferSkipped(phone, voucher.Id, "SelfTransferNotAllowed"));
-                continue;
-            }
-
-            // Auto-link: receiving a transferred voucher of brand X makes them brand X's customer.
-            var voucherPlan = await _planRepository.GetByIdAsync(voucher.ParentId, cancellationToken);
-            if (voucherPlan != null)
-                await _brandCustomerRepository.EnsureAsync(voucherPlan.BrandId, customer.Id, BrandCustomerSource.Transfer, null, cancellationToken);
-
-            transfers.Add((voucher, member.Id, phone));
+            deliveries.Add(new GiftDelivery(
+                voucher.Id,
+                initiated.TransferId,
+                initiated.RecipientPhone ?? rawPhone,
+                initiated.RecipientName,
+                initiated.DeliveryStatus ?? GiftDeliveryStatus.HoldingNoEmail,
+                initiated.Message ?? string.Empty));
         }
 
-        if (transfers.Count == 0)
+        if (deliveries.Count == 0)
         {
             return new TransferResult(
                 false,
                 ErrorCode: "NoEligibleRecipients",
-                ErrorMessage: "No eligible recipients (all blacklisted/invalid).",
+                ErrorMessage: "No gift could be sent — every recipient was skipped. Check the reason listed for each one.",
                 SkippedRecords: skipped);
-        }
-
-        // AC1 + AC2: Atomic update (single SaveChangesAsync wraps all changes in one tx)
-        var now = DateTime.UtcNow;
-        foreach (var (detail, recipientMemberId, _) in transfers)
-        {
-            detail.MemberId = recipientMemberId;
-            _detailRepository.Update(detail);
-
-            var distribution = new VoucherDistribution
-            {
-                VoucherId = detail.Id,
-                MemberId = recipientMemberId,
-                Method = DistributionMethod.Transfer,
-                DistributionDate = now
-            };
-            await _distributionRepository.AddAsync(distribution, cancellationToken);
-        }
-
-        await _detailRepository.SaveChangesAsync(cancellationToken);
-
-        // Send transfer notifications to eligible recipients
-        var senderName = senderCustomer?.FullName ?? senderMember?.FullName ?? "A member";
-
-        foreach (var (detail, recipientMemberId, phone) in transfers)
-        {
-            try
-            {
-                var recipientCustomer = await _customerRepository.GetByIdAsync(
-                    (await _memberRepository.GetByIdAsync(recipientMemberId, cancellationToken))!.CustomerId,
-                    cancellationToken);
-
-                await _notificationService.NotifyVoucherTransferInitiatedAsync(new VoucherTransferInitiatedNotification(
-                    recipientCustomer?.Email,
-                    phone,
-                    recipientCustomer?.FullName ?? phone,
-                    senderName,
-                    1,
-                    now,
-                    BuildMagicLinkUrl(recipientMemberId)), cancellationToken);
-            }
-            catch (Exception)
-            {
-                // Notification failures must not break the transfer flow.
-            }
-
-            // Epic 6.4: Publish webhook event for each transferred voucher.
-            try
-            {
-                await _eventPublisher.PublishAsync(
-                    "voucher.transferred",
-                    detail.Id,
-                    phone,
-                    detail.Parent?.BrandId,
-                    new { fromMemberId, toMemberId = recipientMemberId, direction = "outgoing" },
-                    cancellationToken);
-            }
-            catch
-            {
-                // Best-effort: event publishing errors must not fail the transfer.
-            }
         }
 
         return new TransferResult(
             Success: true,
-            TransferredCount: transfers.Count,
+            TransferredCount: deliveries.Count,
             SkippedCount: skipped.Count,
-            SkippedRecords: skipped);
+            SkippedRecords: skipped,
+            Deliveries: deliveries);
     }
 
-    // AC5: outgoing transfer history — distributions where Method=Transfer for vouchers ever owned by fromMemberId
+    // AC5: outgoing gift history — distributions where Method=Transfer for vouchers ever owned by fromMemberId.
+    // CR-2026-09-10-30: a distribution row is written when the recipient accepts, so this lists completed gifts.
     public async Task<IReadOnlyList<TransferHistoryItem>> GetOutgoingHistoryAsync(
         Guid fromMemberId,
         CancellationToken cancellationToken = default)
@@ -258,44 +182,5 @@ public class TransferService : ITransferService
         }
 
         return result;
-    }
-
-    private async Task<MemberAccount?> ResolveOrCreateMemberAccountByPhoneAsync(string phone, CancellationToken cancellationToken)
-    {
-        var customer = await _customerRepository.GetByPhoneNumberAsync(phone, cancellationToken);
-        if (customer == null)
-        {
-            // Auto-onboard new customer + placeholder member account
-            customer = new Customer
-            {
-                PhoneNumber = phone,
-                FullName = phone,
-                Status = CustomerStatus.Active
-            };
-            await _customerRepository.AddAsync(customer, cancellationToken);
-            await _customerRepository.SaveChangesAsync(cancellationToken);
-        }
-
-        var member = await _memberRepository.GetByCustomerIdAsync(customer.Id, cancellationToken);
-        if (member != null)
-            return member;
-
-        var placeholder = new MemberAccount
-        {
-            CustomerId = customer.Id,
-            Username = phone,
-            PasswordHash = string.Empty, // Not usable for login until registered
-            FullName = customer.FullName,
-            Status = MemberAccountStatus.Active
-        };
-        return await _memberRepository.AddAsync(placeholder, cancellationToken);
-    }
-
-    /// <summary>CR-2026-09-07-19: Build a magic-link URL for passwordless member access.</summary>
-    private string BuildMagicLinkUrl(Guid memberAccountId)
-    {
-        var magicToken = _jwtTokenService.GenerateMagicLinkToken(memberAccountId);
-        var webBaseUrl = _configuration["WebBaseUrl"]?.TrimEnd('/') ?? "https://localhost:7162";
-        return $"{webBaseUrl}/member/welcome?token={Uri.EscapeDataString(magicToken)}";
     }
 }

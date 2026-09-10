@@ -149,8 +149,9 @@ if (emailEnabled && !string.IsNullOrWhiteSpace(smtpHost))
 }
 else
 {
-    // Console sink: notifications are logged only (email delivery suppressed by Notifications:EmailEnabled or missing SMTP).
-    builder.Services.AddScoped<INotificationService, ConsoleNotificationService>();
+    // File sink: notifications (including magic-link URLs) are appended to logs/notifications.log
+    // instead of the console. Active when Notifications:EmailEnabled is off or SMTP is unconfigured.
+    builder.Services.AddScoped<INotificationService, FileNotificationService>();
 }
 
 // Import services
@@ -218,9 +219,17 @@ builder.Services.AddHealthChecks()
 
 // Rate limiter (CR-2026-09-07-18): protect staff-login from credential stuffing. 5 requests
 // per minute per client IP; other endpoints are unaffected. CR-04 will broaden this.
+// CR-2026-09-09-27: member-auth covers customer sign-in and the recovery link, which is both a
+// credential-stuffing target and a mail-sending endpoint.
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("staff-login", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("member-auth", opt =>
     {
         opt.PermitLimit = 5;
         opt.Window = TimeSpan.FromMinutes(1);
@@ -230,7 +239,7 @@ builder.Services.AddRateLimiter(options =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsync("{\"error\":\"Too many login attempts. Please try again later.\"}", token);
+        await context.HttpContext.Response.WriteAsync("{\"error\":\"Too many attempts. Please wait a minute and try again.\"}", token);
     };
 });
 
@@ -250,6 +259,9 @@ app.UseStaticFiles(); // Serve uploaded images from wwwroot/uploads/
 app.UseAuthentication();
 app.UseMiddleware<BrandScopeMiddleware>();
 app.UseMiddleware<IntegrationApiKeyMiddleware>();
+// POS X-API-Key gate (CR-18): validates the key and attaches pos.outlet_id / pos.brand_id.
+// PosController has no [Authorize] by design — this middleware IS its auth boundary.
+app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

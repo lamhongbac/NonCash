@@ -43,7 +43,9 @@ public class CustomersControllerTests
             new MemberAccountRepository(context),
             repository,
             new UserAccountRepository(context),
-            brandCustomers);
+            brandCustomers,
+            new BrandRepository(context),
+            new OutletRepository(context));
         return new CustomersController(
             service, importService, currentUser ?? new TestCurrentUserService("Admin"), batchService, new VoucherCodeService(), auditLogs);
     }
@@ -453,7 +455,6 @@ public class CustomersControllerTests
         {
             Id = memberId,
             CustomerId = customer.Id,
-            Username = "history-customer",
             PasswordHash = "x",
             FullName = "History Customer",
             Status = MemberAccountStatus.Active

@@ -15,4 +15,14 @@ public class VoucherScope
     public List<Guid> Companies { get; set; } = new();
     public List<Guid> Brands { get; set; } = new();
     public List<Guid> Outlets { get; set; } = new();
+
+    /// <summary>
+    /// Returns true if the given outlet is covered by this scope.
+    /// Empty Outlets = all outlets under the owning brand (hierarchy-aware).
+    /// Non-empty Outlets = only the explicitly listed outlets.
+    /// The caller must separately verify that the outlet belongs to the plan's brand
+    /// (same-brand gate); this method only checks the scope-level outlet list.
+    /// </summary>
+    public bool CoversOutlet(Guid outletId) =>
+        Outlets.Count == 0 || Outlets.Contains(outletId);
 }

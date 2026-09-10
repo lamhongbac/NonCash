@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using NonCash.API.Controllers;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
@@ -65,9 +66,11 @@ public class DistributionBatchTests : IDisposable
             new Repository<VoucherUsage>(_context),
             new VoucherTransferRepository(_context),
             new Repository<Outlet>(_context),
-            new ConsoleNotificationService(),
+            new FileNotificationService(),
             brandCustomerRepository,
-            batchRepository);
+            batchRepository,
+            new StubJwtTokenService(),
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
 
         _batchService = new DistributionBatchService(
             planRepository,
@@ -77,7 +80,9 @@ public class DistributionBatchTests : IDisposable
             memberRepository,
             customerRepository,
             new UserAccountRepository(_context),
-            brandCustomerRepository);
+            brandCustomerRepository,
+            new BrandRepository(_context),
+            new OutletRepository(_context));
 
         Seed();
     }
@@ -114,7 +119,7 @@ public class DistributionBatchTests : IDisposable
             new Customer { Id = CarolCustomerId, PhoneNumber = CarolPhone, FullName = "Carol Blocked", Email = "carol@example.com", Status = CustomerStatus.Active });
 
         _context.MemberAccounts.Add(
-            new MemberAccount { Id = CarolMemberId, CustomerId = CarolCustomerId, Username = "carol-bat", PasswordHash = "x", FullName = "Carol Blocked", Status = MemberAccountStatus.Active });
+            new MemberAccount { Id = CarolMemberId, CustomerId = CarolCustomerId, PasswordHash = "x", FullName = "Carol Blocked", Status = MemberAccountStatus.Active });
 
         _context.BrandCustomers.Add(new BrandCustomer
         {

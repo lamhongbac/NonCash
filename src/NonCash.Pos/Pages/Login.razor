@@ -11,10 +11,10 @@
             Sign in to start your shift
         </MudText>
 
-        @if (_outletName is not null)
+        @if (!string.IsNullOrEmpty(_storeCode))
         {
             <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" Icon="@Icons.Material.Filled.Store">
-                @_outletName <strong>(@_storeCode)</strong>
+                <strong>Store: @_storeCode</strong>
             </MudAlert>
         }
 
@@ -28,12 +28,8 @@
                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" />
 
         <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined"
-                      InputType="InputType.Password" Class="mb-3"
+                      InputType="InputType.Password" Class="mb-4"
                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock" />
-
-        <MudTextField @bind-Value="_posNo" Label="POS Terminal No. (optional)" Variant="Variant.Outlined"
-                      Placeholder="e.g. POS-01" Class="mb-4"
-                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Computer" />
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleLogin"
                    Disabled="@_loading" FullWidth="true" Size="Size.Large">
@@ -57,9 +53,8 @@
 
     private string _username = string.Empty;
     private string _storeCode = string.Empty;
-    private string? _outletName;
     private string _password = string.Empty;
-    private string _posNo = string.Empty;
+    private string? _posNo;
     private string? _error;
     private bool _loading;
 
@@ -79,12 +74,12 @@
             return;
         }
 
-        // Pre-fill store code from provisioning
+        // Pre-fill store code and POS No from provisioning
         var outlet = await Provisioning.GetOutletAsync();
         if (outlet is not null)
         {
             _storeCode = outlet.StoreCode;
-            _outletName = outlet.OutletName;
+            _posNo = string.IsNullOrWhiteSpace(outlet.PosNo) ? null : outlet.PosNo;
         }
     }
 
@@ -99,8 +94,7 @@
         }
 
         _loading = true;
-        var posNo = string.IsNullOrWhiteSpace(_posNo) ? null : _posNo.Trim();
-        var (success, error) = await Auth.LoginAsync(_username.Trim(), _storeCode.Trim(), _password, posNo);
+        var (success, error) = await Auth.LoginAsync(_username.Trim(), _storeCode.Trim(), _password, _posNo);
         _loading = false;
 
         if (success)

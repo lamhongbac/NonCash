@@ -109,14 +109,16 @@
     [Parameter] public string? CardStyle { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private string ResolveImageUrl(string url)
+    private string ResolveImageUrl(string url) => ResolveMediaUrl(Configuration, url);
+
+    public static string ResolveMediaUrl(IConfiguration configuration, string url)
     {
         // DB stores the MSA relative URL; full CDN URL is composed at display time.
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return url;
 
-        var envName = Configuration["Environment:Name"] ?? "dev";
-        var apiBase = Configuration[$"ApiBaseUrls:{envName}"] ?? Configuration["ApiBaseUrl"] ?? "";
+        var envName = configuration["Environment:Name"] ?? "dev";
+        var apiBase = configuration[$"ApiBaseUrls:{envName}"] ?? configuration["ApiBaseUrl"] ?? "";
 
         // Local dev fallback: files served from API host (e.g. /uploads/...)
         if (url.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
@@ -142,11 +144,12 @@
 
     private Color BadgeColor => StatusBadge switch
     {
-        "Active" => Color.Success,
+        "Available" => Color.Success,
         "Expiring Soon" => Color.Warning,
         "Expired" => Color.Error,
         "Used" => Color.Default,
         "In Use" => Color.Info,
+        "On its way" => Color.Info,
         _ => Color.Default
     };
 

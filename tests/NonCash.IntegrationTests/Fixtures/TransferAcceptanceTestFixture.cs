@@ -25,6 +25,7 @@ public class TransferAcceptanceTestFixture : IDisposable
     public IJwtTokenService JwtTokenService { get; }
     public IVoucherTransferService TransferService { get; }
     public IVoucherTransferRepository TransferRepository { get; }
+    public RecordingNotificationService Notifications { get; }
     public IRepository<VoucherPlanDetail> VoucherRepository { get; }
     public ICustomerRepository CustomerRepository { get; }
     public IMemberAccountRepository MemberRepository { get; }
@@ -61,7 +62,9 @@ public class TransferAcceptanceTestFixture : IDisposable
 
         var jwtConfig = TestJwtConfig.Create();
         JwtTokenService = new JwtTokenService(jwtConfig);
-        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService, new ConsoleNotificationService(), CustomerRepository, new OutletRepository(Context), new UserOutletRepository(Context));
+        AuthService = new AuthService(UserRepository, MemberRepository, JwtTokenService, new FileNotificationService(), CustomerRepository, new OutletRepository(Context), new UserOutletRepository(Context), jwtConfig);
+
+        Notifications = new RecordingNotificationService();
 
         TransferService = new VoucherTransferService(
             VoucherRepository,
@@ -69,7 +72,13 @@ public class TransferAcceptanceTestFixture : IDisposable
             MemberRepository,
             TransferRepository,
             new BrandCustomerRepository(Context),
-            new VoucherPlanRepository(Context));
+            new VoucherPlanRepository(Context),
+            new BrandRepository(Context),
+            new Repository<VoucherDistribution>(Context),
+            Notifications,
+            new VoucherEventPublisher(Context),
+            JwtTokenService,
+            jwtConfig);
 
         SeedAsync().GetAwaiter().GetResult();
     }
@@ -132,7 +141,6 @@ public class TransferAcceptanceTestFixture : IDisposable
             {
                 Id = AliceMemberId,
                 CustomerId = AliceCustomerId,
-                Username = "alice",
                 PasswordHash = AuthService.HashPassword("Test@123"),
                 FullName = "Alice Sender",
                 Status = MemberAccountStatus.Active
@@ -141,7 +149,6 @@ public class TransferAcceptanceTestFixture : IDisposable
             {
                 Id = BobMemberId,
                 CustomerId = BobCustomerId,
-                Username = "bob",
                 PasswordHash = AuthService.HashPassword("Test@123"),
                 FullName = "Bob Receiver",
                 Status = MemberAccountStatus.Active

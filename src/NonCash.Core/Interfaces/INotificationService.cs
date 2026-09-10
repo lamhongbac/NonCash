@@ -135,12 +135,64 @@ public record VoucherTransferInitiatedNotification(
     DateTime TransferredAt,
     string? MagicLinkUrl = null);
 
+/// <summary>CR-2026-09-10-30: sent to the gift sender when the recipient accepts and thanks them.</summary>
+public record GiftAcceptedNotification(
+    string? SenderEmail,
+    string SenderName,
+    string RecipientName,
+    string? RecipientThankYouNote,
+    string VoucherName,
+    decimal FaceValue,
+    DateTime AcceptedAt);
+
+/// <summary>CR-2026-09-10-30: sent to the gift sender when the recipient declines the gift.</summary>
+public record GiftDeclinedNotification(
+    string? SenderEmail,
+    string SenderName,
+    string RecipientName,
+    string? Reason,
+    string VoucherName,
+    decimal FaceValue,
+    DateTime DeclinedAt);
+
+/// <summary>CR-2026-09-10-30: sent to the gift sender when nobody accepted the gift within the
+/// 7-day window; the voucher is unlocked and returns to the sender's wallet.</summary>
+public record GiftExpiredNotification(
+    string? SenderEmail,
+    string SenderName,
+    string RecipientName,
+    string RecipientPhone,
+    string VoucherName,
+    decimal FaceValue,
+    int ExpiryDays,
+    DateTime ExpiredAt);
+
+/// <summary>CR-2026-09-10-31: sent to the other participant when a member adds a message to a
+/// gift's conversation.</summary>
+public record GiftMessageNotification(
+    string? RecipientEmail,
+    string RecipientName,
+    string AuthorName,
+    string Body,
+    string VoucherName,
+    decimal FaceValue,
+    DateTime SentAt);
+
 /// <summary>Payload sent to a user who requested a password reset.</summary>
 public record PasswordResetNotification(
     string? UserEmail,
     string FullName,
     string ResetToken,
     DateTime TokenExpiry);
+
+/// <summary>CR-2026-09-09-27: sign-in link emailed to a customer who could not get into their
+/// account. The link lands on the member welcome page, which exchanges it for a session so the
+/// customer can then set a password.</summary>
+public record SignInLinkNotification(
+    string? MemberEmail,
+    string FullName,
+    string SignInLinkUrl,
+    DateTime LinkExpiry);
 
 public interface INotificationService
 {
@@ -161,5 +213,10 @@ public interface INotificationService
     Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default);
     Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyGiftAcceptedAsync(GiftAcceptedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyGiftDeclinedAsync(GiftDeclinedNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyGiftExpiredAsync(GiftExpiredNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyGiftMessageAsync(GiftMessageNotification notification, CancellationToken cancellationToken = default);
     Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default);
+    Task NotifySignInLinkAsync(SignInLinkNotification notification, CancellationToken cancellationToken = default);
 }

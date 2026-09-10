@@ -24,6 +24,7 @@ public class VoucherTransfer : BaseEntity
     public DateTime InitiatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
     public string? Note { get; set; }
+    public string? RecipientNote { get; set; }
     public string? RejectReason { get; set; }
     public DateTime? RespondedAt { get; set; }
 

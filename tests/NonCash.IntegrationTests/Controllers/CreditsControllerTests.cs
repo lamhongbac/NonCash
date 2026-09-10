@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NonCash.API.Controllers;
 using NonCash.API.DTOs;
@@ -14,6 +15,7 @@ using NonCash.Core.Services;
 using NonCash.Infrastructure.Data;
 using NonCash.Infrastructure.Repositories;
 using NonCash.Infrastructure.Services;
+using NonCash.IntegrationTests.Fixtures;
 
 namespace NonCash.IntegrationTests.Controllers;
 
@@ -127,7 +129,6 @@ public class CreditsControllerTests : IDisposable
         {
             Id = _memberId,
             CustomerId = _customerId,
-            Username = "creditmember",
             PasswordHash = "hash",
             FullName = "Credit Member",
             Status = MemberAccountStatus.Active
@@ -355,7 +356,9 @@ public class CreditsControllerTests : IDisposable
         new Repository<Outlet>(_context),
         new StubNotificationService(),
         new BrandCustomerRepository(_context),
-        new Repository<VoucherDistributionBatch>(_context));
+        new Repository<VoucherDistributionBatch>(_context),
+        new StubJwtTokenService(),
+        new ConfigurationBuilder().AddInMemoryCollection().Build());
 
     [Fact]
     public async Task ConfirmGiftPayment_DoesNotChargeCredits()
@@ -893,7 +896,12 @@ public class CreditsControllerTests : IDisposable
         public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftAcceptedAsync(GiftAcceptedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftDeclinedAsync(GiftDeclinedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftExpiredAsync(GiftExpiredNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftMessageAsync(GiftMessageNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifySignInLinkAsync(SignInLinkNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     /// <summary>Welcome-policy stub — CreditService only calls ResolveForBusinessAsync.</summary>

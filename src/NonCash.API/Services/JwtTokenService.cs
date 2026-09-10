@@ -10,6 +10,9 @@ namespace NonCash.API.Services;
 
 public class JwtTokenService : IJwtTokenService
 {
+    private const string MagicLinkPurpose = "magic_link";
+    private const string SignInLinkPurpose = "sign_in_link";
+
     private readonly IConfiguration _configuration;
 
     public JwtTokenService(IConfiguration configuration)
@@ -49,7 +52,7 @@ public class JwtTokenService : IJwtTokenService
     {
         var claims = BuildClaims(
             member.Id.ToString(),
-            member.Username,
+            username: null,
             "Member",
             "",
             member.CustomerId.ToString(),
@@ -59,18 +62,22 @@ public class JwtTokenService : IJwtTokenService
         return BuildToken(claims);
     }
 
-    private static List<Claim> BuildClaims(string id, string username, string role, string brandId, string customerId, string fullName, string? outletId)
+    private static List<Claim> BuildClaims(string id, string? username, string role, string brandId, string customerId, string fullName, string? outletId)
     {
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, id),
-            new(JwtRegisteredClaimNames.UniqueName, username),
             new(ClaimTypes.NameIdentifier, id),
             new("brand_id", brandId),
             new("customer_id", customerId),
             new(ClaimTypes.Role, role),
             new("full_name", fullName)
         };
+
+        if (!string.IsNullOrEmpty(username))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.UniqueName, username));
+        }
 
         if (!string.IsNullOrEmpty(outletId))
         {
@@ -115,12 +122,24 @@ public class JwtTokenService : IJwtTokenService
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, memberAccountId.ToString()),
-            new("purpose", "magic_link")
+            new("purpose", MagicLinkPurpose)
         };
         return BuildTokenWithExpiry(claims, DateTime.UtcNow.AddDays(7));
     }
 
-    /// <summary>CR-2026-09-07-19: Validate a magic-link JWT and return the MemberAccountId, or null if invalid.</summary>
+    /// <summary>CR-2026-09-09-27: Generate a sign-in-link JWT with a 30-minute TTL for
+    /// customer-requested password recovery.</summary>
+    public string GenerateSignInLinkToken(Guid memberAccountId)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, memberAccountId.ToString()),
+            new("purpose", SignInLinkPurpose)
+        };
+        return BuildTokenWithExpiry(claims, DateTime.UtcNow.AddMinutes(30));
+    }
+
+    /// <summary>CR-2026-09-07-19: Validate a magic-link or sign-in-link JWT and return the MemberAccountId, or null if invalid.</summary>
     public Guid? ValidateMagicLinkToken(string token)
     {
         var jwtConfig = _configuration.GetSection("Jwt");
@@ -145,7 +164,7 @@ public class JwtTokenService : IJwtTokenService
         {
             var principal = handler.ValidateToken(token, validationParameters, out _);
             var purposeClaim = principal.FindFirst("purpose");
-            if (purposeClaim?.Value != "magic_link")
+            if (purposeClaim?.Value != MagicLinkPurpose && purposeClaim?.Value != SignInLinkPurpose)
                 return null;
 
             var subClaim = principal.FindFirst(JwtRegisteredClaimNames.Sub)

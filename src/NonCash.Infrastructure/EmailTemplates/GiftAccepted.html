@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Your gift was accepted</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #388e3c; color: #fff; padding: 20px;">
+            <h2 style="margin: 0;">{{RecipientName}} accepted your gift</h2>
+        </div>
+        <div style="padding: 24px;">
+            <p>Dear {{SenderName}},</p>
+            <p>Good news — <strong>{{RecipientName}}</strong> accepted the gift you sent.</p>
+            <div style="background-color: #f5f5f5; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
+                <p style="margin: 0;"><strong>{{VoucherName}}</strong></p>
+                <p style="margin: 4px 0 0; color: #666;">Face value: {{FaceValue}}</p>
+            </div>
+            {{ThankYouNoteHtml}}
+            <p style="color: #666;">Accepted on: {{AcceptedAt}}</p>
+            <p>You can see this gift and every other gift you have sent under <strong>My Vouchers &rarr; Gifts you sent</strong>.</p>
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+        </div>
+    </div>
+</body>
+</html>

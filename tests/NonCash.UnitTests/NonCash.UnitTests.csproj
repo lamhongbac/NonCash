@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NonCash.Core\NonCash.Core.csproj" />
     <ProjectReference Include="..\..\src\NonCash.Infrastructure\NonCash.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\NonCash.Pos\NonCash.Pos.csproj" />
     <ProjectReference Include="..\..\src\NonCash.Shared\NonCash.Shared.csproj" />
   </ItemGroup>
 

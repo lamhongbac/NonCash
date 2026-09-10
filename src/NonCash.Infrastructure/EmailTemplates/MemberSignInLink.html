@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Sign In To NonCash</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #1976d2; color: #fff; padding: 20px;">
+            <h2 style="margin: 0;">Your Sign-In Link</h2>
+        </div>
+        <div style="padding: 24px;">
+            <p>Dear {{FullName}},</p>
+            <p>We received a request to help you into your NonCash account. Use this link to sign in:</p>
+            {{SignInLinkHtml}}
+            <p>This link expires on <strong>{{LinkExpiry}}</strong>.</p>
+            <p>Once you are in, choose <strong>Set Password</strong> so you can sign in yourself next time.
+               You sign in with your <strong>phone number</strong> or your <strong>email address</strong> —
+               NonCash never asks you for a username.</p>
+            <p>If you did not request this link, you can safely ignore this email; your account is unchanged.</p>
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+        </div>
+    </div>
+</body>
+</html>

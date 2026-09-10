@@ -155,6 +155,83 @@ public class OutletsControllerTests
         result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.NotFoundResult>();
     }
 
+    [Fact]
+    public async Task CreateOutlet_WithoutRedemptionMode_DefaultsToOneClick()
+    {
+        using var context = CreateContext();
+        var controller = CreateController(context);
+        var request = new CreateOutletRequest("Mode Default Outlet", null);
+
+        var result = await controller.CreateOutlet(request, CancellationToken.None);
+
+        var created = (result.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as OutletResponse;
+        created!.RedemptionMode.Should().Be("OneClick");
+    }
+
+    [Fact]
+    public async Task CreateOutlet_WithThreeStepMode_PersistsIt()
+    {
+        using var context = CreateContext();
+        var controller = CreateController(context);
+        var request = new CreateOutletRequest("Mode Explicit Outlet", null, null, "ThreeStep");
+
+        var result = await controller.CreateOutlet(request, CancellationToken.None);
+
+        var created = (result.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as OutletResponse;
+        created!.RedemptionMode.Should().Be("ThreeStep");
+    }
+
+    [Fact]
+    public async Task CreateOutlet_WithUnknownRedemptionMode_ReturnsBadRequestNamingAllowedValues()
+    {
+        using var context = CreateContext();
+        var controller = CreateController(context);
+        var request = new CreateOutletRequest("Bad Mode Outlet", null, null, "Turbo");
+
+        var result = await controller.CreateOutlet(request, CancellationToken.None);
+
+        var badRequest = result.Result as Microsoft.AspNetCore.Mvc.BadRequestObjectResult;
+        badRequest.Should().NotBeNull();
+        badRequest!.Value.Should().NotBeNull();
+        badRequest.Value!.ToString().Should().Contain("Turbo").And.Contain("OneClick").And.Contain("ThreeStep");
+    }
+
+    [Fact]
+    public async Task UpdateOutlet_ChangesRedemptionMode()
+    {
+        using var context = CreateContext();
+        var controller = CreateController(context);
+        var createResult = await controller.CreateOutlet(new CreateOutletRequest("Mode Switch Outlet", null), CancellationToken.None);
+        var created = (createResult.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as OutletResponse;
+
+        var result = await controller.UpdateOutlet(
+            created!.Id,
+            new UpdateOutletRequest("Mode Switch Outlet", null, null, "ThreeStep"),
+            CancellationToken.None);
+
+        var outlet = (result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult)!.Value as OutletResponse;
+        outlet!.RedemptionMode.Should().Be("ThreeStep");
+    }
+
+    [Fact]
+    public async Task UpdateOutlet_WithoutRedemptionMode_KeepsExistingMode()
+    {
+        using var context = CreateContext();
+        var controller = CreateController(context);
+        var createResult = await controller.CreateOutlet(
+            new CreateOutletRequest("Mode Keep Outlet", null, null, "ThreeStep"), CancellationToken.None);
+        var created = (createResult.Result as Microsoft.AspNetCore.Mvc.CreatedAtActionResult)!.Value as OutletResponse;
+
+        var result = await controller.UpdateOutlet(
+            created!.Id,
+            new UpdateOutletRequest("Mode Keep Outlet Renamed", null),
+            CancellationToken.None);
+
+        var outlet = (result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult)!.Value as OutletResponse;
+        outlet!.Name.Should().Be("Mode Keep Outlet Renamed");
+        outlet.RedemptionMode.Should().Be("ThreeStep");
+    }
+
     private class FakeCurrentUserService : ICurrentUserService
     {
         private readonly Guid _brandId;

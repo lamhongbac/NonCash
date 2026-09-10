@@ -16,48 +16,24 @@
             <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
         }
 
-        @if (_step == 1)
-        {
-            <MudTextField @bind-Value="_apiKey" Label="API Key" Variant="Variant.Outlined"
-                          Placeholder="e.g. a3f7b2c1" HelperText="NonCash Web → Outlets → Edit → Copy Setup Key"
-                          Class="mb-4" />
-            <MudTextField @bind-Value="_storeCode" Label="Store Code" Variant="Variant.Outlined"
-                          Placeholder="e.g. S01" HelperText="NonCash Web → Outlets → Edit → Copy Setup Key"
-                          Class="mb-4" />
-            <MudTextField @bind-Value="_outletName" Label="Outlet Name" Variant="Variant.Outlined"
-                          Placeholder="e.g. Giga Coffee District 1"
-                          Class="mb-4" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ValidateKey"
-                       Disabled="@_loading" FullWidth="true">
-                @if (_loading)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                }
-                Validate &amp; Continue
-            </MudButton>
-        }
-        else if (_step == 2)
-        {
-            <MudAlert Severity="Severity.Info" Class="mb-4">
-                API key accepted. Now enter the Outlet ID to complete provisioning.
-            </MudAlert>
-            <MudTextField @bind-Value="_outletId" Label="Outlet ID (GUID)" Variant="Variant.Outlined"
-                          Placeholder="e.g. 11111111-1111-1111-1111-111111111111"
-                          HelperText="NonCash Web → Outlets → Edit → Copy Setup Key"
-                          Class="mb-4" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CompleteProvisioning"
-                       Disabled="@_loading" FullWidth="true">
-                @if (_loading)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                }
-                Provision Terminal
-            </MudButton>
-            <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@(() => _step = 1)"
-                       FullWidth="true" Class="mt-2">
-                Back
-            </MudButton>
-        }
+        <MudTextField @bind-Value="_apiKey" Label="API Key" Variant="Variant.Outlined"
+                      Placeholder="e.g. a3f7b2c1" HelperText="NonCash Web → Outlets → Edit → Copy Setup Key"
+                      Class="mb-4" />
+        <MudTextField @bind-Value="_storeCode" Label="Store Code" Variant="Variant.Outlined"
+                      Placeholder="e.g. S01" HelperText="NonCash Web → Outlets → Edit → Copy Setup Key"
+                      Class="mb-4" />
+        <MudTextField @bind-Value="_posNo" Label="POS Terminal No." Variant="Variant.Outlined"
+                      Placeholder="e.g. POS-01" Required="true"
+                      HelperText="Unique identifier for this POS terminal (e.g. POS-01, COUNTER-1)"
+                      Class="mb-4" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CompleteProvisioning"
+                   Disabled="@_loading" FullWidth="true">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Provision Terminal
+        </MudButton>
     </MudPaper>
 </MudContainer>
 
@@ -67,10 +43,8 @@
 
     private string _apiKey = string.Empty;
     private string _storeCode = string.Empty;
-    private string _outletName = string.Empty;
-    private string _outletId = string.Empty;
+    private string _posNo = string.Empty;
     private string? _error;
-    private int _step = 1;
     private bool _loading;
 
     protected override async Task OnInitializedAsync()
@@ -81,9 +55,10 @@
         }
     }
 
-    private async Task ValidateKey()
+    private async Task CompleteProvisioning()
     {
         _error = null;
+
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
             _error = "API Key is required.";
@@ -94,26 +69,20 @@
             _error = "Store Code is required.";
             return;
         }
-        _step = 2;
-    }
-
-    private async Task CompleteProvisioning()
-    {
-        _error = null;
-        _loading = true;
-
-        if (!Guid.TryParse(_outletId.Trim(), out var outletId))
+        if (string.IsNullOrWhiteSpace(_posNo))
         {
-            _error = "Invalid Outlet ID format. Must be a valid GUID.";
-            _loading = false;
+            _error = "POS Terminal No. is required.";
             return;
         }
 
+        _loading = true;
+
+        // No manual Outlet ID: the outlet is resolved authoritatively at staff login
+        // (store code → outlet), so a mistyped GUID can never break redeem calls.
         var outlet = new ProvisionedOutlet(
             ApiKey: _apiKey.Trim(),
-            OutletId: outletId,
             StoreCode: _storeCode.Trim(),
-            OutletName: _outletName.Trim()
+            PosNo: _posNo.Trim()
         );
 
         await Provisioning.SaveOutletAsync(outlet);

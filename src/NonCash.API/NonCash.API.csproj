@@ -23,4 +23,8 @@
     <ProjectReference Include="..\NonCash.Shared\NonCash.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="NonCash.IntegrationTests" />
+  </ItemGroup>
+
 </Project>

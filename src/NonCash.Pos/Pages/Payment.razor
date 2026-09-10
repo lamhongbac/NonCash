@@ -21,13 +21,17 @@ else
                           Variant="Variant.Outlined" Immediate="true"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
                           Placeholder="Paste the full voucher code here..."
+                          HelperText="Scan the customer's rotating code from the member app (valid 2 minutes). Serial numbers (VC-...) are not scannable."
                           Class="mb-3" />
 
             <MudTextField @bind-Value="_billNumber" Label="Bill Number" Variant="Variant.Outlined"
                           Placeholder="Auto-generated if empty" Class="mb-3" />
 
             <MudTextField @bind-Value="_amountUsed" Label="Amount Used (VND)" Variant="Variant.Outlined"
-                          InputType="InputType.Number" Placeholder="0" Class="mb-4" />
+                          InputType="InputType.Number" Placeholder="0" Class="mb-2"
+                          HelperText="Leave empty to redeem the voucher's full face value." />
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block">@ModeHint</MudText>
 
             @if (!string.IsNullOrEmpty(_error))
             {
@@ -45,32 +49,49 @@ else
                     Verify
                 </MudButton>
 
-                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="HandleLock"
-                           Disabled="@IsLockDisabled">
-                    @if (_loading && _action == "lock")
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Lock
-                </MudButton>
+                @if (IsOneClick)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="HandleRedeem"
+                               Disabled="@IsRedeemDisabled">
+                        @if (_loading && _action == "redeem")
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Redeem
+                    </MudButton>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="HandleLock"
+                               Disabled="@IsLockDisabled">
+                        @if (_loading && _action == "lock")
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Lock
+                    </MudButton>
+                }
 
-                <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="HandleCommit"
-                           Disabled="@IsCommitDisabled">
-                    @if (_loading && _action == "commit")
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Commit
-                </MudButton>
+                @if (!IsOneClick || _lockId is not null)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="HandleCommit"
+                               Disabled="@IsCommitDisabled">
+                        @if (_loading && _action == "commit")
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Commit
+                    </MudButton>
 
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="HandleRollback"
-                           Disabled="@IsRollbackDisabled">
-                    @if (_loading && _action == "rollback")
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Rollback
-                </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="HandleRollback"
+                               Disabled="@IsRollbackDisabled">
+                        @if (_loading && _action == "rollback")
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Rollback
+                    </MudButton>
+                }
 
                 <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="ResetForm">
                     Clear
@@ -91,6 +112,9 @@ else
                 @if (_verifyResult.Reason is not null)
                 {
                     <MudText Typo="Typo.body2" Color="Color.Secondary">Reason: @_verifyResult.Reason</MudText>
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        @(PosFailureReasons.Describe(_verifyResult.Reason, Auth.CurrentShift?.StoreCode))
+                    </MudAlert>
                 }
                 @if (_verifyResult.VoucherInfo is not null)
                 {
@@ -117,6 +141,17 @@ else
                                 <MudTd>Expiry</MudTd>
                                 <MudTd>@_verifyResult.VoucherInfo.ExpiryDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
                             </MudTr>
+                            <MudTr>
+                                <MudTd>Scope</MudTd>
+                                <MudTd>@_verifyResult.VoucherInfo.ScopeSummary</MudTd>
+                            </MudTr>
+                            @if (_verifyResult.VoucherInfo.ApplicableOutlets.Count > 0)
+                            {
+                                <MudTr>
+                                    <MudTd>Stores</MudTd>
+                                    <MudTd>@(string.Join(", ", _verifyResult.VoucherInfo.ApplicableOutlets))</MudTd>
+                                </MudTr>
+                            }
                         </BodyContent>
                     </MudSimpleTable>
                 }
@@ -181,7 +216,8 @@ else
 
 @code {
     [Inject] private PosAuthService Auth { get; set; } = default!;
-    [Inject] private PosApiClient PosApi { get; set; } = default!;
+    [Inject] private IPosApiClient PosApi { get; set; } = default!;
+    [Inject] private RedemptionFlowService Redemption { get; set; } = default!;
     [Inject] private ProvisioningService Provisioning { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
@@ -197,7 +233,14 @@ else
     private PosVerifyResponse? _verifyResult;
     private Guid? _lockId;
 
+    private bool IsOneClick => Auth.CurrentShift?.IsOneClickRedemption ?? true;
+
+    private string ModeHint => IsOneClick
+        ? "One-click mode (this outlet): paste the code and press REDEEM — it locks and commits in one step. VERIFY is optional and does not redeem."
+        : "Three-step mode (this outlet): VERIFY, then LOCK, then COMMIT. ROLLBACK releases a lock.";
+
     private bool IsVerifyDisabled => _loading || string.IsNullOrWhiteSpace(_voucherCode);
+    private bool IsRedeemDisabled => _loading || string.IsNullOrWhiteSpace(_voucherCode);
     private bool IsLockDisabled => _loading || _verifyResult?.Status != "Valid";
     private bool IsCommitDisabled => _loading || _lockId == null;
     private bool IsRollbackDisabled => _loading || _lockId == null;
@@ -221,8 +264,56 @@ else
             var outlet = await Provisioning.GetOutletAsync();
             if (outlet is null) { _error = "Terminal not provisioned."; return; }
 
-            _verifyResult = await PosApi.VerifyAsync(_voucherCode.Trim(), outlet.OutletId);
+            // The outlet id sent to the API is the shift-resolved one (from staff login),
+            // not the manually-provisioned value — the API key already pins the terminal.
+            _verifyResult = await PosApi.VerifyAsync(_voucherCode.Trim(), Auth.CurrentShift!.OutletId);
             if (_verifyResult is null) _error = "No response from server.";
+        }
+        catch (Exception ex) { _error = $"Error: {ex.Message}"; }
+        finally { _loading = false; _action = string.Empty; }
+    }
+
+    private async Task HandleRedeem()
+    {
+        _error = null;
+        _commitMessage = null;
+        _verifyResult = null;
+        _lockId = null;
+        _loading = true;
+        _action = "redeem";
+
+        try
+        {
+            if (await Provisioning.GetOutletAsync() is null) { _error = "Terminal not provisioned."; return; }
+
+            var shift = Auth.CurrentShift!;
+            var bill = string.IsNullOrWhiteSpace(_billNumber)
+                ? $"BILL-{DateTime.Now:yyyyMMddHHmmss}"
+                : _billNumber.Trim();
+            _billNumber = bill;
+
+            var txnId = $"{shift.StoreCode}-{bill}-{DateTime.UtcNow.Ticks}";
+            var amount = decimal.TryParse(_amountUsed, out var typed) && typed > 0 ? typed : (decimal?)null;
+
+            var outcome = await Redemption.RedeemAsync(
+                _voucherCode.Trim(), shift.OutletId, bill, txnId, amount,
+                shift.PosNo, shift.StaffUserId.ToString());
+
+            if (outcome.Committed)
+            {
+                Auth.RecordTransaction(bill, outcome.VoucherInfo?.SerialNo ?? "", outcome.AmountUsed, "Committed");
+                Snackbar.Add($"Voucher redeemed — {outcome.AmountUsed:N0} VND.", Severity.Success);
+                ResetForm();
+            }
+            else
+            {
+                _lockId = outcome.LockId;
+                _verifyResult = new PosVerifyResponse(
+                    outcome.LockId is null ? "Invalid" : "Locked", outcome.Reason, outcome.VoucherInfo);
+                _error = PosFailureReasons.Describe(outcome.Reason, shift.StoreCode)
+                         ?? outcome.Message
+                         ?? "Redemption failed. The voucher was not redeemed.";
+            }
         }
         catch (Exception ex) { _error = $"Error: {ex.Message}"; }
         finally { _loading = false; _action = string.Empty; }
@@ -238,14 +329,14 @@ else
 
         try
         {
-            var outlet = await Provisioning.GetOutletAsync()!;
+            if (await Provisioning.GetOutletAsync() is null) { _error = "Terminal not provisioned."; return; }
             var bill = string.IsNullOrWhiteSpace(_billNumber)
                 ? $"BILL-{DateTime.Now:yyyyMMddHHmmss}"
                 : _billNumber.Trim();
             _billNumber = bill;
 
             var result = await PosApi.LockAsync(
-                _voucherCode.Trim(), outlet!.OutletId, bill,
+                _voucherCode.Trim(), Auth.CurrentShift!.OutletId, bill,
                 Auth.CurrentShift!.PosNo, Auth.CurrentShift.StaffUserId.ToString());
 
             if (result?.Status == "Locked")
@@ -256,7 +347,8 @@ else
             }
             else
             {
-                _error = result?.Reason ?? result?.Status ?? "Lock failed";
+                _error = PosFailureReasons.Describe(result?.Reason, Auth.CurrentShift?.StoreCode)
+                         ?? result?.Status ?? "Lock failed";
             }
         }
         catch (Exception ex) { _error = $"Error: {ex.Message}"; }
@@ -291,7 +383,8 @@ else
             }
             else
             {
-                _error = result?.Reason ?? result?.Message ?? "Commit failed";
+                _error = PosFailureReasons.Describe(result?.Reason, Auth.CurrentShift?.StoreCode)
+                         ?? result?.Message ?? "Commit failed";
             }
         }
         catch (Exception ex) { _error = $"Error: {ex.Message}"; }
@@ -318,7 +411,8 @@ else
             }
             else
             {
-                _error = result?.Reason ?? result?.Message ?? "Rollback failed";
+                _error = PosFailureReasons.Describe(result?.Reason, Auth.CurrentShift?.StoreCode)
+                         ?? result?.Message ?? "Rollback failed";
             }
         }
         catch (Exception ex) { _error = $"Error: {ex.Message}"; }

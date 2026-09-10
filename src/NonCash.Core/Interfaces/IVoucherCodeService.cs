@@ -1,5 +1,21 @@
 namespace NonCash.Core.Interfaces;
 
+/// <summary>Why a presented voucher code token did not validate.</summary>
+public enum VoucherCodeCheck
+{
+    /// <summary>Signature verifies and the token is within its validity window.</summary>
+    Valid,
+
+    /// <summary>Not a token at all (e.g. a pasted serial number) or an undecodable payload.</summary>
+    Malformed,
+
+    /// <summary>Genuine token whose validity window has passed; the customer must refresh it.</summary>
+    Expired,
+
+    /// <summary>Token shape is fine but the HMAC does not match the stored secret: counterfeit.</summary>
+    BadSignature
+}
+
 public interface IVoucherCodeService
 {
     /// <summary>
@@ -9,9 +25,10 @@ public interface IVoucherCodeService
     string GenerateCode(Guid voucherDetailId, string secretKey, int validitySeconds = 120);
 
     /// <summary>
-    /// Validates a voucher code token. Returns the voucher detail ID if valid, null if invalid/expired.
+    /// Classifies a presented code against the detail's secret and outputs the voucher
+    /// detail ID carried in the payload (Guid.Empty unless <see cref="VoucherCodeCheck.Valid"/>).
     /// </summary>
-    Guid? ValidateCode(string code, string secretKey);
+    VoucherCodeCheck CheckCode(string code, string secretKey, out Guid voucherId);
 
     /// <summary>
     /// Generates a random secret key for a voucher detail.

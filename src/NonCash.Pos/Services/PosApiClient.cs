@@ -8,7 +8,7 @@ namespace NonCash.Pos.Services;
 /// the outlet's X-API-Key header, exactly like any third-party POS would.
 /// Base address is configured from the API URL (same origin or CORS-enabled).
 /// </summary>
-public class PosApiClient
+public class PosApiClient : IPosApiClient
 {
     private readonly HttpClient _http;
     private readonly ProvisioningService _provisioning;

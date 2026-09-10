@@ -40,14 +40,15 @@ public class AuthControllerTests
             { "Jwt:Key", "noncash-test-key-min-32-bytes-long!!" },
             { "Jwt:Issuer", "NonCash-Test" },
             { "Jwt:Audience", "NonCash-Test-Users" },
-            { "Jwt:ExpiryHours", "1" }
+            { "Jwt:ExpiryHours", "1" },
+            { "WebBaseUrl", "https://test.noncash.local" }
         };
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(inMemorySettings!)
             .Build();
 
         _jwtTokenService = new JwtTokenService(configuration);
-        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService, new ConsoleNotificationService(), new CustomerRepository(_context), new OutletRepository(_context), new UserOutletRepository(_context));
+        _authService = new AuthService(_userRepository, _memberRepository, _jwtTokenService, new FileNotificationService(), new CustomerRepository(_context), new OutletRepository(_context), new UserOutletRepository(_context), configuration);
     }
 
     private AuthController CreateController()
@@ -57,7 +58,7 @@ public class AuthControllerTests
 
     private UsersController CreateUsersController()
     {
-        var userService = new UserService(_userRepository, _authService, new ConsoleNotificationService(), new FakeBrandRepositoryForAuth());
+        var userService = new UserService(_userRepository, _authService, new FileNotificationService(), new FakeBrandRepositoryForAuth());
         return new UsersController(userService);
     }
 
@@ -79,7 +80,7 @@ public class AuthControllerTests
         return user;
     }
 
-    private async Task<MemberAccount> SeedMember(string username = "testmember", MemberAccountStatus status = MemberAccountStatus.Active)
+    private async Task<MemberAccount> SeedMember(MemberAccountStatus status = MemberAccountStatus.Active)
     {
         var customer = new Customer
         {
@@ -95,10 +96,39 @@ public class AuthControllerTests
         {
             Id = Guid.NewGuid(),
             CustomerId = customer.Id,
-            Username = username,
             PasswordHash = _authService.HashPassword("Password@123"),
             FullName = "Test Member",
             Status = status
+        };
+
+        await _memberRepository.AddAsync(member);
+        await _memberRepository.SaveChangesAsync();
+        return member;
+    }
+
+    /// <summary>CR-27: the login identifier lives on the customer record, so seeding a member
+    /// means seeding the phone number and/or email the API will resolve it from.</summary>
+    private async Task<MemberAccount> SeedMemberWithIdentifier(
+        string phone, string? email = null, string? passwordHash = null)
+    {
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(),
+            PhoneNumber = Customer.NormalizePhoneNumber(phone),
+            Email = Customer.NormalizeEmail(email),
+            FullName = "Phone Member",
+            Status = CustomerStatus.Active
+        };
+        await _context.Customers.AddAsync(customer);
+        await _context.SaveChangesAsync();
+
+        var member = new MemberAccount
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = customer.Id,
+            PasswordHash = passwordHash ?? _authService.HashPassword("Password@123"),
+            FullName = "Phone Member",
+            Status = MemberAccountStatus.Active
         };
 
         await _memberRepository.AddAsync(member);
@@ -126,15 +156,18 @@ public class AuthControllerTests
         response.User.Role.Should().Be("BrandManager");
     }
 
+    private static string? Error(Microsoft.AspNetCore.Mvc.ObjectResult result) =>
+        result.Value!.GetType().GetProperty("error")!.GetValue(result.Value) as string;
+
     [Fact]
-    public async Task MemberLogin_WithValidCredentials_ReturnsToken()
+    public async Task MemberLogin_WithPhoneNumber_ReturnsToken()
     {
         // Arrange
         var member = await SeedMember();
         var controller = CreateController();
 
         // Act
-        var result = await controller.MemberLogin(new LoginRequest("testmember", "Password@123"), CancellationToken.None);
+        var result = await controller.MemberLogin(new MemberLoginRequest("0909111111", "Password@123"), CancellationToken.None);
 
         // Assert
         var okResult = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
@@ -145,6 +178,173 @@ public class AuthControllerTests
         response.User.UserId.Should().Be(member.Id);
         response.User.Role.Should().Be("Member");
         response.User.CustomerId.Should().Be(member.CustomerId);
+    }
+
+    [Fact]
+    public async Task MemberLogin_WithFormattedPhoneNumber_ResolvesTheMemberAccount()
+    {
+        var member = await SeedMemberWithIdentifier("0913660575", email: "member@example.com");
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest(" 0913 660 575 ", "Password@123"), CancellationToken.None);
+
+        var okResult = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
+        okResult.Should().NotBeNull();
+        ((LoginResponse)okResult!.Value!).User.UserId.Should().Be(member.Id);
+    }
+
+    [Fact]
+    public async Task MemberLogin_WithEmailAddress_ResolvesTheMemberAccount()
+    {
+        var member = await SeedMemberWithIdentifier("0913660575", email: "Member@Example.com");
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest("member@example.com", "Password@123"), CancellationToken.None);
+
+        var okResult = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
+        okResult.Should().NotBeNull();
+        ((LoginResponse)okResult!.Value!).User.UserId.Should().Be(member.Id);
+    }
+
+    [Fact]
+    public async Task MemberLogin_WithAFormerUsername_TellsTheCustomerWhatToEnter()
+    {
+        await SeedMemberWithIdentifier("0913660575", email: "member@example.com");
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest("lamhongbac", "Password@123"), CancellationToken.None);
+
+        var unauthorized = result.Result as Microsoft.AspNetCore.Mvc.UnauthorizedObjectResult;
+        unauthorized.Should().NotBeNull();
+        Error(unauthorized!).Should().Be(AuthService.MalformedIdentifierMessage);
+    }
+
+    [Fact]
+    public async Task MemberLogin_ProvisionedAccountWithoutPassword_ReturnsHowToSetOne()
+    {
+        await SeedMemberWithIdentifier("0913660575", passwordHash: string.Empty);
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest("0913660575", "Password@123"), CancellationToken.None);
+
+        var unauthorized = result.Result as Microsoft.AspNetCore.Mvc.UnauthorizedObjectResult;
+        unauthorized.Should().NotBeNull();
+        Error(unauthorized!).Should().Be(AuthService.NoPasswordYetMessage);
+    }
+
+    [Fact]
+    public async Task MemberLogin_WrongPassword_ReturnsGenericError()
+    {
+        await SeedMemberWithIdentifier("0913660575");
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest("0913660575", "WrongPassword"), CancellationToken.None);
+
+        var unauthorized = result.Result as Microsoft.AspNetCore.Mvc.UnauthorizedObjectResult;
+        unauthorized.Should().NotBeNull();
+        Error(unauthorized!).Should().Be(AuthService.InvalidIdentifierMessage);
+    }
+
+    [Fact]
+    public async Task MemberLogin_BlacklistedCustomer_IsRefused()
+    {
+        // Matrix row 10 (O2) survives the switch to phone/email identifiers.
+        var member = await SeedMemberWithIdentifier("0913660575");
+        var customer = await _context.Customers.SingleAsync(c => c.Id == member.CustomerId);
+        customer.Status = CustomerStatus.Blacklisted;
+        await _context.SaveChangesAsync();
+        var controller = CreateController();
+
+        var result = await controller.MemberLogin(new MemberLoginRequest("0913660575", "Password@123"), CancellationToken.None);
+
+        result.Result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ForbidResult>();
+    }
+
+    // ── CR-27 C1: POST /auth/member/forgot-password ──────────────────────
+
+    [Fact]
+    public async Task MemberForgotPassword_KnownIdentifier_ReturnsTheNeutralMessage()
+    {
+        await SeedMemberWithIdentifier("0913660575", email: "member@example.com");
+        var controller = CreateController();
+
+        var result = await controller.MemberForgotPassword(new MemberForgotPasswordRequest("0913660575"), CancellationToken.None);
+
+        var ok = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
+        ok.Should().NotBeNull();
+        ((MemberForgotPasswordResponse)ok!.Value!).Message.Should().Be(AuthService.SignInLinkSentMessage);
+    }
+
+    [Fact]
+    public async Task MemberForgotPassword_UnknownIdentifier_ReturnsTheSameMessage()
+    {
+        // Anti-enumeration: a made-up phone number must be indistinguishable from a real one.
+        var controller = CreateController();
+
+        var result = await controller.MemberForgotPassword(new MemberForgotPasswordRequest("0900000000"), CancellationToken.None);
+
+        var ok = result.Result as Microsoft.AspNetCore.Mvc.OkObjectResult;
+        ok.Should().NotBeNull();
+        ((MemberForgotPasswordResponse)ok!.Value!).Message.Should().Be(AuthService.SignInLinkSentMessage);
+    }
+
+    [Fact]
+    public async Task MemberForgotPassword_MalformedIdentifier_ReturnsBadRequestWithNextAction()
+    {
+        var controller = CreateController();
+
+        var result = await controller.MemberForgotPassword(new MemberForgotPasswordRequest("not-an-identifier"), CancellationToken.None);
+
+        var bad = result.Result as Microsoft.AspNetCore.Mvc.BadRequestObjectResult;
+        bad.Should().NotBeNull();
+        Error(bad!).Should().Be(AuthService.MalformedIdentifierMessage);
+    }
+
+    // ── CR-2026-09-10-32: POST /auth/set-password ────────────────────────
+
+    [Fact]
+    public async Task SetMemberPassword_WithAMemberToken_PersistsTheHash()
+    {
+        var member = await SeedMemberWithIdentifier("0913660575", passwordHash: string.Empty);
+        var controller = CreateController();
+        controller.ControllerContext = MemberContext(member.Id);
+
+        var result = await controller.SetMemberPassword(new SetMemberPasswordRequest("NewPassword@123"), CancellationToken.None);
+
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>();
+        var stored = await _context.MemberAccounts.SingleAsync(m => m.Id == member.Id);
+        stored.PasswordHash.Should().NotBeEmpty();
+        _authService.VerifyPassword("NewPassword@123", stored.PasswordHash).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetMemberPassword_RequiresTheMemberRole()
+    {
+        // These tests construct the controller directly, so the authorization middleware that
+        // turns a missing token into a 401 never runs; assert the attribute that drives it.
+        var attribute = typeof(AuthController)
+            .GetMethod(nameof(AuthController.SetMemberPassword))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Single();
+
+        attribute.Roles.Should().Be("Member");
+    }
+
+    private static Microsoft.AspNetCore.Mvc.ControllerContext MemberContext(Guid memberAccountId)
+    {
+        var identity = new ClaimsIdentity(
+            new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, memberAccountId.ToString()),
+                new Claim(ClaimTypes.Role, "Member")
+            },
+            authenticationType: "Test");
+
+        return new Microsoft.AspNetCore.Mvc.ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+        };
     }
 
     [Fact]
@@ -376,7 +576,6 @@ public class JwtTokenServiceTests
         {
             Id = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            Username = "testmember",
             FullName = "Test Member",
             Status = MemberAccountStatus.Active
         };
@@ -420,7 +619,6 @@ public class JwtTokenServiceTests
         {
             Id = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            Username = "testmember",
             FullName = "Test Member",
             Status = MemberAccountStatus.Active
         };
@@ -440,6 +638,47 @@ public class JwtTokenServiceTests
         var customerIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "customer_id");
         customerIdClaim.Should().NotBeNull();
         customerIdClaim!.Value.Should().Be(member.CustomerId.ToString());
+    }
+
+    [Fact]
+    public void GenerateToken_Member_OmitsTheUsernameClaim()
+    {
+        // CR-27: customers have no username, so the token must not invent one for them.
+        var service = CreateService();
+        var member = new MemberAccount
+        {
+            Id = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            FullName = "Test Member",
+            Status = MemberAccountStatus.Active
+        };
+
+        var jwtToken = new JwtSecurityTokenHandler().ReadJwtToken(service.GenerateToken(member));
+
+        jwtToken.Claims.Should().NotContain(c => c.Type == ClaimTypes.Name || c.Type == "unique_name");
+    }
+
+    [Fact]
+    public void GenerateSignInLinkToken_RoundTripsThroughTheMagicLinkValidator()
+    {
+        // The recovery link lands on the same /member/welcome route as the voucher magic link,
+        // so one validator accepts both purposes.
+        var service = CreateService();
+        var memberId = Guid.NewGuid();
+
+        service.ValidateMagicLinkToken(service.GenerateSignInLinkToken(memberId)).Should().Be(memberId);
+        service.ValidateMagicLinkToken(service.GenerateMagicLinkToken(memberId)).Should().Be(memberId);
+    }
+
+    [Fact]
+    public void GenerateSignInLinkToken_ExpiresInThirtyMinutes()
+    {
+        // Short-lived on purpose: it is a way into the account, mailed to a possibly shared inbox.
+        var service = CreateService();
+
+        var jwtToken = new JwtSecurityTokenHandler().ReadJwtToken(service.GenerateSignInLinkToken(Guid.NewGuid()));
+
+        jwtToken.ValidTo.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(30), TimeSpan.FromMinutes(2));
     }
 
     [Fact]

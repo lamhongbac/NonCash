@@ -101,4 +101,20 @@ public class VoucherGenerationServiceTests
         result.Success.Should().BeTrue();
         result.GeneratedCount.Should().Be(30);
     }
+
+    [Fact]
+    public async Task GenerateBatchAsync_SerialNoUsesPlanPrefix_NotBrandCode()
+    {
+        // Arrange: two plans from the same brand — serial numbers must not collide
+        ArrangePlan(ApprovedPlan(10), 0);
+
+        // Act
+        await _sut.GenerateBatchAsync(_planId, 1, _brandId);
+
+        // Assert: serial number uses plan prefix (first 8 hex chars of planId), not brand code
+        var expectedPrefix = _planId.ToString()[..8].ToUpperInvariant();
+        await _detailRepository.Received(1).AddAsync(
+            Arg.Is<VoucherPlanDetail>(d => d.SerialNo.StartsWith($"VC-{expectedPrefix}-")),
+            Arg.Any<CancellationToken>());
+    }
 }

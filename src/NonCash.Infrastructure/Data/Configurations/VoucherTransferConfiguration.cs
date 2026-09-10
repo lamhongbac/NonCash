@@ -23,6 +23,7 @@ public class VoucherTransferConfiguration : IEntityTypeConfiguration<VoucherTran
         builder.Property(t => t.InitiatedAt).IsRequired();
         builder.Property(t => t.ExpiresAt).IsRequired();
         builder.Property(t => t.Note).HasMaxLength(500);
+        builder.Property(t => t.RecipientNote).HasMaxLength(500);
         builder.Property(t => t.RejectReason).HasMaxLength(500);
         builder.Property(t => t.RespondedAt).IsRequired(false);
 

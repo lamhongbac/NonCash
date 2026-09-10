@@ -11,7 +11,8 @@ public static class TestJwtConfig
             { "Jwt:Key", "noncash-test-key-min-32-bytes-long!!" },
             { "Jwt:Issuer", "NonCash-Test" },
             { "Jwt:Audience", "NonCash-Test-Users" },
-            { "Jwt:ExpiryHours", "1" }
+            { "Jwt:ExpiryHours", "1" },
+            { "WebBaseUrl", "https://test.noncash.local" }
         };
 
         return new ConfigurationBuilder()

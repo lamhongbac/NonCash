@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NonCash.Core.Configuration;
 using NonCash.Core.Entities;
@@ -9,6 +10,7 @@ using NonCash.Core.Services;
 using NonCash.Infrastructure.Data;
 using NonCash.Infrastructure.Repositories;
 using NonCash.Infrastructure.Services;
+using NonCash.IntegrationTests.Fixtures;
 
 namespace NonCash.IntegrationTests.CustomerActions;
 
@@ -53,7 +55,7 @@ public class BrandCustomerEnforcementTests : IDisposable
         _context = new ApplicationDbContext(options);
         _context.Database.EnsureCreated();
 
-        var notificationService = new ConsoleNotificationService();
+        var notificationService = new FileNotificationService();
         var brandCustomerRepository = new BrandCustomerRepository(_context);
 
         _promotionService = new PromotionService(
@@ -67,7 +69,9 @@ public class BrandCustomerEnforcementTests : IDisposable
             new Repository<Outlet>(_context),
             notificationService,
             brandCustomerRepository,
-            new Repository<VoucherDistributionBatch>(_context));
+            new Repository<VoucherDistributionBatch>(_context),
+            new StubJwtTokenService(),
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
 
         _purchaseService = new PurchaseService(
             new VoucherPlanRepository(_context),
@@ -79,15 +83,26 @@ public class BrandCustomerEnforcementTests : IDisposable
             new CustomerRepository(_context),
             brandCustomerRepository);
 
+        var voucherTransferService = new VoucherTransferService(
+            new Repository<VoucherPlanDetail>(_context),
+            new CustomerRepository(_context),
+            new MemberAccountRepository(_context),
+            new VoucherTransferRepository(_context),
+            brandCustomerRepository,
+            new VoucherPlanRepository(_context),
+            new BrandRepository(_context),
+            new Repository<VoucherDistribution>(_context),
+            notificationService,
+            new VoucherEventPublisher(_context),
+            new StubJwtTokenService(),
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
+
         _transferService = new TransferService(
             new Repository<VoucherPlanDetail>(_context),
             new CustomerRepository(_context),
             new MemberAccountRepository(_context),
             new Repository<VoucherDistribution>(_context),
-            notificationService,
-            new VoucherEventPublisher(_context),
-            brandCustomerRepository,
-            new VoucherPlanRepository(_context));
+            voucherTransferService);
 
         Seed();
     }
@@ -127,8 +142,8 @@ public class BrandCustomerEnforcementTests : IDisposable
             new Customer { Id = EveCustomerId, PhoneNumber = EvePhone, FullName = "Eve Blacklisted", Email = "eve@example.com", Status = CustomerStatus.Blacklisted });
 
         _context.MemberAccounts.AddRange(
-            new MemberAccount { Id = CarolMemberId, CustomerId = CarolCustomerId, Username = "carol", PasswordHash = "x", FullName = "Carol Blocked At A", Status = MemberAccountStatus.Active },
-            new MemberAccount { Id = EveMemberId, CustomerId = EveCustomerId, Username = "eve", PasswordHash = "x", FullName = "Eve Blacklisted", Status = MemberAccountStatus.Active });
+            new MemberAccount { Id = CarolMemberId, CustomerId = CarolCustomerId, PasswordHash = "x", FullName = "Carol Blocked At A", Status = MemberAccountStatus.Active },
+            new MemberAccount { Id = EveMemberId, CustomerId = EveCustomerId, PasswordHash = "x", FullName = "Eve Blacklisted", Status = MemberAccountStatus.Active });
 
         // Carol's Brand A relationship, blocked at this brand.
         _context.BrandCustomers.Add(new BrandCustomer

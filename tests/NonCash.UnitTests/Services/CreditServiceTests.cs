@@ -507,7 +507,12 @@ public class CreditServiceTests
         public Task NotifyPlanReviewedAsync(PlanReviewedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyStaffAccountCreatedAsync(StaffAccountCreatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVoucherTransferInitiatedAsync(VoucherTransferInitiatedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftAcceptedAsync(GiftAcceptedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftDeclinedAsync(GiftDeclinedNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftExpiredAsync(GiftExpiredNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyGiftMessageAsync(GiftMessageNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifySignInLinkAsync(SignInLinkNotification notification, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubWelcomePolicyService : IWelcomePolicyService

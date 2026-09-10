@@ -15,6 +15,7 @@ public interface IVoucherTransferRepository
     Task<TransferActionResult> AcceptAsync(
         Guid transferId,
         Guid recipientId,
+        string? recipientNote = null,
         CancellationToken cancellationToken = default);
 
     Task<TransferActionResult> RejectAsync(
@@ -47,4 +48,32 @@ public interface IVoucherTransferRepository
         CancellationToken cancellationToken = default);
 
     Task<int> SweepExpiredAsync(DateTime now, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<BrandGiftItem>> GetBrandGiftsAsync(
+        Guid? brandId,
+        VoucherTransferStatus? status = null,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>CR-2026-09-10-31: stages a message so it is written by the caller's next
+    /// SaveChangesAsync — inside the same transaction as the gift write that produced it.</summary>
+    void AddMessage(GiftMessage message);
+
+    /// <summary>CR-2026-09-10-31: every message of a gift, oldest first.</summary>
+    Task<IReadOnlyList<GiftMessageItem>> GetThreadAsync(Guid transferId, CancellationToken cancellationToken = default);
+
+    /// <summary>CR-2026-09-10-31: only the kinds a brand may read, oldest first. A brandId that
+    /// does not own the gift's voucher returns an empty list.</summary>
+    Task<IReadOnlyList<GiftMessageItem>> GetBrandVisibleThreadAsync(
+        Guid transferId,
+        Guid? brandId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>CR-2026-09-10-31: marks the messages addressed to a reader as read.</summary>
+    Task MarkMessagesReadAsync(Guid transferId, Guid readerMemberId, CancellationToken cancellationToken = default);
+
+    Task<int> CountMessagesAsync(Guid transferId, CancellationToken cancellationToken = default);
+
+    Task<int> CountMessagesByAuthorSinceAsync(Guid authorMemberId, DateTime sinceUtc, CancellationToken cancellationToken = default);
 }

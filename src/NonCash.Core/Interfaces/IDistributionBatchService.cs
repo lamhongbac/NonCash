@@ -37,7 +37,8 @@ public record DistributionBatchSummary(
     string NotifyChannel,
     int RecipientCount,
     int DistributedCount,
-    int SkippedCount);
+    int SkippedCount,
+    string ScopeSummary);
 
 public record BatchRecipientRow(
     Guid VoucherId,

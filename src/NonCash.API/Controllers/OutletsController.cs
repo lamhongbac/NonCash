@@ -64,12 +64,18 @@ public class OutletsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<OutletResponse>> CreateOutlet(CreateOutletRequest request, CancellationToken cancellationToken)
     {
+        if (!TryParseMode(request.RedemptionMode, out var mode, out var modeError))
+        {
+            return BadRequest(new { error = modeError });
+        }
+
         try
         {
             var outlet = await _outletService.CreateAsync(
                 request.Name,
                 request.Address,
                 request.Code,
+                mode ?? PosRedemptionMode.OneClick,
                 cancellationToken);
 
             return CreatedAtAction(nameof(GetOutlet), new { id = outlet.Id }, MapToResponse(outlet));
@@ -87,9 +93,14 @@ public class OutletsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<OutletResponse>> UpdateOutlet(Guid id, UpdateOutletRequest request, CancellationToken cancellationToken)
     {
+        if (!TryParseMode(request.RedemptionMode, out var mode, out var modeError))
+        {
+            return BadRequest(new { error = modeError });
+        }
+
         try
         {
-            var outlet = await _outletService.UpdateAsync(id, request.Name, request.Address, request.Code, cancellationToken);
+            var outlet = await _outletService.UpdateAsync(id, request.Name, request.Address, request.Code, mode, cancellationToken);
             return Ok(MapToResponse(outlet));
         }
         catch (KeyNotFoundException)
@@ -126,8 +137,31 @@ public class OutletsController : ControllerBase
             outlet.Code,
             outlet.Status.ToString(),
             outlet.ApiKeyPrefix,
+            outlet.PosRedemptionMode.ToString(),
             outlet.CreatedAt,
             outlet.UpdatedAt
         );
+    }
+
+    private static bool TryParseMode(string? value, out PosRedemptionMode? mode, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            mode = null;
+            error = null;
+            return true;
+        }
+
+        if (Enum.TryParse<PosRedemptionMode>(value, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
+        {
+            mode = parsed;
+            error = null;
+            return true;
+        }
+
+        var allowed = string.Join(", ", Enum.GetNames<PosRedemptionMode>());
+        error = $"Unknown redemption mode '{value}'. Allowed values: {allowed}.";
+        mode = null;
+        return false;
     }
 }

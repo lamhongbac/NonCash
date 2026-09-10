@@ -17,14 +17,6 @@ public class MemberAccountConfiguration : IEntityTypeConfiguration<MemberAccount
             .HasForeignKey(u => u.CustomerId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Property(u => u.Username)
-            .IsRequired()
-            .HasMaxLength(100);
-
-        builder.HasIndex(u => u.Username)
-            .IsUnique()
-            .HasDatabaseName("IX_member_accounts_username");
-
         builder.Property(u => u.PasswordHash)
             .IsRequired()
             .HasMaxLength(255);

@@ -13,6 +13,8 @@ public class DistributionBatchService : IDistributionBatchService
     private readonly ICustomerRepository _customerRepository;
     private readonly IUserAccountRepository _userRepository;
     private readonly IBrandCustomerRepository _brandCustomerRepository;
+    private readonly IBrandRepository _brandRepository;
+    private readonly IOutletRepository _outletRepository;
 
     public DistributionBatchService(
         IVoucherPlanRepository planRepository,
@@ -22,7 +24,9 @@ public class DistributionBatchService : IDistributionBatchService
         IMemberAccountRepository memberRepository,
         ICustomerRepository customerRepository,
         IUserAccountRepository userRepository,
-        IBrandCustomerRepository brandCustomerRepository)
+        IBrandCustomerRepository brandCustomerRepository,
+        IBrandRepository brandRepository,
+        IOutletRepository outletRepository)
     {
         _planRepository = planRepository;
         _batchRepository = batchRepository;
@@ -32,6 +36,8 @@ public class DistributionBatchService : IDistributionBatchService
         _customerRepository = customerRepository;
         _userRepository = userRepository;
         _brandCustomerRepository = brandCustomerRepository;
+        _brandRepository = brandRepository;
+        _outletRepository = outletRepository;
     }
 
     public async Task<IReadOnlyList<DistributionBatchSummary>> GetBatchesByPlanAsync(
@@ -52,8 +58,9 @@ public class DistributionBatchService : IDistributionBatchService
             batches.Where(b => b.CreatedById.HasValue).Select(b => b.CreatedById!.Value), cancellationToken);
 
         var planName = PlanDisplayName(plan);
+        var scopeSummary = await BuildScopeSummaryAsync(plan, cancellationToken);
         return batches
-            .Select(b => ToSummary(b, planName, creatorNames))
+            .Select(b => ToSummary(b, planName, creatorNames, scopeSummary))
             .ToList();
     }
 
@@ -66,10 +73,11 @@ public class DistributionBatchService : IDistributionBatchService
 
         var plan = await _planRepository.GetByIdAsync(batch.PlanId, cancellationToken);
         var planName = plan != null ? PlanDisplayName(plan) : string.Empty;
+        var scopeSummary = plan != null ? await BuildScopeSummaryAsync(plan, cancellationToken) : string.Empty;
 
         var creatorNames = await ResolveCreatorNamesAsync(
             batch.CreatedById.HasValue ? new[] { batch.CreatedById.Value } : Array.Empty<Guid>(), cancellationToken);
-        var summary = ToSummary(batch, planName, creatorNames);
+        var summary = ToSummary(batch, planName, creatorNames, scopeSummary);
 
         var distributions = (await _distributionRepository.FindAsync(d => d.BatchId == batchId, cancellationToken))
             .OrderByDescending(d => d.DistributionDate)
@@ -213,7 +221,7 @@ public class DistributionBatchService : IDistributionBatchService
         => string.IsNullOrWhiteSpace(plan.DisplayName) ? $"{plan.VoucherType} Voucher" : plan.DisplayName!;
 
     private static DistributionBatchSummary ToSummary(
-        VoucherDistributionBatch batch, string planName, IReadOnlyDictionary<Guid, string> creatorNames)
+        VoucherDistributionBatch batch, string planName, IReadOnlyDictionary<Guid, string> creatorNames, string scopeSummary)
         => new(
             batch.Id,
             batch.PlanId,
@@ -225,7 +233,29 @@ public class DistributionBatchService : IDistributionBatchService
             batch.NotifyChannel.ToString(),
             batch.RecipientCount,
             batch.DistributedCount,
-            batch.SkippedCount);
+            batch.SkippedCount,
+            scopeSummary);
+
+    /// <summary>
+    /// Human-readable store scope of a plan: empty <see cref="VoucherScope.Outlets"/> means the
+    /// whole brand (all its stores); otherwise the selected stores are named explicitly.
+    /// </summary>
+    private async Task<string> BuildScopeSummaryAsync(VoucherPlanHeader plan, CancellationToken cancellationToken)
+    {
+        if (plan.Scope.Outlets.Count == 0)
+        {
+            var brand = await _brandRepository.GetByIdAsync(plan.BrandId, cancellationToken);
+            return string.IsNullOrWhiteSpace(brand?.Name)
+                ? "All stores of the brand"
+                : $"All stores of {brand!.Name}";
+        }
+
+        var outlets = await _outletRepository.FindAsync(o => plan.Scope.Outlets.Contains(o.Id), cancellationToken);
+        var names = outlets.Select(o => o.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+        return names.Count == 0
+            ? $"{plan.Scope.Outlets.Count} selected store(s)"
+            : $"{names.Count} selected store(s): {string.Join(", ", names)}";
+    }
 
     private async Task<Dictionary<Guid, string>> ResolveCreatorNamesAsync(
         IEnumerable<Guid> creatorIds, CancellationToken cancellationToken)

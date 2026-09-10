@@ -28,5 +28,9 @@ builder.Services.AddScoped(sp =>
     return http;
 });
 builder.Services.AddScoped<PosApiClient>();
+builder.Services.AddScoped<IPosApiClient>(sp => sp.GetRequiredService<PosApiClient>());
+
+// One-click redemption (LOCK + COMMIT) for outlets configured with PosRedemptionMode = OneClick.
+builder.Services.AddScoped<RedemptionFlowService>();
 
 await builder.Build().RunAsync();

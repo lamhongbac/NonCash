@@ -18,7 +18,7 @@ namespace NonCash.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("public")
-                .HasAnnotation("ProductVersion", "9.0.4")
+                .HasAnnotation("ProductVersion", "9.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1080,6 +1080,76 @@ namespace NonCash.Infrastructure.Migrations
                     b.ToTable("email_logs", "public");
                 });
 
+            modelBuilder.Entity("NonCash.Core.Entities.GiftMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_member_id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("direction");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_read");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<Guid>("RecipientMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_member_id");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid>("TransferId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorMemberId");
+
+                    b.HasIndex("RecipientMemberId", "IsRead")
+                        .HasDatabaseName("IX_gift_messages_recipient_member_id_is_read");
+
+                    b.HasIndex("TransferId", "SentAt")
+                        .HasDatabaseName("IX_gift_messages_transfer_id_sent_at");
+
+                    b.ToTable("gift_messages", "public");
+                });
+
             modelBuilder.Entity("NonCash.Core.Entities.IntegrationPartner", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1184,21 +1254,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("username");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId")
                         .IsUnique()
                         .HasDatabaseName("IX_member_accounts_customer_id");
-
-                    b.HasIndex("Username")
-                        .IsUnique()
-                        .HasDatabaseName("IX_member_accounts_username");
 
                     b.ToTable("member_accounts", "public");
                 });
@@ -1279,6 +1339,10 @@ namespace NonCash.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
+
+                    b.Property<int>("PosRedemptionMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("pos_redemption_mode");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2226,6 +2290,11 @@ namespace NonCash.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("recipient_id");
 
+                    b.Property<string>("RecipientNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("recipient_note");
+
                     b.Property<string>("RejectReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -2762,6 +2831,33 @@ namespace NonCash.Infrastructure.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("NonCash.Core.Entities.GiftMessage", b =>
+                {
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.MemberAccount", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NonCash.Core.Entities.VoucherTransfer", "Transfer")
+                        .WithMany()
+                        .HasForeignKey("TransferId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Transfer");
                 });
 
             modelBuilder.Entity("NonCash.Core.Entities.MemberAccount", b =>

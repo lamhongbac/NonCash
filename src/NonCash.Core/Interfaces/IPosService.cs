@@ -74,5 +74,10 @@ public record PosVoucherInfo(
     string ValueType,
     DateTime ExpiryDate,
     string BrandName,
-    string SerialNo
+    string SerialNo,
+    // Human-readable applicability scope so the cashier can tell the customer where
+    // the voucher redeems: "All stores of {brand}" or "N selected store(s)".
+    string ScopeSummary,
+    // Outlet names when the scope lists explicit outlets; empty for whole-brand scope.
+    IReadOnlyList<string> ApplicableOutlets
 );

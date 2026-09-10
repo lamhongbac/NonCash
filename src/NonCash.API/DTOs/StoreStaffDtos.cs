@@ -42,5 +42,7 @@ public record StaffLoginResponse(
     string Token,
     DateTime ExpiresAt,
     UserDto User,
-    Guid OutletId
+    Guid OutletId,
+    string OutletName,
+    string RedemptionMode = "OneClick"
 );

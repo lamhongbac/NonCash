@@ -1,36 +1,19 @@
-using System.Net.Http.Headers;
-
 namespace NonCash.Web.Services;
 
 /// <summary>
-/// Delegating handler that attaches the JWT token to outgoing requests and redirects
-/// to the login page when the API returns 401 Unauthorized.
+/// Delegating handler that turns transport failures into HTTP status codes so pages can show
+/// a readable error instead of an exception. It deliberately does not attach the JWT: the
+/// handler chain is built from a root scope, so the <see cref="ClientAuthService"/> resolved
+/// here is not the Blazor circuit's instance and has no token. Pages must add the
+/// Authorization header themselves.
 /// </summary>
 public class AuthHttpHandler : DelegatingHandler
 {
-    private readonly IServiceProvider _serviceProvider;
-
-    public AuthHttpHandler(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
-
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        // Create a scope so we can resolve scoped services inside this singleton-compatible handler.
-        await using var scope = _serviceProvider.CreateAsyncScope();
-        var authState = scope.ServiceProvider.GetRequiredService<ClientAuthService>();
-
-        var token = await authState.GetTokenAsync();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        HttpResponseMessage response;
         try
         {
-            response = await base.SendAsync(request, cancellationToken);
+            return await base.SendAsync(request, cancellationToken);
         }
         catch (HttpRequestException)
         {
@@ -42,12 +25,5 @@ public class AuthHttpHandler : DelegatingHandler
             // Request timed out — return 504 Gateway Timeout.
             return new HttpResponseMessage(System.Net.HttpStatusCode.GatewayTimeout);
         }
-
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-        {
-            await authState.LogoutAsync();
-        }
-
-        return response;
     }
 }

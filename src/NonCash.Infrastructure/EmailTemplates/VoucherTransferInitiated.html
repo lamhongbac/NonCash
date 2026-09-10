@@ -2,18 +2,20 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Voucher Transfer Received</title>
+    <title>A gift is waiting for you</title>
 </head>
 <body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
     <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #7b1fa2; color: #fff; padding: 20px;">
-            <h2 style="margin: 0;">Voucher(s) Received via Transfer</h2>
+            <h2 style="margin: 0;">A gift is waiting for you</h2>
         </div>
         <div style="padding: 24px;">
             <p>Dear {{RecipientName}},</p>
-            <p>You have received <strong>{{VoucherCount}}</strong> voucher(s) from <strong>{{SenderName}}</strong>.</p>
-            <p style="color: #666;">Transferred on: {{TransferredAt}}</p>
-            <p>You can view your vouchers by logging into your account or visiting the NonCash member portal.</p>
+            <p><strong>{{SenderName}}</strong> sent you <strong>{{VoucherCount}}</strong> voucher(s) as a gift.</p>
+            <p style="color: #666;">Sent on: {{SentAt}}</p>
+            <p>Open the gift to accept it. Until you do, the voucher stays reserved for you for 7 days &mdash; after that it goes back to {{SenderName}}.</p>
+            <!-- CR-2026-09-07-19: Magic link for passwordless access -->
+            {{MagicLinkHtml}}
             <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
         </div>
     </div>

@@ -34,7 +34,7 @@ public class PosController : ControllerBase
         var middlewareOutletId = HttpContext.Items["pos.outlet_id"] as Guid?;
         if (middlewareOutletId == null || middlewareOutletId.Value != request.OutletId)
         {
-            return Ok(new PosVerifyResponse("Invalid", "OutletNotAuthorized", null));
+            return Ok(new PosVerifyResponse("Invalid", "TerminalKeyMismatch", null));
         }
 
         var result = await _posService.VerifyAsync(request.VoucherCode, request.OutletId, cancellationToken);
@@ -46,7 +46,9 @@ public class PosController : ControllerBase
                 result.VoucherInfo.ValueType,
                 result.VoucherInfo.ExpiryDate,
                 result.VoucherInfo.BrandName,
-                result.VoucherInfo.SerialNo);
+                result.VoucherInfo.SerialNo,
+                result.VoucherInfo.ScopeSummary,
+                result.VoucherInfo.ApplicableOutlets);
 
         return Ok(new PosVerifyResponse(result.Status, result.Reason, info));
     }
@@ -71,7 +73,7 @@ public class PosController : ControllerBase
         var middlewareOutletId = HttpContext.Items["pos.outlet_id"] as Guid?;
         if (middlewareOutletId == null || middlewareOutletId.Value != request.OutletId)
         {
-            return Ok(new PosLockResponse("Invalid", "OutletNotAuthorized", null, null));
+            return Ok(new PosLockResponse("Invalid", "TerminalKeyMismatch", null, null));
         }
 
         var result = await _posService.LockAsync(request.VoucherCode, request.OutletId, request.BillNumber, cancellationToken);
@@ -83,7 +85,9 @@ public class PosController : ControllerBase
                 result.VoucherInfo.ValueType,
                 result.VoucherInfo.ExpiryDate,
                 result.VoucherInfo.BrandName,
-                result.VoucherInfo.SerialNo);
+                result.VoucherInfo.SerialNo,
+                result.VoucherInfo.ScopeSummary,
+                result.VoucherInfo.ApplicableOutlets);
 
         if (result.Status == "AlreadyInUse")
         {
@@ -190,5 +194,7 @@ public record PosVoucherInfoDto(
     string ValueType,
     DateTime ExpiryDate,
     string BrandName,
-    string SerialNo
+    string SerialNo,
+    string ScopeSummary,
+    IReadOnlyList<string> ApplicableOutlets
 );

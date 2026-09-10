@@ -43,7 +43,7 @@ else
                 <MudText Typo="Typo.body2"><b>Plan Date:</b> @_plan.PlanDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
                 <MudText Typo="Typo.body2"><b>Publish Date:</b> @_plan.PublishDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
                 <MudText Typo="Typo.body2"><b>Expiry Date:</b> @_plan.ExpiryDate.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
-                <MudText Typo="Typo.body2"><b>Outlets:</b> @_plan.OutletIds.Count</MudText>
+                <MudText Typo="Typo.body2"><b>Applicable stores:</b> @_scopeText</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -182,6 +182,8 @@ else
     private PlanDetail? _plan;
     private List<ReviewItem> _reviews = new();
     private List<VersionItem> _versions = new();
+    private List<OutletItem> _outlets = new();
+    private string _scopeText = string.Empty;
     private bool _loading = true;
     private bool _processing = false;
     private string _reviewNotes = "";
@@ -199,7 +201,8 @@ else
         _loading = true;
         try
         {
-            await Task.WhenAll(LoadPlan(), LoadReviews(), LoadVersions(), LoadFunding());
+            await Task.WhenAll(LoadPlan(), LoadReviews(), LoadVersions(), LoadFunding(), LoadOutletsAsync());
+            ComputeScopeText();
         }
         finally
         {
@@ -261,6 +264,55 @@ else
         var response = await Http.SendAsync(request);
         if (response.IsSuccessStatusCode)
             _funding = await response.Content.ReadFromJsonAsync<FundingInfo>();
+    }
+
+    /// <summary>Loads the brand's outlets so the plan scope can be shown as store names.</summary>
+    private async Task LoadOutletsAsync()
+    {
+        try
+        {
+            var token = await AuthState.GetTokenAsync();
+            var all = new List<OutletItem>();
+            var pageNumber = 1;
+            while (true)
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/outlets?pageSize=100&pageNumber={pageNumber}");
+                if (!string.IsNullOrEmpty(token))
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                var response = await Http.SendAsync(request);
+                if (!response.IsSuccessStatusCode) break;
+                var result = await response.Content.ReadFromJsonAsync<PagedOutlets>();
+                if (result == null || result.Items.Count == 0) break;
+                all.AddRange(result.Items.Select(o => new OutletItem { Id = o.Id, Name = o.Name }));
+                if (all.Count >= result.TotalCount || result.Items.Count < 100) break;
+                pageNumber++;
+            }
+            _outlets = all;
+        }
+        catch
+        {
+            _outlets = new();
+        }
+    }
+
+    /// <summary>Empty scope = whole brand; otherwise the explicit outlet names.</summary>
+    private void ComputeScopeText()
+    {
+        if (_plan == null)
+        {
+            _scopeText = string.Empty;
+            return;
+        }
+
+        if (_plan.OutletIds.Count == 0)
+        {
+            _scopeText = $"Whole brand (all {_outlets.Count} outlets)";
+            return;
+        }
+
+        var names = _plan.OutletIds.Select(id =>
+            _outlets.FirstOrDefault(o => o.Id == id)?.Name ?? id.ToString()[..8]);
+        _scopeText = $"{_plan.OutletIds.Count} selected: {string.Join(", ", names)}";
     }
 
     private async Task ClonePlan()
@@ -459,6 +511,18 @@ else
         public bool Sufficient { get; set; }
         public int Balance { get; set; }
         public int Required { get; set; }
+    }
+
+    private class OutletItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private class PagedOutlets
+    {
+        public List<OutletItem> Items { get; set; } = new();
+        public int TotalCount { get; set; }
     }
 
     private class ApiError

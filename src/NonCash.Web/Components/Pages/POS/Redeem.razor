@@ -52,6 +52,11 @@
     <MudAlert Severity="Severity.Info" Class="mb-4">
         <b>@_voucherInfo.BrandName</b> — Face value: <b>@_voucherInfo.FaceValue.ToString("N0")</b> @_voucherInfo.ValueType
         <br />Serial: @_voucherInfo.SerialNo | Expires: @_voucherInfo.ExpiryDate.ToLocalTime().ToString("g")
+        <br />Scope: @_voucherInfo.ScopeSummary
+        @if (_voucherInfo.ApplicableOutlets.Count > 0)
+        {
+            <text><br />Stores: @_voucherInfo.StoresText</text>
+        }
     </MudAlert>
 }
 
@@ -297,7 +302,9 @@
             node["valueType"]?.GetValue<string>() ?? string.Empty,
             node["expiryDate"]?.GetValue<DateTime>() ?? DateTime.MinValue,
             node["brandName"]?.GetValue<string>() ?? string.Empty,
-            node["serialNo"]?.GetValue<string>() ?? string.Empty
+            node["serialNo"]?.GetValue<string>() ?? string.Empty,
+            node["scopeSummary"]?.GetValue<string>() ?? string.Empty,
+            node["applicableOutlets"]?.AsArray().Select(x => x?.GetValue<string>() ?? string.Empty).ToList() ?? new List<string>()
         );
     }
 
@@ -335,13 +342,15 @@
 
     public class PosVoucherInfoDto
     {
-        public PosVoucherInfoDto(decimal faceValue, string valueType, DateTime expiryDate, string brandName, string serialNo)
+        public PosVoucherInfoDto(decimal faceValue, string valueType, DateTime expiryDate, string brandName, string serialNo, string scopeSummary, List<string> applicableOutlets)
         {
             FaceValue = faceValue;
             ValueType = valueType;
             ExpiryDate = expiryDate;
             BrandName = brandName;
             SerialNo = serialNo;
+            ScopeSummary = scopeSummary;
+            ApplicableOutlets = applicableOutlets;
         }
 
         public decimal FaceValue { get; set; }
@@ -349,6 +358,11 @@
         public DateTime ExpiryDate { get; set; }
         public string BrandName { get; set; }
         public string SerialNo { get; set; }
+        public string ScopeSummary { get; set; }
+        public List<string> ApplicableOutlets { get; set; } = new();
+
+        /// <summary>Comma-separated store names for display (avoids inline string literals in markup).</summary>
+        public string StoresText => string.Join(", ", ApplicableOutlets);
     }
 
     public class PagedResult<T>

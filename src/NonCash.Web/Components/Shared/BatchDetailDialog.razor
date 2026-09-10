@@ -36,6 +36,10 @@
                     <MudText Typo="Typo.body2"><b>Recipients:</b> @s.RecipientCount</MudText>
                     <MudText Typo="Typo.body2"><b>Distributed:</b> @s.DistributedCount</MudText>
                     <MudText Typo="Typo.body2"><b>Skipped:</b> @s.SkippedCount</MudText>
+                    @if (!string.IsNullOrWhiteSpace(s.ScopeSummary))
+                    {
+                        <MudText Typo="Typo.body2"><b>Applicable stores:</b> @s.ScopeSummary</MudText>
+                    }
                 </MudStack>
             </MudPaper>
 
@@ -165,6 +169,7 @@
         public int RecipientCount { get; set; }
         public int DistributedCount { get; set; }
         public int SkippedCount { get; set; }
+        public string ScopeSummary { get; set; } = "";
     }
 
     public class BatchRecipientItem

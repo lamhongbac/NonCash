@@ -50,12 +50,15 @@ public class PosAuthService
                 StaffUserId = result.User.UserId,
                 StaffName = result.User.FullName,
                 OutletId = result.OutletId,
-                OutletName = outlet?.OutletName ?? storeCode,
+                OutletName = !string.IsNullOrWhiteSpace(result.OutletName) ? result.OutletName : (outlet?.StoreCode ?? storeCode),
                 StoreCode = storeCode,
                 JwtToken = result.Token,
                 ShiftStart = DateTime.UtcNow,
                 TokenExpiry = result.ExpiresAt,
-                PosNo = posNo
+                PosNo = posNo,
+                RedemptionMode = string.IsNullOrWhiteSpace(result.RedemptionMode)
+                    ? ShiftSession.OneClickMode
+                    : result.RedemptionMode
             };
 
             return (true, null);

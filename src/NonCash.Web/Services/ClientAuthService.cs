@@ -18,6 +18,7 @@ public class ClientAuthService
     public Guid? UserId { get; private set; }
     public Guid? CustomerId { get; private set; }
     public DateTime? TokenExpiry { get; private set; }
+    private bool _jsInteropAvailable;
     public bool IsLoggedIn => !string.IsNullOrEmpty(Token) && !IsTokenExpired();
     public bool IsMember => Role?.Equals("Member", StringComparison.OrdinalIgnoreCase) == true;
 
@@ -54,6 +55,8 @@ public class ClientAuthService
             if (DateTime.TryParse(expiryStr, out var expiry))
                 TokenExpiry = expiry;
 
+            _jsInteropAvailable = true;
+
             // If the token is already expired, log out immediately.
             if (!string.IsNullOrEmpty(Token) && IsTokenExpired())
             {
@@ -62,7 +65,9 @@ public class ClientAuthService
         }
         catch
         {
-            // JS interop not available during prerender
+            // JS interop not available during prerender: the session is unknowable on this
+            // pass, so it must not trigger any logout or redirect.
+            _jsInteropAvailable = false;
         }
     }
 
@@ -83,6 +88,8 @@ public class ClientAuthService
         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authUserId", userId.ToString());
         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authCustomerId", customerId?.ToString() ?? "");
         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authTokenExpiry", tokenExpiry?.ToString("O") ?? "");
+
+        _jsInteropAvailable = true;
 
         OnAuthStateChanged?.Invoke();
     }
@@ -114,6 +121,12 @@ public class ClientAuthService
         }
 
         OnAuthStateChanged?.Invoke();
+
+        // Navigation is impossible without JS interop (prerender); the interactive pass that
+        // follows will redirect if the session is really gone.
+        if (!_jsInteropAvailable)
+            return;
+
         try
         {
             _navigation.NavigateTo("/login", forceLoad: true);
@@ -129,6 +142,11 @@ public class ClientAuthService
     {
         if (Token == null)
             await InitializeAsync();
+
+        // Without JS interop (prerender) a missing token means unknowable, not expired, so
+        // this pass must not log out or redirect.
+        if (!_jsInteropAvailable)
+            return null;
 
         if (IsTokenExpired())
         {

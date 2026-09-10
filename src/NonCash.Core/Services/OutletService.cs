@@ -14,7 +14,12 @@ public class OutletService
         _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
     }
 
-    public async Task<Outlet> CreateAsync(string name, string? address, string? code = null, CancellationToken cancellationToken = default)
+    public async Task<Outlet> CreateAsync(
+        string name,
+        string? address,
+        string? code = null,
+        PosRedemptionMode posRedemptionMode = PosRedemptionMode.OneClick,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Outlet name is required.", nameof(name));
@@ -29,7 +34,8 @@ public class OutletService
             Address = address?.Trim(),
             Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim(),
             Status = OutletStatus.Active,
-            ApiKeyPrefix = GenerateApiKeyPrefix()
+            ApiKeyPrefix = GenerateApiKeyPrefix(),
+            PosRedemptionMode = posRedemptionMode
         };
 
         await _outletRepository.AddAsync(outlet, cancellationToken);
@@ -83,7 +89,13 @@ public class OutletService
         return outlet;
     }
 
-    public async Task<Outlet> UpdateAsync(Guid id, string name, string? address, string? code = null, CancellationToken cancellationToken = default)
+    public async Task<Outlet> UpdateAsync(
+        Guid id,
+        string name,
+        string? address,
+        string? code = null,
+        PosRedemptionMode? posRedemptionMode = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Outlet name is required.", nameof(name));
@@ -98,6 +110,8 @@ public class OutletService
         outlet.Name = name.Trim();
         outlet.Address = address?.Trim();
         outlet.Code = string.IsNullOrWhiteSpace(code) ? null : code.Trim();
+        if (posRedemptionMode.HasValue)
+            outlet.PosRedemptionMode = posRedemptionMode.Value;
 
         await _outletRepository.SaveChangesAsync(cancellationToken);
         return outlet;

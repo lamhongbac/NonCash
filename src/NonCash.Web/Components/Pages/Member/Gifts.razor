@@ -1,0 +1,416 @@
+@page "/member/gifts"
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@using NonCash.Shared.Helpers
+
+<PageTitle>Gifts from friends</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4" Class="mb-1">Gifts from friends</MudText>
+        <MudText Typo="Typo.body2">
+            A friend sent you a voucher. Accept it and it moves into your wallet — you can add a thank-you note for them.
+        </MudText>
+    </div>
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+        <MudSelect T="string" Value="_status" ValueChanged="OnStatusChanged" Label="Show" Variant="Variant.Outlined" Style="min-width: 160px;">
+            <MudSelectItem Value="@("PendingAcceptance")">Waiting for me</MudSelectItem>
+            <MudSelectItem Value="@("All")">Everything</MudSelectItem>
+        </MudSelect>
+        <MudTooltip Text="Refresh">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" OnClick="LoadGifts" Disabled="_loading" />
+        </MudTooltip>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CardGiftcard" Href="/my-vouchers">
+            Gifts you sent
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_loading && !_loaded)
+{
+    <MudProgressLinear Indeterminate="true" Class="my-4" />
+}
+else if (!_inbox.Any())
+{
+    <MudPaper Class="pa-8 mt-4" Elevation="0" Style="text-align: center;">
+        <MudIcon Icon="@Icons.Material.Outlined.CardGiftcard" Color="Color.Primary" Style="font-size: 4rem;" Class="mb-2" />
+        <MudText Typo="Typo.h6" Class="mb-1">No gifts waiting</MudText>
+        <MudText Typo="Typo.body2">
+            When a friend sends you a voucher it appears here, and stays reserved for you for 7 days.
+        </MudText>
+    </MudPaper>
+}
+else
+{
+    <MudGrid>
+        @foreach (var gift in _inbox)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="2">
+                    <div style="height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Size="Size.Large" Style="color: white;" />
+                    </div>
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
+                            <MudText Typo="Typo.h6">@gift.BrandName</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(gift.Status)">@GiftMessageHelper.StatusLabel(gift.Status)</MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.h5" Class="mb-2">@VoucherDisplayHelper.FormatValue(gift.FaceValue, gift.ValueType ?? "Value")</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-1">From @gift.SenderDisplayName</MudText>
+                        @if (!string.IsNullOrWhiteSpace(gift.Note))
+                        {
+                            <MudText Typo="Typo.body2" Style="font-style: italic;">"@gift.Note"</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="d-block mt-2" Style="@DeadlineStyle(gift)">@DeadlineFor(gift)</MudText>
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (GiftMessageHelper.IsWaiting(gift.Status))
+                        {
+                            <MudButton Color="Color.Success" Variant="Variant.Filled" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Check" OnClick="() => OpenAccept(gift)">
+                                Accept gift
+                            </MudButton>
+                            <MudButton Color="Color.Error" Variant="Variant.Text" Size="Size.Small" OnClick="() => OpenDecline(gift)">
+                                Decline
+                            </MudButton>
+                        }
+                        <MudBadge Visible="@(gift.UnreadCount > 0)" Content="@gift.UnreadCount" Color="Color.Error" Overlap="true">
+                            <MudButton Color="Color.Primary" Variant="Variant.Text" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Outlined.Chat" OnClick="() => OpenThread(gift)">
+                                @(gift.MessageCount == 0 ? "Messages" : $"Messages ({gift.MessageCount})")
+                            </MudButton>
+                        </MudBadge>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<MudDialog @bind-Visible="_showAccept" Options="_dialogOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.CardGiftcard" Color="Color.Success" />
+            <MudText Typo="Typo.h6">Accept this gift</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selected is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-1">
+                <b>@_selected.BrandName</b> · @VoucherDisplayHelper.FormatValue(_selected.FaceValue, _selected.ValueType ?? "Value")
+                from @_selected.SenderDisplayName moves into your wallet.
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">
+                Add a short thank-you — it is emailed to them together with your acceptance.
+            </MudText>
+            <MudTextField T="string" @bind-Value="_thankYouNote" Label="Thank-you note" Lines="3" Variant="Variant.Outlined"
+                          MaxLength="280" Counter="280" Immediate="true"
+                          HelperText="This note goes straight to your friend. Clear it if you would rather not send one." />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showAccept = false">Not now</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Check"
+                   OnClick="ConfirmAccept" Disabled="_acting">
+            @if (_acting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Accept gift
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_showDecline" Options="_dialogOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.Undo" Color="Color.Error" />
+            <MudText Typo="Typo.h6">Decline this gift</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selected is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">
+                The voucher goes straight back to @_selected.SenderDisplayName's wallet and they are told you declined.
+                You can say why — it is sent with the notice.
+            </MudText>
+            <MudTextField T="string" @bind-Value="_declineReason" Label="Reason (optional)" Lines="2" Variant="Variant.Outlined"
+                          MaxLength="280" Counter="280" Immediate="true" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showDecline = false">Keep it for now</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="ConfirmDecline" Disabled="_acting">
+            @if (_acting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Decline gift
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_showThread" Options="_dialogOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Outlined.Chat" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">
+                @(_selected is null ? "Messages" : $"Messages with {_selected.SenderDisplayName}")
+            </MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selected is not null)
+        {
+            <MudText Typo="Typo.caption" Class="d-block mb-3">
+                @_selected.BrandName · @VoucherDisplayHelper.FormatValue(_selected.FaceValue, _selected.ValueType ?? "Value")
+                · @GiftMessageHelper.StatusLabel(_selected.Status)
+            </MudText>
+            <GiftConversation TransferId="_selected.TransferId" ViewerMemberId="_viewerMemberId" OnChanged="LoadGifts" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showThread = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const string SuggestedThankYou = "Cảm ơn món quà của bạn!";
+
+    private bool _loading;
+    private bool _loaded;
+    private bool _acting;
+    private string _status = "PendingAcceptance";
+    private List<GiftInboxItem> _inbox = new();
+    private GiftInboxItem? _selected;
+    private bool _showAccept;
+    private bool _showDecline;
+    private bool _showThread;
+    private Guid _viewerMemberId;
+    private string _thankYouNote = SuggestedThankYou;
+    private string _declineReason = string.Empty;
+    private DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.GetTokenAsync();
+        if (AuthState.UserId.HasValue && AuthState.UserId.Value != Guid.Empty)
+            _viewerMemberId = AuthState.UserId.Value;
+
+        await LoadGifts();
+    }
+
+    private void OpenThread(GiftInboxItem gift)
+    {
+        _selected = gift;
+        _showThread = true;
+    }
+
+    private async Task OnStatusChanged(string status)
+    {
+        _status = status;
+        await LoadGifts();
+    }
+
+    private async Task LoadGifts()
+    {
+        _loading = true;
+        try
+        {
+            var query = _status == "All"
+                ? "?page=1&pageSize=50"
+                : $"?status={Uri.EscapeDataString(_status)}&page=1&pageSize=50";
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, $"api/v1/member/transfers/inbox{query}");
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _inbox = await response.Content.ReadFromJsonAsync<List<GiftInboxItem>>() ?? new();
+                _loaded = true;
+            }
+            else
+            {
+                await ShowApiFailureAsync("We could not load your gifts", response);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "We could not load your gifts",
+                $"The gift service did not answer ({ex.Message}). Check your connection, then tap Refresh.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenAccept(GiftInboxItem gift)
+    {
+        _selected = gift;
+        _thankYouNote = SuggestedThankYou;
+        _showAccept = true;
+    }
+
+    private void OpenDecline(GiftInboxItem gift)
+    {
+        _selected = gift;
+        _declineReason = string.Empty;
+        _showDecline = true;
+    }
+
+    private async Task ConfirmAccept()
+    {
+        if (_selected is null) return;
+
+        _acting = true;
+        try
+        {
+            var note = string.IsNullOrWhiteSpace(_thankYouNote) ? null : _thankYouNote.Trim();
+            var request = await CreateAuthRequestAsync(HttpMethod.Post, $"api/v1/member/transfers/{_selected.TransferId}/accept");
+            request.Content = JsonContent.Create(new { Note = note });
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _showAccept = false;
+                var sender = _selected.SenderDisplayName;
+                await LoadGifts();
+                await MessageDialog.ShowAsync(DialogService, "Gift accepted",
+                    note is null
+                        ? $"The voucher from {sender} is now in your wallet — open My Vouchers to see its code."
+                        : $"The voucher from {sender} is now in your wallet, and your thank-you note was sent to them. Open My Vouchers to see its code.",
+                    Severity.Success);
+            }
+            else
+            {
+                await ShowApiFailureAsync("The gift was not accepted", response);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "The gift was not accepted",
+                $"The gift service did not answer ({ex.Message}). The gift is still waiting for you — tap Refresh and try again.",
+                Severity.Error);
+        }
+        finally
+        {
+            _acting = false;
+        }
+    }
+
+    private async Task ConfirmDecline()
+    {
+        if (_selected is null) return;
+
+        _acting = true;
+        try
+        {
+            var reason = string.IsNullOrWhiteSpace(_declineReason) ? null : _declineReason.Trim();
+            var request = await CreateAuthRequestAsync(HttpMethod.Post, $"api/v1/member/transfers/{_selected.TransferId}/reject");
+            request.Content = JsonContent.Create(new { Reason = reason });
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _showDecline = false;
+                var sender = _selected.SenderDisplayName;
+                await LoadGifts();
+                await MessageDialog.ShowAsync(DialogService, "Gift declined",
+                    $"The voucher went back to {sender}'s wallet and they were told you declined it.", Severity.Info);
+            }
+            else
+            {
+                await ShowApiFailureAsync("The gift was not declined", response);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "The gift was not declined",
+                $"The gift service did not answer ({ex.Message}). The gift is still waiting for you — tap Refresh and try again.",
+                Severity.Error);
+        }
+        finally
+        {
+            _acting = false;
+        }
+    }
+
+    private async Task ShowApiFailureAsync(string title, HttpResponseMessage response)
+    {
+        string detail;
+        try
+        {
+            var payload = await response.Content.ReadAsStringAsync();
+            detail = string.IsNullOrWhiteSpace(payload) ? $"The server answered {(int)response.StatusCode}." : payload;
+        }
+        catch
+        {
+            detail = $"The server answered {(int)response.StatusCode}.";
+        }
+
+        await MessageDialog.ShowAsync(DialogService, title,
+            $"{detail}\n\nIf this keeps happening, tap Refresh and try again.", Severity.Error);
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "PendingAcceptance" => Color.Warning,
+        "Accepted" => Color.Success,
+        "Rejected" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string DeadlineFor(GiftInboxItem gift)
+    {
+        if (!GiftMessageHelper.IsWaiting(gift.Status))
+            return gift.RespondedAt.HasValue
+                ? $"Closed on {gift.RespondedAt.Value.ToLocalTime():dd/MM/yyyy HH:mm}"
+                : $"Closed on {gift.ExpiresAt.ToLocalTime():dd/MM/yyyy HH:mm}";
+
+        var daysLeft = (int)Math.Ceiling((gift.ExpiresAt - DateTime.UtcNow).TotalDays);
+        return daysLeft switch
+        {
+            <= 0 => "Last day to accept — it goes back to your friend tonight.",
+            1 => "Accept by tomorrow, then it goes back to your friend.",
+            _ => $"Reserved for you for {daysLeft} more days (until {gift.ExpiresAt.ToLocalTime():dd/MM/yyyy HH:mm})."
+        };
+    }
+
+    private static string DeadlineStyle(GiftInboxItem gift) =>
+        GiftMessageHelper.IsWaiting(gift.Status) && (gift.ExpiresAt - DateTime.UtcNow).TotalDays <= 1
+            ? "color: #ed6c02;"
+            : string.Empty;
+
+    public class GiftInboxItem
+    {
+        public Guid TransferId { get; set; }
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string BrandName { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public string? ValueType { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public Guid SenderId { get; set; }
+        public string SenderDisplayName { get; set; } = "";
+        public string? Note { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime InitiatedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? RespondedAt { get; set; }
+        public int MessageCount { get; set; }
+        public DateTime? LastMessageAt { get; set; }
+        public int UnreadCount { get; set; }
+    }
+}

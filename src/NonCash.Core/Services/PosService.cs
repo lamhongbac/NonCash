@@ -51,7 +51,7 @@ public class PosService : IPosService
         if (ctx.Failure != null)
             return new PosVerifyResult("Invalid", ctx.Failure, null);
 
-        return new PosVerifyResult("Valid", null, BuildInfo(ctx));
+        return new PosVerifyResult("Valid", null, await BuildInfoAsync(ctx, cancellationToken));
     }
 
     public async Task<PosLockResult> LockAsync(
@@ -78,7 +78,7 @@ public class PosService : IPosService
                     && ctx.Detail.BillNumber == billNumber
                     && ctx.Detail.LockId != null)
                 {
-                    return new PosLockResult("Locked", null, ctx.Detail.LockId, BuildInfo(ctx));
+                    return new PosLockResult("Locked", null, ctx.Detail.LockId, await BuildInfoAsync(ctx, cancellationToken));
                 }
                 return new PosLockResult("AlreadyInUse", "AlreadyInUse", null, null);
             }
@@ -98,12 +98,12 @@ public class PosService : IPosService
                 && current.BillNumber == billNumber
                 && current.LockId != null)
             {
-                return new PosLockResult("Locked", null, current.LockId, BuildInfo(ctx));
+                return new PosLockResult("Locked", null, current.LockId, await BuildInfoAsync(ctx, cancellationToken));
             }
             return new PosLockResult("AlreadyInUse", "AlreadyInUse", null, null);
         }
 
-        return new PosLockResult("Locked", null, lockId, BuildInfo(ctx));
+        return new PosLockResult("Locked", null, lockId, await BuildInfoAsync(ctx, cancellationToken));
     }
 
     public async Task<PosCommitResult> CommitAsync(
@@ -244,13 +244,16 @@ public class PosService : IPosService
 
         if (string.IsNullOrWhiteSpace(voucherCode))
         {
-            ctx.Failure = "Forged";
+            ctx.Failure = "InvalidCodeFormat";
             return ctx;
         }
 
+        // A serial number (VC-...) is not a scannable code: the POS contract takes the
+        // short-lived signed token minted per voucher, so anything non-token-shaped is
+        // reported as a format problem, not as counterfeiting.
         if (!_codeService.TryExtractVoucherId(voucherCode, out var voucherId))
         {
-            ctx.Failure = "Forged";
+            ctx.Failure = "InvalidCodeFormat";
             return ctx;
         }
 
@@ -262,8 +265,13 @@ public class PosService : IPosService
         }
         ctx.Detail = detail;
 
-        var validatedId = _codeService.ValidateCode(voucherCode, detail.VoucherCodeSecret);
-        if (validatedId == null || validatedId != voucherId)
+        var check = _codeService.CheckCode(voucherCode, detail.VoucherCodeSecret, out var validatedId);
+        if (check == VoucherCodeCheck.Expired)
+        {
+            ctx.Failure = "CodeExpired";
+            return ctx;
+        }
+        if (check != VoucherCodeCheck.Valid || validatedId != voucherId)
         {
             ctx.Failure = "Forged";
             return ctx;
@@ -298,9 +306,10 @@ public class PosService : IPosService
             ctx.Failure = "OutletNotAuthorized";
             return ctx;
         }
-        // Epic 3 (scope storage only): still checks the explicit outlet list. Hierarchy-aware
-        // resolution (empty Outlets = whole brand/company) is deferred to the redeem analysis.
-        if (!plan.Scope.Outlets.Contains(outletId))
+        // Epic 3: hierarchy-aware scope check. Empty Outlets = whole brand (same-brand gate
+        // above already ensures the outlet belongs to the plan's brand). Non-empty Outlets
+        // = only the explicitly listed outlets.
+        if (!plan.Scope.CoversOutlet(outletId))
         {
             ctx.Failure = "OutletNotAuthorized";
             return ctx;
@@ -333,14 +342,31 @@ public class PosService : IPosService
         return detail.TransferLockedAt.Value.AddDays(VoucherTransferService.TransferExpiryDays) > DateTime.UtcNow;
     }
 
-    private static PosVoucherInfo BuildInfo(ValidationContext ctx)
+    private async Task<PosVoucherInfo> BuildInfoAsync(ValidationContext ctx, CancellationToken cancellationToken)
     {
+        var plan = ctx.Plan!;
+
+        // Resolve the explicit outlet names of the scope so the POS can show the cashier
+        // exactly which stores redeem this voucher. Empty scope = whole brand (no list).
+        var outletNames = new List<string>();
+        if (plan.Scope.Outlets.Count > 0)
+        {
+            var outlets = await _outletRepository.FindAsync(o => plan.Scope.Outlets.Contains(o.Id), cancellationToken);
+            outletNames = outlets.Select(o => o.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        var scopeSummary = plan.Scope.Outlets.Count == 0
+            ? (string.IsNullOrWhiteSpace(ctx.BrandName) ? "All stores of the brand" : $"All stores of {ctx.BrandName}")
+            : $"{plan.Scope.Outlets.Count} selected store(s)";
+
         return new PosVoucherInfo(
-            FaceValue: ctx.Plan!.FaceValue,
-            ValueType: ctx.Plan.ValueType.ToString(),
-            ExpiryDate: ctx.Plan.ExpiryDate,
+            FaceValue: plan.FaceValue,
+            ValueType: plan.ValueType.ToString(),
+            ExpiryDate: plan.ExpiryDate,
             BrandName: ctx.BrandName,
-            SerialNo: ctx.Detail!.SerialNo
+            SerialNo: ctx.Detail!.SerialNo,
+            ScopeSummary: scopeSummary,
+            ApplicableOutlets: outletNames
         );
     }
 

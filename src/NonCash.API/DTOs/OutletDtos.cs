@@ -3,13 +3,15 @@ namespace NonCash.API.DTOs;
 public record CreateOutletRequest(
     string Name,
     string? Address,
-    string? Code = null
+    string? Code = null,
+    string? RedemptionMode = null
 );
 
 public record UpdateOutletRequest(
     string Name,
     string? Address,
-    string? Code = null
+    string? Code = null,
+    string? RedemptionMode = null
 );
 
 public record OutletResponse(
@@ -20,6 +22,7 @@ public record OutletResponse(
     string? Code,
     string Status,
     string? ApiKeyPrefix,
+    string RedemptionMode,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );

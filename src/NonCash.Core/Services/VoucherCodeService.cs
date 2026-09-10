@@ -32,42 +32,37 @@ public class VoucherCodeService : IVoucherCodeService
         return $"{payloadBase64}.{signatureBase64}";
     }
 
-    public Guid? ValidateCode(string code, string secretKey)
+    public VoucherCodeCheck CheckCode(string code, string secretKey, out Guid voucherId)
     {
+        voucherId = Guid.Empty;
         try
         {
             var parts = code.Split('.');
-            if (parts.Length != 2) return null;
+            if (parts.Length != 2) return VoucherCodeCheck.Malformed;
 
             var payloadBase64 = parts[0];
-            var signatureBase64 = parts[1];
 
-            // Verify signature
+            // Signature first: a tampered token must never be reported as merely expired.
             var expectedSignature = ComputeHmac(payloadBase64, secretKey);
-            var actualSignature = Convert.FromBase64String(signatureBase64);
-
+            var actualSignature = Convert.FromBase64String(parts[1]);
             if (!CryptographicOperations.FixedTimeEquals(expectedSignature, actualSignature))
-                return null;
+                return VoucherCodeCheck.BadSignature;
 
-            // Decode payload
             var payloadBytes = Convert.FromBase64String(payloadBase64);
             var payloadJson = Encoding.UTF8.GetString(payloadBytes);
             var payload = JsonSerializer.Deserialize<VoucherCodePayload>(payloadJson, PayloadJsonOptions);
+            if (payload == null) return VoucherCodeCheck.Malformed;
 
-            if (payload == null) return null;
-
-            // Check expiry
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            if (now > payload.Exp) return null;
+            if (now > payload.Exp) return VoucherCodeCheck.Expired;
 
-            if (Guid.TryParse(payload.Vid, out var vid))
-                return vid;
-
-            return null;
+            return Guid.TryParse(payload.Vid, out voucherId)
+                ? VoucherCodeCheck.Valid
+                : VoucherCodeCheck.Malformed;
         }
         catch
         {
-            return null;
+            return VoucherCodeCheck.Malformed;
         }
     }
 

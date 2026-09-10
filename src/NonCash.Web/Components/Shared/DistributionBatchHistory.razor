@@ -26,6 +26,10 @@
     }
     else
     {
+        @if (!string.IsNullOrWhiteSpace(_batches[0].ScopeSummary))
+        {
+            <MudText Typo="Typo.body2" Class="mb-2"><b>Applicable stores:</b> @_batches[0].ScopeSummary</MudText>
+        }
         <MudTable Items="_batches" Hover="true" Dense="true" Elevation="0">
             <HeaderContent>
                 <MudTh>Run At</MudTh>
@@ -152,5 +156,6 @@
         public int RecipientCount { get; set; }
         public int DistributedCount { get; set; }
         public int SkippedCount { get; set; }
+        public string ScopeSummary { get; set; } = "";
     }
 }

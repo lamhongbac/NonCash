@@ -41,6 +41,7 @@ else if (_outlets is not null)
             <MudTh>Code</MudTh>
             <MudTh>Address</MudTh>
             <MudTh>Status</MudTh>
+            <MudTh>POS Mode</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
@@ -59,6 +60,12 @@ else if (_outlets is not null)
             <MudTd DataLabel="Address">@context.Address</MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="POS Mode">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Color="@(context.RedemptionMode == "ThreeStep" ? Color.Warning : Color.Success)">
+                    @GetModeLabel(context.RedemptionMode)
+                </MudChip>
             </MudTd>
             <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
             <MudTd>
@@ -103,6 +110,11 @@ else if (_outlets is not null)
             <MudTextField @bind-Value="_model.Name" Label="Name" Required="true" RequiredError="Name is required" />
             <MudTextField @bind-Value="_model.Address" Label="Address" />
             <MudTextField @bind-Value="_model.Code" Label="Store Code" HelperText="Short code for POS login (e.g. S01). Must be unique within your brand." MaxLength="20" />
+            <MudSelect @bind-Value="_model.RedemptionMode" Label="POS Redemption Mode" Variant="Variant.Outlined" Class="mt-3"
+                       HelperText="One Click: cashier scans the code and presses REDEEM (lock + commit in one step). Three Step: cashier runs VERIFY, LOCK, COMMIT separately. Applies to this outlet's POS terminals at their next login.">
+                <MudSelectItem Value="@("OneClick")">One Click (recommended)</MudSelectItem>
+                <MudSelectItem Value="@("ThreeStep")">Three Step (verify / lock / commit)</MudSelectItem>
+            </MudSelect>
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -188,7 +200,8 @@ else if (_outlets is not null)
             Name = outlet.Name,
             Address = outlet.Address,
             Code = outlet.Code,
-            ApiKeyPrefix = outlet.ApiKeyPrefix
+            ApiKeyPrefix = outlet.ApiKeyPrefix,
+            RedemptionMode = string.IsNullOrWhiteSpace(outlet.RedemptionMode) ? "OneClick" : outlet.RedemptionMode
         };
         _showDialog = true;
     }
@@ -205,7 +218,7 @@ else if (_outlets is not null)
         {
             if (_isEdit)
             {
-                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code };
+                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code, _model.RedemptionMode };
                 var token = await AuthState.GetTokenAsync();
                 var httpRequest = new HttpRequestMessage(HttpMethod.Put, $"api/v1/outlets/{_model.Id}") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
@@ -224,7 +237,7 @@ else if (_outlets is not null)
             }
             else
             {
-                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code };
+                var request = new { _model.Name, _model.Address, Code = string.IsNullOrWhiteSpace(_model.Code) ? null : _model.Code, _model.RedemptionMode };
                 var token = await AuthState.GetTokenAsync();
                 var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/v1/outlets") { Content = JsonContent.Create(request) };
                 if (!string.IsNullOrEmpty(token))
@@ -302,6 +315,8 @@ else if (_outlets is not null)
 
     private static bool IsClosed(string status) => status == "Closed";
 
+    private static string GetModeLabel(string? mode) => mode == "ThreeStep" ? "Three Step" : "One Click";
+
     private async Task CopySetupKey()
     {
         var code = string.IsNullOrWhiteSpace(_model.Code) ? "(not set)" : _model.Code;
@@ -327,6 +342,7 @@ else if (_outlets is not null)
         public string? Code { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? ApiKeyPrefix { get; set; }
+        public string? RedemptionMode { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
@@ -346,5 +362,6 @@ else if (_outlets is not null)
         public string? Address { get; set; }
         public string? Code { get; set; }
         public string? ApiKeyPrefix { get; set; }
+        public string RedemptionMode { get; set; } = "OneClick";
     }
 }

@@ -1,0 +1,233 @@
+@page "/brandmanager/gifts"
+@attribute [Authorize(Roles = "BrandManager,Admin")]
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@using NonCash.Shared.Helpers
+
+<PageTitle>Gifts</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4" Class="mb-1">Gifts</MudText>
+        <MudText Typo="Typo.body2">
+            Every voucher of your brand that a customer sent to someone else: who, when, and how it ended. Read-only.
+        </MudText>
+    </div>
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+        <MudSelect T="string" Value="_status" ValueChanged="OnStatusChanged" Label="Status" Variant="Variant.Outlined"
+                   Style="min-width: 170px;">
+            <MudSelectItem Value="@("")">All</MudSelectItem>
+            <MudSelectItem Value="@("PendingAcceptance")">Waiting</MudSelectItem>
+            <MudSelectItem Value="@("Accepted")">Accepted</MudSelectItem>
+            <MudSelectItem Value="@("Rejected")">Declined</MudSelectItem>
+            <MudSelectItem Value="@("Expired")">Expired</MudSelectItem>
+            <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+        </MudSelect>
+        <MudTooltip Text="Refresh">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" OnClick="() => LoadGifts(1)" Disabled="_loading" />
+        </MudTooltip>
+    </MudStack>
+</MudStack>
+
+@if (_loading && !_loaded)
+{
+    <MudProgressLinear Indeterminate="true" Class="my-4" />
+}
+else if (!_gifts.Any())
+{
+    <MudAlert Severity="Severity.Info">
+        No gifts match this filter. A gift appears here as soon as a customer sends one of your vouchers to another person.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_gifts" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Sent</MudTh>
+            <MudTh>Voucher</MudTh>
+            <MudTh>From</MudTh>
+            <MudTh>To</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Conversation</MudTh>
+            <MudTh>Closed</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Sent">@context.InitiatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Voucher">
+                @context.BrandName
+                <MudText Typo="Typo.caption" Class="d-block">@context.SerialNo · @VoucherDisplayHelper.FormatValue(context.FaceValue, context.ValueType ?? "Value")</MudText>
+            </MudTd>
+            <MudTd DataLabel="From">
+                @context.SenderName
+                <MudText Typo="Typo.caption" Class="d-block">@context.SenderPhone</MudText>
+            </MudTd>
+            <MudTd DataLabel="To">
+                @context.RecipientName
+                <MudText Typo="Typo.caption" Class="d-block">@context.RecipientPhone</MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@GiftMessageHelper.StatusLabel(context.Status)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Conversation">
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Outlined.Chat" OnClick="() => OpenThread(context)">
+                    @(context.MessageCount == 0 ? "Nothing written" : $"Read ({context.MessageCount})")
+                </MudButton>
+                @if (context.LastMessageAt.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Class="d-block">
+                        last @context.LastMessageAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    </MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Closed">
+                @(context.RespondedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    ?? $"waiting until {context.ExpiresAt.ToLocalTime():dd/MM/yyyy HH:mm}")
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mt-3">
+        <MudText Typo="Typo.caption" Class="mr-3">Page @_page · @_gifts.Count row(s)</MudText>
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ChevronLeft"
+                   Disabled="@(_loading || _page <= 1)" OnClick="() => LoadGifts(_page - 1)">Newer</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" EndIcon="@Icons.Material.Filled.ChevronRight" Class="ml-2"
+                   Disabled="@(_loading || _gifts.Count < PageSize)" OnClick="() => LoadGifts(_page + 1)">Older</MudButton>
+    </MudStack>
+}
+
+<MudDialog @bind-Visible="_showThread" Options="_threadOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Outlined.Chat" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Gift conversation</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selected is not null)
+        {
+            <MudText Typo="Typo.caption" Class="d-block mb-3">
+                @_selected.BrandName · @_selected.SerialNo · from @_selected.SenderName to @_selected.RecipientName
+                · @GiftMessageHelper.StatusLabel(_selected.Status)
+            </MudText>
+            <GiftConversation TransferId="_selected.TransferId" BrandMode="true" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showThread = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int PageSize = 50;
+
+    private bool _loading;
+    private bool _loaded;
+    private int _page = 1;
+    private string _status = string.Empty;
+    private List<BrandGift> _gifts = new();
+    private BrandGift? _selected;
+    private bool _showThread;
+    private DialogOptions _threadOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync() => await LoadGifts(1);
+
+    private void OpenThread(BrandGift gift)
+    {
+        _selected = gift;
+        _showThread = true;
+    }
+
+    private async Task OnStatusChanged(string status)
+    {
+        _status = status;
+        await LoadGifts(1);
+    }
+
+    private async Task LoadGifts(int page)
+    {
+        if (page < 1) page = 1;
+        _loading = true;
+        try
+        {
+            var statusQuery = string.IsNullOrWhiteSpace(_status) ? string.Empty : $"&status={Uri.EscapeDataString(_status)}";
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, $"api/v1/brand/gifts?page={page}&pageSize={PageSize}{statusQuery}");
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _gifts = await response.Content.ReadFromJsonAsync<List<BrandGift>>() ?? new();
+                _page = page;
+                _loaded = true;
+            }
+            else
+            {
+                await ShowApiFailureAsync("We could not load the gift log", response);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "We could not load the gift log",
+                $"The gift service did not answer ({ex.Message}). Check your connection, then tap Refresh.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ShowApiFailureAsync(string title, HttpResponseMessage response)
+    {
+        string detail;
+        try
+        {
+            var payload = await response.Content.ReadAsStringAsync();
+            detail = string.IsNullOrWhiteSpace(payload) ? $"The server answered {(int)response.StatusCode}." : payload;
+        }
+        catch
+        {
+            detail = $"The server answered {(int)response.StatusCode}.";
+        }
+
+        await MessageDialog.ShowAsync(DialogService, title,
+            $"{detail}\n\nIf this keeps happening, tap Refresh and try again.", Severity.Error);
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "PendingAcceptance" => Color.Warning,
+        "Accepted" => Color.Success,
+        "Rejected" => Color.Error,
+        _ => Color.Default
+    };
+
+    public class BrandGift
+    {
+        public Guid TransferId { get; set; }
+        public Guid VoucherId { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string BrandName { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public string? ValueType { get; set; }
+        public string SenderName { get; set; } = "";
+        public string SenderPhone { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public string RecipientPhone { get; set; } = "";
+        public int MessageCount { get; set; }
+        public DateTime? LastMessageAt { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime InitiatedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? RespondedAt { get; set; }
+    }
+}

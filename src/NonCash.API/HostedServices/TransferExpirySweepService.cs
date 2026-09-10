@@ -25,14 +25,14 @@ public class TransferExpirySweepService : BackgroundService
             try
             {
                 using var scope = _serviceProvider.CreateScope();
-                var transferRepo = scope.ServiceProvider.GetRequiredService<IVoucherTransferRepository>();
+                var transferService = scope.ServiceProvider.GetRequiredService<IVoucherTransferService>();
 
                 var now = DateTime.UtcNow;
-                var expired = await transferRepo.SweepExpiredAsync(now, stoppingToken);
+                var expired = await transferService.SweepExpiredAsync(now, stoppingToken);
 
                 if (expired > 0)
                 {
-                    _logger.LogInformation("TransferExpirySweepService expired {Count} pending transfer(s).", expired);
+                    _logger.LogInformation("TransferExpirySweepService expired {Count} pending gift(s) and notified their senders.", expired);
                 }
             }
             catch (OperationCanceledException)

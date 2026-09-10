@@ -126,6 +126,11 @@ public class EmailNotificationService : INotificationService
         }
 
         var subject = $"You've received a voucher: {notification.VoucherName ?? "NonCash voucher"}";
+        var magicLinkHtml = string.IsNullOrWhiteSpace(notification.MagicLinkUrl)
+            ? string.Empty
+            : $"<p style=\"text-align:center;margin:24px 0;\"><a href=\"{notification.MagicLinkUrl}\" style=\"display:inline-block;background-color:#388e3c;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold;\">View My Voucher</a></p>" +
+              $"<p style=\"font-size:12px;color:#888;\">Or copy this link: {notification.MagicLinkUrl}</p>";
+
         var body = await _templateRenderer.RenderAsync("VoucherReceived", new Dictionary<string, string?>
         {
             ["RecipientName"] = notification.RecipientName,
@@ -133,7 +138,7 @@ public class EmailNotificationService : INotificationService
             ["FaceValue"] = notification.FaceValue.ToString("N0"),
             ["ExpiryDate"] = notification.ExpiryDate.ToString("yyyy-MM-dd"),
             ["PhoneNumber"] = notification.PhoneNumber,
-            ["MagicLinkUrl"] = notification.MagicLinkUrl
+            ["MagicLinkHtml"] = magicLinkHtml
         }, cancellationToken);
 
         await SendAsync(notification.Email, subject, body, cancellationToken, "VoucherReceived", "VoucherDistribution");
@@ -445,21 +450,125 @@ public class EmailNotificationService : INotificationService
     {
         if (string.IsNullOrWhiteSpace(notification.RecipientEmail))
         {
-            _logger.LogInformation("Voucher transfer notification skipped for {Phone}: no email on file.", notification.RecipientPhone);
+            _logger.LogInformation("Gift notification skipped for {Phone}: no email on file.", notification.RecipientPhone);
             return;
         }
 
-        var subject = $"You've received {notification.VoucherCount} voucher(s) via transfer";
+        var subject = $"{notification.SenderName} sent you a gift";
+        var transferMagicLinkHtml = string.IsNullOrWhiteSpace(notification.MagicLinkUrl)
+            ? string.Empty
+            : $"<p style=\"text-align:center;margin:24px 0;\"><a href=\"{notification.MagicLinkUrl}\" style=\"display:inline-block;background-color:#7b1fa2;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold;\">Accept your gift</a></p>" +
+              $"<p style=\"font-size:12px;color:#888;\">Or copy this link: {notification.MagicLinkUrl}</p>";
+
         var body = await _templateRenderer.RenderAsync("VoucherTransferInitiated", new Dictionary<string, string?>
         {
             ["RecipientName"] = notification.RecipientName,
             ["SenderName"] = notification.SenderName,
             ["VoucherCount"] = notification.VoucherCount.ToString(),
-            ["TransferredAt"] = notification.TransferredAt.ToString("yyyy-MM-dd HH:mm"),
-            ["MagicLinkUrl"] = notification.MagicLinkUrl
+            ["SentAt"] = notification.TransferredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            ["MagicLinkHtml"] = transferMagicLinkHtml
         }, cancellationToken);
 
-        await SendAsync(notification.RecipientEmail, subject, body, cancellationToken, "VoucherTransferInitiated", "VoucherTransfer");
+        await SendAsync(notification.RecipientEmail, subject, body, cancellationToken, "VoucherTransferInitiated", "GiftSent");
+    }
+
+    public async Task NotifyGiftAcceptedAsync(GiftAcceptedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.SenderEmail))
+        {
+            _logger.LogInformation("Gift-accepted notification skipped for {SenderName}: no email on file.", notification.SenderName);
+            return;
+        }
+
+        var thankYouNoteHtml = string.IsNullOrWhiteSpace(notification.RecipientThankYouNote)
+            ? string.Empty
+            : $"<div style=\"background-color:#f1f8e9;border:1px solid #c5e1a5;border-radius:6px;padding:12px 16px;margin:16px 0;\">" +
+              $"<p style=\"margin:0;\"><strong>{HtmlEncode(notification.RecipientName)} wrote:</strong> &ldquo;{HtmlEncode(notification.RecipientThankYouNote)}&rdquo;</p></div>";
+
+        var subject = $"{notification.RecipientName} accepted your gift";
+        var body = await _templateRenderer.RenderAsync("GiftAccepted", new Dictionary<string, string?>
+        {
+            ["SenderName"] = notification.SenderName,
+            ["RecipientName"] = notification.RecipientName,
+            ["VoucherName"] = notification.VoucherName,
+            ["FaceValue"] = notification.FaceValue.ToString("N0"),
+            ["ThankYouNoteHtml"] = thankYouNoteHtml,
+            ["AcceptedAt"] = notification.AcceptedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.SenderEmail, subject, body, cancellationToken, "GiftAccepted", "GiftAccepted");
+    }
+
+    public async Task NotifyGiftDeclinedAsync(GiftDeclinedNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.SenderEmail))
+        {
+            _logger.LogInformation("Gift-declined notification skipped for {SenderName}: no email on file.", notification.SenderName);
+            return;
+        }
+
+        var reasonHtml = string.IsNullOrWhiteSpace(notification.Reason)
+            ? string.Empty
+            : $"<p><strong>Reason given:</strong> {HtmlEncode(notification.Reason)}</p>";
+
+        var subject = $"{notification.RecipientName} declined your gift";
+        var body = await _templateRenderer.RenderAsync("GiftDeclined", new Dictionary<string, string?>
+        {
+            ["SenderName"] = notification.SenderName,
+            ["RecipientName"] = notification.RecipientName,
+            ["VoucherName"] = notification.VoucherName,
+            ["FaceValue"] = notification.FaceValue.ToString("N0"),
+            ["ReasonHtml"] = reasonHtml,
+            ["DeclinedAt"] = notification.DeclinedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.SenderEmail, subject, body, cancellationToken, "GiftDeclined", "GiftDeclined");
+    }
+
+    public async Task NotifyGiftExpiredAsync(GiftExpiredNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.SenderEmail))
+        {
+            _logger.LogInformation("Gift-expired notification skipped for {SenderName}: no email on file.", notification.SenderName);
+            return;
+        }
+
+        var subject = $"Your gift to {notification.RecipientName} expired — the voucher is back in your wallet";
+        var body = await _templateRenderer.RenderAsync("GiftExpired", new Dictionary<string, string?>
+        {
+            ["SenderName"] = notification.SenderName,
+            ["RecipientName"] = notification.RecipientName,
+            ["RecipientPhone"] = notification.RecipientPhone,
+            ["VoucherName"] = notification.VoucherName,
+            ["FaceValue"] = notification.FaceValue.ToString("N0"),
+            ["ExpiryDays"] = notification.ExpiryDays.ToString(),
+            ["ExpiredAt"] = notification.ExpiredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.SenderEmail, subject, body, cancellationToken, "GiftExpired", "GiftExpired");
+    }
+
+    public async Task NotifyGiftMessageAsync(GiftMessageNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.RecipientEmail))
+        {
+            _logger.LogInformation("Gift-message notification skipped for {RecipientName}: no email on file.", notification.RecipientName);
+            return;
+        }
+
+        var subject = $"{notification.AuthorName} sent you a message about your gift";
+        var body = await _templateRenderer.RenderAsync("GiftMessage", new Dictionary<string, string?>
+        {
+            ["RecipientName"] = notification.RecipientName,
+            ["AuthorName"] = notification.AuthorName,
+            // Members type this freely, so it is encoded before it reaches the HTML body.
+            ["Body"] = HtmlEncode(notification.Body),
+            ["VoucherName"] = notification.VoucherName,
+            ["FaceValue"] = notification.FaceValue.ToString("N0"),
+            ["SentAt"] = notification.SentAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.RecipientEmail, subject, body, cancellationToken, "GiftMessage", "GiftMessage");
     }
 
     public async Task NotifyPasswordResetAsync(PasswordResetNotification notification, CancellationToken cancellationToken = default)
@@ -479,6 +588,29 @@ public class EmailNotificationService : INotificationService
         }, cancellationToken);
 
         await SendAsync(notification.UserEmail, subject, body, cancellationToken, "PasswordReset", "PasswordReset");
+    }
+
+    public async Task NotifySignInLinkAsync(SignInLinkNotification notification, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(notification.MemberEmail))
+        {
+            _logger.LogInformation("Sign-in link skipped for {FullName}: no email on file.", notification.FullName);
+            return;
+        }
+
+        var signInLinkHtml =
+            $"<p style=\"text-align:center;margin:24px 0;\"><a href=\"{notification.SignInLinkUrl}\" style=\"display:inline-block;background-color:#1976d2;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold;\">Sign In To NonCash</a></p>" +
+            $"<p style=\"font-size:12px;color:#888;\">Or copy this link: {notification.SignInLinkUrl}</p>";
+
+        var subject = "Your NonCash sign-in link";
+        var body = await _templateRenderer.RenderAsync("MemberSignInLink", new Dictionary<string, string?>
+        {
+            ["FullName"] = notification.FullName,
+            ["SignInLinkHtml"] = signInLinkHtml,
+            ["LinkExpiry"] = notification.LinkExpiry.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        }, cancellationToken);
+
+        await SendAsync(notification.MemberEmail, subject, body, cancellationToken, "MemberSignInLink", "MemberSignInLink");
     }
 
     private async Task SendAsync(string toAddress, string subject, string body, CancellationToken cancellationToken, string templateName = "", string notificationType = "")

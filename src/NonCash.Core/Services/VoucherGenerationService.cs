@@ -47,7 +47,9 @@ public class VoucherGenerationService : IVoucherGenerationService
             return new GenerationResult(false, ErrorMessage: "PlanNotApproved: Vouchers can only be generated for approved plans.");
 
         // Generate voucher details
-        var brandCode = plan.Brand?.TaxCode ?? plan.BrandId.ToString()[..8].ToUpperInvariant();
+        // Serial number prefix uses PlanId (8-char hex) to guarantee global uniqueness across
+        // all plans of the same brand. Brand code alone would collide when multiple plans exist.
+        var planPrefix = planId.ToString()[..8].ToUpperInvariant();
         var year = DateTime.UtcNow.Year;
         var details = new List<VoucherPlanDetail>();
 
@@ -63,7 +65,7 @@ public class VoucherGenerationService : IVoucherGenerationService
         for (int i = 0; i < quantity; i++)
         {
             var seq = startSeq + i;
-            var serialNo = $"VC-{brandCode}-{year}-{seq:D8}";
+            var serialNo = $"VC-{planPrefix}-{year}-{seq:D8}";
             var secretKey = _voucherCodeService.GenerateSecretKey();
 
             var detail = new VoucherPlanDetail

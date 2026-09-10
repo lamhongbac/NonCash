@@ -334,7 +334,6 @@ public class PromotionService : IPromotionService
         var placeholder = new MemberAccount
         {
             CustomerId = customer.Id,
-            Username = customer.PhoneNumber,
             PasswordHash = string.Empty,
             FullName = customer.FullName,
             Status = MemberAccountStatus.Active

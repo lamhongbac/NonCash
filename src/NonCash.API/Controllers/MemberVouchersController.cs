@@ -65,7 +65,13 @@ public class MemberVouchersController : ControllerBase
             };
         }
 
-        return Ok(new InitiateTransferResponse(result.TransferId!.Value, "PendingAcceptance"));
+        return Ok(new InitiateTransferResponse(
+            result.TransferId!.Value,
+            "PendingAcceptance",
+            result.DeliveryStatus,
+            result.RecipientPhone,
+            result.RecipientName,
+            result.Message));
     }
 
     // AC1, AC3, AC4: Initiate batch transfer
@@ -94,6 +100,7 @@ public class MemberVouchersController : ControllerBase
             request.FromMemberId,
             request.VoucherIds,
             request.RecipientPhones,
+            request.Note,
             cancellationToken);
 
         if (!result.Success)
@@ -109,7 +116,14 @@ public class MemberVouchersController : ControllerBase
         return Ok(new TransferResponse(
             result.TransferredCount,
             result.SkippedCount,
-            result.SkippedRecords?.Select(s => new TransferSkippedDto(s.PhoneNumber, s.VoucherId, s.Reason)).ToList() ?? new List<TransferSkippedDto>()));
+            result.SkippedRecords?.Select(s => new TransferSkippedDto(s.PhoneNumber, s.VoucherId, s.Reason)).ToList() ?? new List<TransferSkippedDto>(),
+            result.Deliveries?.Select(d => new GiftDeliveryDto(
+                d.VoucherId,
+                d.TransferId,
+                d.RecipientPhone,
+                d.RecipientName,
+                d.DeliveryStatus,
+                d.Message)).ToList() ?? new List<GiftDeliveryDto>()));
     }
 
     // AC5: Outgoing transfer history
@@ -129,14 +143,35 @@ public class MemberVouchersController : ControllerBase
     }
 }
 
-public record TransferRequest(Guid FromMemberId, List<Guid> VoucherIds, List<string> RecipientPhones);
+/// <summary>CR-2026-09-10-31: <see cref="Note"/> is optional and travels with every gift in the send,
+/// becoming the first line of each gift's conversation.</summary>
+public record TransferRequest(Guid FromMemberId, List<Guid> VoucherIds, List<string> RecipientPhones, string? Note = null);
 
-public record TransferResponse(int TransferredCount, int SkippedCount, List<TransferSkippedDto> SkippedPhones);
+public record TransferResponse(
+    int TransferredCount,
+    int SkippedCount,
+    List<TransferSkippedDto> SkippedPhones,
+    List<GiftDeliveryDto> Gifts);
 
 public record TransferSkippedDto(string PhoneNumber, Guid VoucherId, string Reason);
+
+/// <summary>CR-2026-09-10-30 row 2: what the sender is told about one gift they just sent.</summary>
+public record GiftDeliveryDto(
+    Guid VoucherId,
+    Guid? TransferId,
+    string RecipientPhone,
+    string? RecipientName,
+    string DeliveryStatus,
+    string Message);
 
 public record TransferHistoryDto(Guid VoucherId, string SerialNo, string RecipientPhone, DateTime TransferredAt);
 
 public record InitiateTransferRequest(string? RecipientPhone, string? RecipientMemberId, string? Note);
 
-public record InitiateTransferResponse(Guid TransferId, string Status);
+public record InitiateTransferResponse(
+    Guid TransferId,
+    string Status,
+    string? DeliveryStatus = null,
+    string? RecipientPhone = null,
+    string? RecipientName = null,
+    string? Message = null);

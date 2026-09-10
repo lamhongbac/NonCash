@@ -51,7 +51,7 @@ public static class VoucherDisplayHelper
             VoucherStatus.InUse => "In Use",
             VoucherStatus.Pending when now > expiryDate => "Expired",
             VoucherStatus.Pending when (expiryDate - now).TotalDays <= 3 => "Expiring Soon",
-            VoucherStatus.Pending => "Active",
+            VoucherStatus.Pending => "Available",
             _ => "Unknown"
         };
     }

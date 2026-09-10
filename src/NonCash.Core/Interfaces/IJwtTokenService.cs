@@ -12,6 +12,10 @@ public interface IJwtTokenService
 
     /// <summary>CR-2026-09-07-19: Generate a magic-link token for passwordless member access (7-day TTL).</summary>
     string GenerateMagicLinkToken(Guid memberAccountId);
-    /// <summary>CR-2026-09-07-19: Validate a magic-link token and return the member account ID, or null if invalid/expired.</summary>
+    /// <summary>CR-2026-09-09-27: Generate a sign-in link token for a customer-requested password
+    /// recovery (30-minute TTL). A recovery link must not outlive the session it recovers.</summary>
+    string GenerateSignInLinkToken(Guid memberAccountId);
+    /// <summary>CR-2026-09-07-19: Validate a magic-link or sign-in-link token and return the member
+    /// account ID, or null if invalid/expired.</summary>
     Guid? ValidateMagicLinkToken(string token);
 }

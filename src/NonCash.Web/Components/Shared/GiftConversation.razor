@@ -1,0 +1,249 @@
+@inject HttpClient Http
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@using NonCash.Shared.Helpers
+
+@* CR-2026-09-10-31 row 8: one conversation view used by the sender, the recipient and the brand.
+   The brand sees a read-only thread that the API has already filtered, so this component never
+   has to decide what is private. *@
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Class="my-2" />
+}
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Dense="true">@_loadError</MudAlert>
+}
+else
+{
+    @if (BrandMode)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">@GiftMessageHelper.BrandPrivacyNote</MudAlert>
+    }
+
+    @if (_messages.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(0,0,0,0.6);">
+            @(BrandMode
+                ? "Nothing was written for this gift."
+                : "No messages yet. Whatever you write here is kept with the gift, so you can both read it again later.")
+        </MudText>
+    }
+    else
+    {
+        @foreach (var message in _messages)
+        {
+            var mine = IsMine(message);
+            var bubbleStyle = $"max-width: 85%; border-radius: 8px; background: {(mine ? "#ede7f6" : "#f5f5f5")};";
+            <div class="mb-2" style="display: flex; justify-content: @(mine ? "flex-end" : "flex-start");">
+                <MudPaper Elevation="0" Class="pa-2" Style="@bubbleStyle">
+                    <MudText Typo="Typo.caption">
+                        <b>@message.AuthorDisplayName</b>
+                        @if (GiftMessageHelper.KindLabel(message.Kind).Length > 0)
+                        {
+                            <span> · @GiftMessageHelper.KindLabel(message.Kind)</span>
+                        }
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">@message.Body</MudText>
+                    <MudText Typo="Typo.caption" Class="d-block" Style="@(mine ? "text-align: right;" : string.Empty)">
+                        @message.SentAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    </MudText>
+                </MudPaper>
+            </div>
+        }
+    }
+
+    @if (!BrandMode)
+    {
+        <MudDivider Class="my-3" />
+
+        @if (_sendError is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_sendError</MudAlert>
+        }
+
+        @if (_canReply)
+        {
+            <MudTextField T="string" @bind-Value="_draft" Label="Write a message" Lines="2" Variant="Variant.Outlined"
+                          MaxLength="280" Counter="280" Immediate="true" Disabled="_sending" />
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudText Typo="Typo.caption">Only the two of you can read this. The brand never sees it.</MudText>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Send" OnClick="SendAsync"
+                           Disabled="@(_sending || string.IsNullOrWhiteSpace(_draft))">
+                    @if (_sending)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Send
+                </MudButton>
+            </MudStack>
+        }
+        else if (_closedReason is not null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">@_closedReason</MudAlert>
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid TransferId { get; set; }
+
+    /// <summary>The signed-in member, used to decide which side of the thread a message sits on.</summary>
+    [Parameter] public Guid ViewerMemberId { get; set; }
+
+    /// <summary>Read-only brand view: no reply box, and the API has already hidden private follow-ups.</summary>
+    [Parameter] public bool BrandMode { get; set; }
+
+    /// <summary>Told to the parent after the thread changes so unread counts in the list can refresh.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _loading;
+    private bool _sending;
+    private string? _loadError;
+    private string? _sendError;
+    private string? _closedReason;
+    private bool _canReply;
+    private string _draft = string.Empty;
+    private List<ThreadMessage> _messages = new();
+    private Guid _loadedTransferId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TransferId == Guid.Empty || TransferId == _loadedTransferId) return;
+        _loadedTransferId = TransferId;
+        _draft = string.Empty;
+        await LoadAsync(notifyParent: !BrandMode);
+    }
+
+    private bool IsMine(ThreadMessage message) =>
+        BrandMode ? message.Direction == "FromRecipient" : message.AuthorMemberId == ViewerMemberId;
+
+    private async Task LoadAsync(bool notifyParent)
+    {
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            var url = BrandMode
+                ? $"api/v1/brand/gifts/{TransferId}/messages"
+                : $"api/v1/member/transfers/{TransferId}/messages";
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, url);
+            var response = await Http.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _messages = new();
+                _loadError = await DescribeAsync(response,
+                    "We could not open this conversation. Close the window, tap Refresh, then open the gift again.");
+                return;
+            }
+
+            // Both endpoints answer with { transferId, messages }; the member one adds the reply state.
+            var thread = await response.Content.ReadFromJsonAsync<ThreadPayload>();
+            _messages = thread?.Messages ?? new();
+            _canReply = thread?.CanReply ?? false;
+            _closedReason = thread?.ClosedReason;
+
+            if (notifyParent)
+                await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _messages = new();
+            _loadError = $"The gift service did not answer ({ex.Message}). Close the window and open the gift again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        var body = _draft?.Trim();
+        if (string.IsNullOrEmpty(body)) return;
+
+        _sending = true;
+        _sendError = null;
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Post, $"api/v1/member/transfers/{TransferId}/messages");
+            request.Content = JsonContent.Create(new { Body = body });
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _draft = string.Empty;
+                await LoadAsync(notifyParent: true);
+            }
+            else
+            {
+                // The draft is kept so nothing the person wrote is lost.
+                _sendError = await DescribeAsync(response,
+                    "Your message was not sent. It is still in the box — read the reason above it and try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _sendError = $"Your message was not sent — the gift service did not answer ({ex.Message}). It is still in the box; tap Send again.";
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private static async Task<string> DescribeAsync(HttpResponseMessage response, string fallback)
+    {
+        try
+        {
+            var payload = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(payload))
+                return $"{fallback} (The server answered {(int)response.StatusCode}.)";
+
+            var error = System.Text.Json.JsonSerializer.Deserialize<ErrorPayload>(
+                payload, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            return string.IsNullOrWhiteSpace(error?.Message) ? payload : error!.Message!;
+        }
+        catch
+        {
+            return $"{fallback} (The server answered {(int)response.StatusCode}.)";
+        }
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    private class ThreadPayload
+    {
+        public Guid TransferId { get; set; }
+        public bool CanReply { get; set; }
+        public string? ClosedReason { get; set; }
+        public List<ThreadMessage> Messages { get; set; } = new();
+    }
+
+    private class ThreadMessage
+    {
+        public Guid MessageId { get; set; }
+        public Guid AuthorMemberId { get; set; }
+        public string AuthorDisplayName { get; set; } = "";
+        public string Direction { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public string Body { get; set; } = "";
+        public DateTime SentAt { get; set; }
+    }
+
+    private class ErrorPayload
+    {
+        public string? Message { get; set; }
+    }
+}
