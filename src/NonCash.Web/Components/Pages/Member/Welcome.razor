@@ -55,24 +55,40 @@
     private bool _success = false;
     private string? _errorMessage;
     private string? _memberName;
+    private string? _magicToken;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         // Extract token from query string: /member/welcome?token=...
         var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var magicToken = query["token"];
+        _magicToken = query["token"];
 
-        if (string.IsNullOrWhiteSpace(magicToken))
+        if (string.IsNullOrWhiteSpace(_magicToken))
         {
             _loading = false;
             _errorMessage = "No magic link token found in the URL. Please check your email and click the link again.";
-            return;
         }
 
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The exchange calls the API and writes localStorage, so it belongs to the interactive
+        // circuit only; during prerender it would fire twice and throw on JS interop.
+        if (firstRender && !string.IsNullOrWhiteSpace(_magicToken))
+        {
+            await ExchangeMagicLinkAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExchangeMagicLinkAsync()
+    {
         try
         {
-            var response = await Http.PostAsJsonAsync("api/v1/auth/magic-link", new { Token = magicToken });
+            var response = await Http.PostAsJsonAsync("api/v1/auth/magic-link", new { Token = _magicToken });
 
             if (response.IsSuccessStatusCode)
             {

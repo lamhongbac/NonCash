@@ -117,6 +117,17 @@ public class ContractService : IContractService
             </div>
 
             <div class='section'>
+                <h2>6. Customer Data Ownership</h2>
+                <p>Customer data on the Platform is held in three layers, each with a different owner.</p>
+                <p><strong>6.1 Identity record — owned by the customer.</strong> The single platform-wide identity record for a customer (name, phone number, email address) belongs to that customer. The Platform holds it as custodian and keeps it accurate; the Brand contributes to it. The Brand may fill a field that is still empty, but has no right to overwrite a value the customer or another Brand has already supplied.</p>
+                <p><strong>6.2 Relationship data — exclusive to the Brand.</strong> The Brand's own customer relationship is its exclusive asset: the mapping of customers to that Brand, the contact lists it imported, and the transaction history of its vouchers. The Platform guarantees that this data is never shown, sold or shared with any other Brand or third party.</p>
+                <p><strong>6.3 Platform data — owned by the Platform.</strong> Fraud signals, the global blacklist and billing records are owned and operated by the Platform, and are used only to run and protect the service.</p>
+                <p><strong>6.4 Import warranty.</strong> For every contact the Brand adds or imports, the Brand warrants that it holds a lawful basis and any consent required to share that contact with the Platform, and that the data it supplies is accurate. The Platform processes imported contacts on the Brand's instructions.</p>
+                <p><strong>6.5 Curation.</strong> Platform administrators may correct an identity record that is wrong or duplicated. Every administrative correction is written to an audit trail recording who made it, when, and the previous and new values.</p>
+                <p><strong>6.6 Exit.</strong> On offboarding, the Brand may export its own relationship data under 6.2. The identity record under 6.1 remains on the Platform, because it belongs to the customer and other Brands may rely on it.</p>
+            </div>
+
+            <div class='section'>
                 <h2>Appendix A — Brand Pricing</h2>
                 <p><strong>Brand:</strong> {{BrandName}}</p>
                 <p>Pricing details for this Brand will be provided in a separate pricing appendix agreed by both parties.</p>

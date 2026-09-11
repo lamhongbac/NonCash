@@ -52,7 +52,10 @@ public class ClientAuthService
                 CustomerId = cid;
 
             var expiryStr = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "authTokenExpiry");
-            if (DateTime.TryParse(expiryStr, out var expiry))
+            // The stored value is a UTC round-trip string; without RoundtripKind TryParse
+            // shifts it to local time and the token appears valid hours past its real expiry.
+            if (DateTime.TryParse(expiryStr, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var expiry))
                 TokenExpiry = expiry;
 
             _jsInteropAvailable = true;
@@ -96,6 +99,8 @@ public class ClientAuthService
 
     public async Task LogoutAsync()
     {
+        var roleBeforeLogout = Role;
+
         Token = null;
         FullName = null;
         Role = null;
@@ -129,7 +134,7 @@ public class ClientAuthService
 
         try
         {
-            _navigation.NavigateTo("/login", forceLoad: true);
+            _navigation.NavigateTo(LoginRouteFor(roleBeforeLogout), forceLoad: true);
         }
         catch (InvalidOperationException)
         {
@@ -150,7 +155,11 @@ public class ClientAuthService
 
         if (IsTokenExpired())
         {
-            await LogoutAsync();
+            // InitializeAsync already logged out (and navigated with the role still known) when it
+            // detected the expiry; logging out again here would have lost the role and sent a
+            // member to the staff login screen.
+            if (Token != null)
+                await LogoutAsync();
             return null;
         }
 
@@ -198,14 +207,14 @@ public class ClientAuthService
     }
 
     /// <summary>
-    /// Redirects to /login, suppressing the exception that occurs when NavigationManager
-    /// is not yet initialized during Blazor prerender.
+    /// Redirects to the login screen matching the current role, suppressing the exception that
+    /// occurs when NavigationManager is not yet initialized during Blazor prerender.
     /// </summary>
     public void NavigateToLogin()
     {
         try
         {
-            _navigation.NavigateTo("/login", forceLoad: true);
+            _navigation.NavigateTo(LoginRouteFor(Role), forceLoad: true);
         }
         catch (NavigationException)
         {
@@ -217,6 +226,9 @@ public class ClientAuthService
             // NavigationManager may not be initialized yet.
         }
     }
+
+    private static string LoginRouteFor(string? role) =>
+        role?.Equals("Member", StringComparison.OrdinalIgnoreCase) == true ? "/member-login" : "/login";
 
     [JSInvokable]
     public async Task OnIdleTimeout()

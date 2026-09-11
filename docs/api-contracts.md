@@ -2,9 +2,21 @@
 
 This document defines the RESTful API endpoints for POS integration and external system components.
 
+> **Not authoritative.** This is the original design sketch; the shipped API differs in paths and
+> field casing (`/api/v1/...`, `POST /pos/commit`, `lockId`, `outletId` as a GUID). For the contract a
+> POS vendor must actually build against — endpoints, request/response bodies, every reason code,
+> redemption modes and the go-live checklist — read **`docs/pos-integration-guide.md`**. What follows
+> is kept only for the shape of the flow, and the two behaviours added since (rate limits and
+> outlet-scoped rollback) are noted inline so this page cannot be read as "no limit" or "any outlet".
+
 ## Overview
 - **Base URL**: `https://api.noncash.service/v1`
 - **Authentication**: API Key (Header: `X-API-Key`) and JWT (Bearer Token).
+- **Rate limits** (CR-2026-09-06-04): every `/pos/*` call is limited to **120 requests/min per outlet
+  API key** (partitioned on the key, not the IP, because all terminals in a store share one NAT
+  address); the anonymous auth recovery endpoints are limited to **5 requests/min per client IP**.
+  Exceeding either returns **HTTP 429** with `{"error":"..."}` — a 429 is not a voucher result and
+  must not be cached as one; wait out the window and send the request once more.
 - **Format**: JSON
 
 ## POS Integration API
@@ -71,6 +83,11 @@ Finalizes the usage of the voucher after the POS transaction is successful.
 
 ### 4. Rollback Lock
 Unlocks the voucher if the POS transaction fails or is cancelled.
+
+> **Outlet-scoped** (CR-2026-09-06-01): only the outlet that took the lock can release it. A rollback
+> sent with another outlet's API key returns **HTTP 200** with `{"status":"Invalid","reason":"OutletMismatch"}`
+> and leaves the lock exactly as it was — the owning store must release it, or it expires on its own
+> timer. `OutletMismatch` is not a transient failure, so do not retry it.
 - **Endpoint**: `POST /pos/rollback`
 - **Request**:
   ```json

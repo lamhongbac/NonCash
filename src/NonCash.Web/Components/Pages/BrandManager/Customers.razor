@@ -136,6 +136,7 @@ else if (_customers is not null)
                 </MudStack>
             </MudAlert>
             <MudText Typo="Typo.body2">Accepted files: <b>.xlsx</b> (recommended) or <b>.csv</b> (comma, semicolon or tab separated; header row optional).</MudText>
+            <MudText Typo="Typo.body2">Imported customers join the shared platform identity; your brand keeps exclusive rights to its list and activity data.</MudText>
             <InputFile OnChange="LoadFiles" accept=".csv,.xlsx" />
         </MudStack>
         @if (!string.IsNullOrEmpty(_importFileName))

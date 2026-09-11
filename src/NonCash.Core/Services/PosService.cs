@@ -135,16 +135,25 @@ public class PosService : IPosService
         Guid? redeemBrandId = null;
         Guid issuingBrandId = Guid.Empty;
         decimal faceValue = 0;
+        VoucherPlanHeader? plan = null;
         var lockedDetail = await _lockRepository.FindByLockIdAsync(lockId, cancellationToken);
         if (lockedDetail != null)
         {
-            var plan = await _planRepository.GetByIdWithOutletsAsync(lockedDetail.ParentId, cancellationToken);
+            plan = await _planRepository.GetByIdWithOutletsAsync(lockedDetail.ParentId, cancellationToken);
             sponsorBrandId = plan?.SponsorBrandId;
             issuingBrandId = plan?.BrandId ?? Guid.Empty;
             faceValue = plan?.FaceValue ?? 0;
 
             var outlet = await _outletRepository.GetByIdAsync(outletId, cancellationToken);
             redeemBrandId = outlet?.BrandId;
+        }
+
+        // A fixed-value voucher is never worth more than its face value, so a larger amount is a
+        // keystroke error that would otherwise be written to voucher_usages and inflated into POS
+        // shift totals. Percentage plans hold no VND amount (FaceValue is the percent number).
+        if (plan != null && plan.ValueType == VoucherValueType.Value && amountUsed > plan.FaceValue)
+        {
+            return new PosCommitResult("Invalid", null, "AmountExceedsValue");
         }
 
         var now = DateTime.UtcNow;
@@ -213,12 +222,13 @@ public class PosService : IPosService
 
     public async Task<PosRollbackResult> RollbackAsync(
         Guid lockId,
+        Guid outletId,
         CancellationToken cancellationToken = default)
     {
-        if (lockId == Guid.Empty)
+        if (lockId == Guid.Empty || outletId == Guid.Empty)
             return new PosRollbackResult("Invalid", null, "BadRequest");
 
-        var outcome = await _lockRepository.RollbackAsync(lockId, cancellationToken);
+        var outcome = await _lockRepository.RollbackAsync(lockId, outletId, cancellationToken);
 
         return outcome switch
         {
@@ -228,6 +238,8 @@ public class PosService : IPosService
             RollbackOutcome.LockNotFound => new PosRollbackResult("AlreadyReleased", "Voucher already released", null),
             // AC2: 409 AlreadyCompleted
             RollbackOutcome.AlreadyComplete => new PosRollbackResult("AlreadyCompleted", null, "AlreadyCompleted"),
+            // CR-2026-09-06-01: another outlet's lock — never released, and the caller is told why.
+            RollbackOutcome.OutletMismatch => new PosRollbackResult("Invalid", null, "OutletMismatch"),
             _ => new PosRollbackResult("Invalid", null, "Unknown")
         };
     }

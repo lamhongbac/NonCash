@@ -57,10 +57,13 @@ public interface IVoucherLockRepository
 
     /// <summary>
     /// Atomically rolls back a locked voucher (InUse → Pending), clearing lock fields.
+    /// Only the outlet that took the lock may release it (CR-2026-09-06-01) — the outlet check is
+    /// part of the same conditional update, so a concurrent commit cannot slip in between.
     /// Does NOT create any VoucherUsage record. Returns RollbackOutcome.
     /// </summary>
     Task<RollbackOutcome> RollbackAsync(
         Guid lockId,
+        Guid outletId,
         CancellationToken cancellationToken = default);
 }
 
@@ -77,5 +80,6 @@ public enum RollbackOutcome
     Success,
     AlreadyReleased,
     AlreadyComplete,
-    LockNotFound
+    LockNotFound,
+    OutletMismatch
 }

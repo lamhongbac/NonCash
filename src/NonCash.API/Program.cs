@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using NonCash.API.HostedServices;
 using NonCash.API.Middleware;
+using NonCash.API.RateLimiting;
 using NonCash.API.Services;
 using NonCash.Core.Configuration;
 using NonCash.Core.Interfaces;
@@ -46,9 +47,14 @@ var connectionStringKey = environmentName.ToLowerInvariant() switch
     _ => "DefaultConnection"
 };
 
-var connectionString = builder.Configuration.GetConnectionString(connectionStringKey)
-    ?? builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? builder.Configuration["NONCASH_CONNECTION_STRING"]
+// Blank counts as absent: the tracked appsettings files keep these keys with empty values so the
+// config shape stays documented, while the real values come from user-secrets or the deployed
+// appsettings.json. GetConnectionString returns "" for those, which would otherwise end the chain.
+static string? Present(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+var connectionString = Present(builder.Configuration.GetConnectionString(connectionStringKey))
+    ?? Present(builder.Configuration.GetConnectionString("DefaultConnection"))
+    ?? Present(builder.Configuration["NONCASH_CONNECTION_STRING"])
     ?? "Host=localhost;Database=noncash;Username=postgres;Password=postgres";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -186,6 +192,9 @@ else
 }
 
 // JWT Authentication
+// Resolved eagerly and outside the options lambda: AddJwtBearer configures lazily, so a missing or
+// too-short key would otherwise surface on the first authenticated request instead of at startup.
+var jwtSigningKey = JwtSigningKey.Resolve(builder.Configuration);
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -199,8 +208,7 @@ builder.Services.AddAuthentication("Bearer")
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtConfig["Issuer"] ?? "NonCash",
             ValidAudience = jwtConfig["Audience"] ?? "NonCash.Users",
-            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
-                System.Text.Encoding.UTF8.GetBytes(jwtConfig["Key"] ?? "noncash-dev-key-min-32-bytes-long!!")),
+            IssuerSigningKey = jwtSigningKey,
             ClockSkew = TimeSpan.FromMinutes(5)
         };
     });
@@ -221,6 +229,9 @@ builder.Services.AddHealthChecks()
 // per minute per client IP; other endpoints are unaffected. CR-04 will broaden this.
 // CR-2026-09-09-27: member-auth covers customer sign-in and the recovery link, which is both a
 // credential-stuffing target and a mail-sending endpoint.
+// CR-2026-09-06-04: auth-recovery covers the remaining anonymous auth endpoints and pos-outlet
+// covers every /api/v1/pos/* call. Both are partitioned, because AddFixedWindowLimiter hands every
+// caller one shared bucket — a single abuser could then lock out recovery for the whole platform.
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("staff-login", opt =>
@@ -235,11 +246,40 @@ builder.Services.AddRateLimiter(options =>
         opt.Window = TimeSpan.FromMinutes(1);
         opt.QueueLimit = 0;
     });
+    options.AddPolicy("auth-recovery", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            RateLimitPartitionKeys.ForClientIp(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    // POS is keyed, not IP-bound: every terminal in a store sits behind one NAT address, so an IP
+    // bucket would let a single busy register starve the rest of the store. UseRateLimiter runs
+    // before ApiKeyMiddleware, so the outlet is not resolved yet — partition on the raw header.
+    options.AddPolicy("pos-outlet", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            RateLimitPartitionKeys.ForPosApiKey(httpContext.Request.Headers["X-API-Key"].ToString()),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
     options.OnRejected = async (context, token) =>
     {
+        // OnRejectedContext carries no policy name, so read it back off the endpoint that was throttled.
+        var policyName = context.HttpContext.GetEndpoint()?
+            .Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        var message = policyName == "pos-outlet"
+            ? "This terminal has sent too many voucher requests in the last minute. Wait 60 seconds, then scan "
+              + "the code again — requests sent before then are rejected."
+            : "Too many attempts. Please wait a minute and try again.";
+
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsync("{\"error\":\"Too many attempts. Please wait a minute and try again.\"}", token);
+        await context.HttpContext.Response.WriteAsJsonAsync(new { error = message }, token);
     };
 });
 

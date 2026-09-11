@@ -1,6 +1,16 @@
 using Npgsql;
 
-var connStr = "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require";
+// The connection string is not committed: it carries the database password. Set it in the shell
+// before running, e.g.  $env:NONCASH_DB_CONNECTION = "Host=...;Password=...;SSL Mode=Require"
+var connStr = Environment.GetEnvironmentVariable("NONCASH_DB_CONNECTION");
+if (string.IsNullOrWhiteSpace(connStr))
+{
+    Console.Error.WriteLine(
+        "NONCASH_DB_CONNECTION is not set, so this tool has no database to query. " +
+        "Set it in this shell first, for example in PowerShell: " +
+        "$env:NONCASH_DB_CONNECTION = \"Host=<host>;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require\"");
+    return 1;
+}
 
 await using var conn = new NpgsqlConnection(connStr);
 await conn.OpenAsync();

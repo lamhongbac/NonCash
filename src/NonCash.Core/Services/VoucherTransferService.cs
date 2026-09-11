@@ -75,6 +75,15 @@ public class VoucherTransferService : IVoucherTransferService
         if (existingPending != null)
             return new InitiateTransferResult(false, ErrorCode: "TransferAlreadyPending", ErrorMessage: "A transfer for this voucher is already pending.");
 
+        // Matrix row 8: the sender gate must live here as well, because the single-voucher
+        // endpoint calls InitiateAsync directly and never passes through TransferService.
+        var senderMember = await _memberRepository.GetByIdAsync(senderId, cancellationToken);
+        var senderCustomer = senderMember != null
+            ? await _customerRepository.GetByIdAsync(senderMember.CustomerId, cancellationToken)
+            : null;
+        if (senderMember != null && (senderCustomer == null || senderCustomer.Status == CustomerStatus.Blacklisted))
+            return new InitiateTransferResult(false, ErrorCode: "SenderBlacklisted", ErrorMessage: "Transfers are not allowed for this account.");
+
         var recipient = await ResolveRecipientAsync(recipientPhone, recipientMemberId, cancellationToken);
         if (recipient == null)
             return new InitiateTransferResult(false, ErrorCode: "RecipientNotFound", ErrorMessage: "Recipient could not be resolved.");

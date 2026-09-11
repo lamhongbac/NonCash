@@ -83,7 +83,7 @@ During the DEV phase, all developer machines connect to the same central Postgre
 Default DEV connection string (already set in `appsettings.Development.json`):
 
 ```text
-Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=%9L@&r#wj!^oy5Gqc#DSHQ%%;SSL Mode=Require
+Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require
 ```
 
 Requirements for the shared DEV server:
@@ -126,7 +126,7 @@ Edit `src/NonCash.API/appsettings.Development.json` for DEV:
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=localhost;Database=noncash;Username=noncash_app;Password=YourStrongPassword;SSL Mode=Disable"
+  "DefaultConnection": "Host=localhost;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Disable"
 }
 ```
 
@@ -134,7 +134,7 @@ For Pilot/Production, create or edit `appsettings.Pilot.json` / `appsettings.Pro
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=your-db-host;Database=noncash;Username=noncash_app;Password=YourStrongPassword;SSL Mode=Require"
+  "DefaultConnection": "Host=your-db-host;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require"
 }
 ```
 
@@ -152,7 +152,7 @@ Update `Jwt:Key` to a random string of at least 32 characters. Do not use the de
 "Jwt": {
   "Issuer": "NonCash",
   "Audience": "NonCash.Users",
-  "Key": "your-random-secret-key-must-be-at-least-32-bytes-long!"
+  "Key": "<jwt-key-min-32-bytes>"
 }
 ```
 
@@ -164,8 +164,8 @@ Update `Jwt:Key` to a random string of at least 32 characters. Do not use the de
 "ZaloPay": {
   "Endpoint": "https://sb-openapi.zalopay.vn/v2/create",
   "AppId": 2554,
-  "Key1": "your-sandbox-key-1",
-  "Key2": "your-sandbox-key-2",
+  "Key1": "<zalo-key1>",
+  "Key2": "<zalo-key2>",
   "CallbackUrl": "https://your-api/api/v1/payments/webhook",
   "RedirectUrl": "https://your-web/payment-result",
   "AppUserPrefix": "noncash"
@@ -176,8 +176,8 @@ Update `Jwt:Key` to a random string of at least 32 characters. Do not use the de
 
 ```json
 "VNPAY": {
-  "TmnCode": "YOUR_TMN_CODE",
-  "HashSecret": "YOUR_HASH_SECRET",
+  "TmnCode": "<vnpay-tmn-code>",
+  "HashSecret": "<vnpay-hash-secret>",
   "BaseUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
   "ApiUrl": "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction",
   "Version": "2.1.0",
@@ -352,7 +352,7 @@ After=network.target
 WorkingDirectory=/var/noncash/api
 ExecStart=/usr/bin/dotnet /var/noncash/api/NonCash.API.dll
 Environment=ASPNETCORE_ENVIRONMENT=Production
-Environment=NONCASH_CONNECTION_STRING=Host=...;Database=noncash;Username=noncash_app;Password=...;SSL Mode=Require
+Environment=NONCASH_CONNECTION_STRING=Host=...;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require
 Restart=always
 RestartSec=10
 User=noncash

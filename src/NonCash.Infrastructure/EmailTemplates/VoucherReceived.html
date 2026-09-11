@@ -2,16 +2,19 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>You've Received a Voucher</title>
+    <title>Your NonCash voucher</title>
 </head>
-<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-    <div style="max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #388e3c; color: #fff; padding: 20px;">
-            <h2 style="margin: 0;">You've Received a Voucher</h2>
+<!-- CR-2026-09-06-12: transactional copy, not promotional. The previous wording and bright banner
+     were a spam-filter fingerprint risk (2026-09-06 deliverability incident). Placeholders are
+     unchanged, so no caller had to be touched. -->
+<body style="font-family: Arial, sans-serif; font-size: 14px; color: #333; background-color: #f4f4f4; margin: 0; padding: 24px 12px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #2f3e46; color: #ffffff; padding: 18px 24px;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: normal;">Your voucher is in your NonCash wallet</h2>
         </div>
         <div style="padding: 24px;">
-            <p>Dear {{RecipientName}},</p>
-            <p>A voucher has been added to your NonCash wallet.</p>
+            <p style="margin-top: 0;">Dear {{RecipientName}},</p>
+            <p>{{VoucherName}} has been added to your NonCash wallet. The details are below.</p>
             <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
                 <tr>
                     <td style="padding: 8px; border: 1px solid #eee; font-weight: bold; width: 140px;">Voucher</td>
@@ -22,14 +25,19 @@
                     <td style="padding: 8px; border: 1px solid #eee;">{{FaceValue}}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Valid Until</td>
+                    <td style="padding: 8px; border: 1px solid #eee; font-weight: bold;">Valid until</td>
                     <td style="padding: 8px; border: 1px solid #eee;">{{ExpiryDate}}</td>
                 </tr>
             </table>
-            <p>Log in with your phone number {{PhoneNumber}} to view and redeem it.</p>
+            <!-- CR-27: customers sign in with a phone number or an email address; there is no username. -->
+            <p>To open it, sign in to NonCash with your phone number {{PhoneNumber}}, or with the email address this message was sent to.</p>
             <!-- CR-2026-09-07-19: Magic link for passwordless access -->
             {{MagicLinkHtml}}
-            <p style="margin-top: 24px; color: #666; font-size: 12px;">Best regards,<br/>NonCash Team</p>
+            <p>If you were not expecting this voucher, you can ignore this message. It stays in your wallet and expires on the date shown above.</p>
+            <p style="margin-top: 24px; color: #666; font-size: 12px;">
+                NonCash<br />
+                This is a transactional message about a voucher on your account.
+            </p>
         </div>
     </div>
 </body>

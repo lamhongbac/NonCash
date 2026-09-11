@@ -231,7 +231,7 @@ Assessment of the voucher-code solution against forgery, theft, and misuse. Veri
 | Code theft (shoulder-surf / screenshot within the 120s window) | Moderate — the code is a bearer token; mitigated only by the TTL |
 | Member account takeover | Weak — password-only member login, no OTP |
 | Outlet key compromise | Weak — outlet keys are matched on plaintext prefix (dev-grade; `integration_partners` keys are stored hashed, outlet keys are not) and there is no rotation procedure |
-| Customer data enumeration | Weak — customer search is `[AllowAnonymous]`; no rate limiting on auth/POS endpoints |
+| Customer data enumeration | Moderate — customer search requires BrandManager/Admin (CR-2026-09-06-02), and the anonymous auth endpoints plus every POS call are now rate limited (CR-2026-09-06-04). Residual: `staff-login` and `member-auth` are one *global* bucket rather than per-IP, so they throttle an abuser and every legitimate user alike |
 
 ### 5.3 Optimization backlog (CR registry)
 
@@ -239,10 +239,10 @@ Sorted by implementation ease (easy → hard), decoupled from risk ranking. Each
 
 | CR ID | Item | Effort | Status |
 |---|---|---|---|
-| CR-2026-09-06-01 | Restrict POS rollback to the lock-owning outlet (closes cross-outlet DoS) | ~1–2h | Registered — pending decision |
+| CR-2026-09-06-01 | Restrict POS rollback to the lock-owning outlet (closes cross-outlet DoS) | ~1–2h | ✅ Implemented 2026-09-11 — `RollbackAsync(lockId, outletId, …)` puts the outlet condition inside the atomic `ExecuteUpdateAsync` WHERE clause, so a commit landing between check and release cannot be undone; a foreign key gets `OutletMismatch` and the voucher keeps its lock. Pinned by 2 integration facts in `PosPipelineTests`. See `customer-action-matrix.md` §9 |
 | CR-2026-09-06-02 | Remove `[AllowAnonymous]` from customer search (require an authenticated brand/admin role) | ~2h | ✅ Verified 2026-09-07 (docs-only re-check: no `[AllowAnonymous]` remains on any customer endpoint — `CustomersController` is class-level `[Authorize(Roles = "BrandManager,Admin")]`; remaining anonymous endpoints are login / self-register / public catalog / payment callbacks by design) |
 | CR-2026-09-06-03 | Doc gaps: brand-guide POS-redeem section + admin-guide "success = SMTP-accepted, not delivered" caveat | ~1–2h | ✅ Verified 2026-09-06 (docs-only; user review = verification) |
-| CR-2026-09-06-04 | Rate limiting on `/api/v1/auth/*` + `/api/v1/pos/verify` (ASP.NET Core RateLimiter middleware) | ~0.5d | Registered — pending decision |
+| CR-2026-09-06-04 | Rate limiting on `/api/v1/auth/*` + `/api/v1/pos/verify` (ASP.NET Core RateLimiter middleware) | ~0.5d | ✅ Implemented 2026-09-11 — two **partitioned** policies: `pos-outlet` (120/min, declared on the `PosController` class so a new POS endpoint is throttled by default) and `auth-recovery` (5/min per client IP) covering `login`, `forgot-password`, `reset-password` and `magic-link`, which had no limiter at all. POS partitions on the SHA-256 of the raw `X-API-Key` header, not on the IP: every terminal in a store sits behind one NAT address, and `UseRateLimiter` runs before `ApiKeyMiddleware` so the outlet is not resolved yet. 429 bodies state the wait and the next action; `PosApiClient` now maps 401/429 to `TerminalRejected` / `RateLimited` / `ServiceRejected` instead of deserializing an error body into an all-null result and showing the cashier a blank screen. Pinned by 5 integration facts. **Still open:** `staff-login` and `member-auth` use `AddFixedWindowLimiter`, i.e. one *global* bucket, so their "per client IP" comment is wrong — see CR-2026-09-06-04's row in `customer-action-matrix.md` §9 |
 | CR-2026-09-06-05 | Outlet API key hashing + rotation endpoint (align with the `integration_partners` hash+prefix pattern) | ~1d | Registered — pending decision |
 | CR-2026-09-06-06 | Mint-on-tap: mint the code on demand per tap instead of eagerly for the whole wallet (also fixes the 120s demo gotcha) | ~1d | Registered — pending decision |
 | CR-2026-09-06-07 | Shrink code TTL 120s → 60s (only after CR-2026-09-06-06) | ~2h | Registered — pending decision |
@@ -273,8 +273,9 @@ Based on the ransomware incident, these P0 items should be verified/completed im
 6. ☐ Verify Windows Firewall blocks port 5432 from internet
 7. ☐ Disable Swagger in production
 8. ☐ Enforce HTTPS on all endpoints
-9. ☐ Implement rate limiting on login/password-reset endpoints
+9. ✅ Rate limiting on login/password-reset endpoints (CR-2026-09-06-04, 2026-09-11): `auth-recovery` 5/min per client IP on `login` / `forgot-password` / `reset-password` / `magic-link`, `pos-outlet` 120/min per outlet key on every POS call
 10. ☐ Set up alerting for failed login attempts
+11. ☐ **Rotate every credential committed before 2026-09-11** (CR-2026-09-06-13). The values are out of the working tree — all four tracked `appsettings*.json` files, the CI workflow, four docs, a generated wiki page and `tools/DbQuery` — but they remain in git history, so the DB passwords, the JWT signing key, the SMTP app password, the MSA media key and the ZaloPay/VNPAY keys must all be treated as exposed and replaced at their providers
 
 ---
 

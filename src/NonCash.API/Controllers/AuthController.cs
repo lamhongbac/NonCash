@@ -19,6 +19,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-recovery")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await _authService.LoginAsync(request.Username, request.Password, cancellationToken);
@@ -86,6 +87,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-recovery")]
     public async Task<ActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         // Always return success to prevent user enumeration
@@ -95,6 +97,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-recovery")]
     public async Task<ActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
     {
         var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword, cancellationToken);
@@ -137,6 +140,7 @@ public class AuthController : ControllerBase
     /// Validates the token and returns a regular session JWT for the member.</summary>
     [HttpPost("magic-link")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-recovery")]
     public async Task<ActionResult<LoginResponse>> MagicLinkLogin(MagicLinkLoginRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Token))

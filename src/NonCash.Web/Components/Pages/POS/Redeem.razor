@@ -63,7 +63,8 @@
 <MudPaper Class="pa-4 mb-4">
     <MudGrid>
         <MudItem xs="12" md="4">
-            <MudNumericField T="decimal" @bind-Value="_amountUsed" Label="Amount Used" Min="0" Step="1000" Format="N0" />
+            <MudNumericField T="decimal" @bind-Value="_amountUsed" Label="Amount Used" Min="0" Step="1000" Format="N0"
+                             HelperText="The voucher is consumed in full either way — this records how much of the bill it covered." />
         </MudItem>
         <MudItem xs="12" md="8" Class="d-flex align-center gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LockAsync" Disabled="_processing || !CanAct || string.IsNullOrWhiteSpace(_voucherCode)">Lock</MudButton>
@@ -237,8 +238,11 @@
     private async Task CommitAsync()
     {
         if (_lockId == null) return;
+        // Lock pre-fills the face value, but the field can still be cleared to 0; committing 0
+        // consumes the voucher while recording a breakage that never happened.
+        var amount = _amountUsed > 0 ? _amountUsed : (_voucherInfo?.FaceValue ?? 0);
         var transactionId = $"TXN-{_lockId:N}-{DateTime.UtcNow.Ticks}";
-        var root = await CallPosAsync("commit", new { LockId = _lockId.Value, TransactionId = transactionId, AmountUsed = _amountUsed });
+        var root = await CallPosAsync("commit", new { LockId = _lockId.Value, TransactionId = transactionId, AmountUsed = amount });
         if (root == null) return;
 
         var status = root["status"]?.GetValue<string>();

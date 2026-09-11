@@ -27,9 +27,10 @@ public class SystemController : ControllerBase
         var smtpHost = _configuration["Smtp:Host"];
         var emailEnabled = _configuration.GetValue<bool?>("Notifications:EmailEnabled") ?? !environment.IsDev;
 
+        // The kill-switch suppresses every send in dev, so "delivery on" must mean configured AND not dev.
         return Ok(new SystemInfoResponse(
             environment.Name,
-            EmailDelivery: emailEnabled && !string.IsNullOrWhiteSpace(smtpHost)));
+            EmailDelivery: emailEnabled && !environment.IsDev && !string.IsNullOrWhiteSpace(smtpHost)));
     }
 }
 

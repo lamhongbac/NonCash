@@ -32,8 +32,8 @@ Agent phải thêm cấu hình sau vào file cấu hình của ứng dụng clie
 {
   "MSAConfig": {
     "BaseUrl": "https://media.agency.com",
-    "AppCode": "YOUR_APP_CODE",
-    "ApiKey": "YOUR_ASSIGNED_API_KEY"
+    "AppCode": "<msa-app-code>",
+    "ApiKey": "<msa-api-key>"
   }
 }
 ```

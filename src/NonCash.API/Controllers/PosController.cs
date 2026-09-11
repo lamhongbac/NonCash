@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NonCash.Core.Interfaces;
 
 namespace NonCash.API.Controllers;
@@ -6,6 +7,9 @@ namespace NonCash.API.Controllers;
 [ApiController]
 [Route("api/v1/pos")]
 // NOTE: No [Authorize]. POS endpoints are gated by ApiKeyMiddleware (X-API-Key).
+// CR-2026-09-06-04: one bucket per outlet API key across every POS action, declared on the class
+// so a new endpoint is throttled by default instead of being an accidental hole.
+[EnableRateLimiting("pos-outlet")]
 public class PosController : ControllerBase
 {
     private readonly IPosService _posService;
@@ -160,7 +164,9 @@ public class PosController : ControllerBase
             return Ok(new PosRollbackResponse("Invalid", "OutletNotAuthorized", null));
         }
 
-        var result = await _posService.RollbackAsync(request.LockId, cancellationToken);
+        // CR-2026-09-06-01: the lock is released only for the outlet that took it, so a stolen or
+        // mis-provisioned key cannot strand another store's open transaction.
+        var result = await _posService.RollbackAsync(request.LockId, middlewareOutletId.Value, cancellationToken);
 
         if (result.Status == "AlreadyCompleted")
         {
@@ -168,7 +174,7 @@ public class PosController : ControllerBase
                 new PosRollbackResponse(result.Status, result.Reason, null));
         }
 
-        // Success + AlreadyReleased both return HTTP 200 (idempotent).
+        // Success + AlreadyReleased + OutletMismatch all return HTTP 200 (business outcomes).
         return Ok(new PosRollbackResponse(result.Status, result.Reason, result.Message));
     }
 }

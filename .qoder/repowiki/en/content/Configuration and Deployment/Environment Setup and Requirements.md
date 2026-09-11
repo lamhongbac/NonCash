@@ -181,10 +181,10 @@ Note: Specific SDK versions are not enumerated in the repository; align with the
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require",
-  "DevConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require",
-  "PilotConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require",
-  "ProductionConnection": "Host=your-production-db;Database=noncash;Username=noncash_app;Password=CHANGE_ME;SSL Mode=Require"
+  "DefaultConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require",
+  "DevConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require",
+  "PilotConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require",
+  "ProductionConnection": "Host=your-production-db;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require"
 }
 ```
 

@@ -29,7 +29,7 @@ else
 
             <MudTextField @bind-Value="_amountUsed" Label="Amount Used (VND)" Variant="Variant.Outlined"
                           InputType="InputType.Number" Placeholder="0" Class="mb-2"
-                          HelperText="Leave empty to redeem the voucher's full face value." />
+                          HelperText="The voucher is consumed in full either way — this records how much of the bill it covered. Leave empty for the full face value." />
 
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block">@ModeHint</MudText>
 
@@ -365,7 +365,26 @@ else
 
         try
         {
-            var amount = decimal.TryParse(_amountUsed, out var a) ? a : 0m;
+            // An empty field means the bill absorbed the whole voucher, same as the Redeem path.
+            // Sending 0 instead would consume the voucher while recording a breakage that never happened.
+            var faceValue = _verifyResult?.VoucherInfo?.FaceValue;
+            decimal amount;
+            if (decimal.TryParse(_amountUsed, out var typed) && typed > 0)
+            {
+                amount = typed;
+            }
+            else if (faceValue is > 0)
+            {
+                amount = faceValue.Value;
+            }
+            else
+            {
+                _error = "This voucher's face value is not loaded, so the amount to record cannot be worked out "
+                         + "and nothing was committed. Type the amount the bill absorbed into Amount Used, "
+                         + "then press Commit again.";
+                return;
+            }
+
             var txnId = $"{Auth.CurrentShift!.StoreCode}-{_billNumber}-{DateTime.UtcNow.Ticks}";
 
             var result = await PosApi.CommitAsync(

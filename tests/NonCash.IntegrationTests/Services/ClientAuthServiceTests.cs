@@ -61,6 +61,63 @@ public class ClientAuthServiceTests
     }
 
     [Fact]
+    public async Task GetTokenAsync_WithAnExpiryOneMinutePast_AlreadyCountsAsExpired()
+    {
+        // Regression: plain TryParse shifted the UTC round-trip string to local time, so at
+        // UTC+7 a token one minute past expiry still looked valid for another ~7 hours.
+        var storage = new Dictionary<string, string?>
+        {
+            ["authToken"] = "stored-token",
+            ["authTokenExpiry"] = DateTime.UtcNow.AddMinutes(-1).ToString("O")
+        };
+        var navigation = new RecordingNavigationManager();
+        var service = new ClientAuthService(new FakeJsRuntime(storage), navigation, EmptyConfig());
+
+        var token = await service.GetTokenAsync();
+
+        token.Should().BeNull();
+        navigation.Navigations.Should().OnlyContain(uri => uri == "/login");
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_WithAnExpiredMemberToken_RedirectsToTheMemberLogin()
+    {
+        // Regression: every exit path used to point at the staff /login, so an expired member
+        // session landed on a screen whose credentials it does not have.
+        var storage = new Dictionary<string, string?>
+        {
+            ["authToken"] = "stored-token",
+            ["authRole"] = "Member",
+            ["authTokenExpiry"] = DateTime.UtcNow.AddDays(-1).ToString("O")
+        };
+        var navigation = new RecordingNavigationManager();
+        var service = new ClientAuthService(new FakeJsRuntime(storage), navigation, EmptyConfig());
+
+        var token = await service.GetTokenAsync();
+
+        token.Should().BeNull();
+        navigation.Navigations.Should().OnlyContain(uri => uri == "/member-login");
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_WithAnExpiredStaffToken_StillRedirectsToTheStaffLogin()
+    {
+        var storage = new Dictionary<string, string?>
+        {
+            ["authToken"] = "stored-token",
+            ["authRole"] = "BrandManager",
+            ["authTokenExpiry"] = DateTime.UtcNow.AddDays(-1).ToString("O")
+        };
+        var navigation = new RecordingNavigationManager();
+        var service = new ClientAuthService(new FakeJsRuntime(storage), navigation, EmptyConfig());
+
+        var token = await service.GetTokenAsync();
+
+        token.Should().BeNull();
+        navigation.Navigations.Should().OnlyContain(uri => uri == "/login");
+    }
+
+    [Fact]
     public async Task LoginAsync_ThenGetTokenAsync_InTheSameCircuit_ReturnsTheToken()
     {
         var storage = new Dictionary<string, string?>();

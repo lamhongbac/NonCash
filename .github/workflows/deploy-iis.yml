@@ -4,7 +4,7 @@ name: Deploy to IIS
 # The runner executes on the target Windows Server where IIS and PostgreSQL are installed.
 #
 # Required GitHub secret:
-#   NONCASH_DB_CONNECTION  e.g. Host=localhost;Database=noncash;Username=noncash_app;Password=NonCashMachine@2026;SSL Mode=Require
+#   NONCASH_DB_CONNECTION  e.g. Host=localhost;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require
 #
 # One-time server setup before this works:
 #   1. Install the self-hosted runner: Settings -> Actions -> Runners -> New self-hosted runner (Windows).

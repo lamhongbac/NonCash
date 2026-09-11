@@ -37,10 +37,12 @@ public interface IPosService
 
     /// <summary>
     /// Rolls back a previously-locked voucher (InUse → Pending). Compensating transaction for Lock.
-    /// Does NOT create a VoucherUsage. Idempotent.
+    /// Only the outlet that took the lock may roll it back (CR-2026-09-06-01); any other outlet gets
+    /// reason `OutletMismatch`. Does NOT create a VoucherUsage. Idempotent.
     /// </summary>
     Task<PosRollbackResult> RollbackAsync(
         Guid lockId,
+        Guid outletId,
         CancellationToken cancellationToken = default);
 }
 

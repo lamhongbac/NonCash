@@ -114,7 +114,12 @@ public static class PosFailureReasons
     public const string OutletNotAuthorized = "OutletNotAuthorized";
     public const string LockExpired = "LockExpired";
     public const string AlreadyComplete = "AlreadyComplete";
+    public const string AmountExceedsValue = "AmountExceedsValue";
     public const string AlreadyReleased = "AlreadyReleased";
+    public const string OutletMismatch = "OutletMismatch";
+    public const string RateLimited = "RateLimited";
+    public const string TerminalRejected = "TerminalRejected";
+    public const string ServiceRejected = "ServiceRejected";
 
     /// <summary>Actionable sentence for known reasons; the raw reason otherwise; null stays null.</summary>
     public static string? Describe(string? reason, string? storeCode) => reason switch
@@ -139,8 +144,9 @@ public static class PosFailureReasons
         NotYetValid =>
             "The voucher is not active yet (its publish / valid-from date is in the future).",
         TransferPending =>
-            "This voucher is mid-transfer to another member. Redemption stays blocked until the transfer "
-            + "completes or is cancelled.",
+            "This voucher is on its way to another member as a gift and is reserved for them until they accept "
+            + "it or the gift expires. Redemption stays blocked meanwhile — ask the customer to come back once "
+            + "the gift is resolved, or check its status under BrandManager > Gifts.",
         OutletNotAuthorized =>
             "This store is not in the voucher's applicable stores — check the applicable-store list shown "
             + "with the voucher.",
@@ -148,8 +154,25 @@ public static class PosFailureReasons
             "The lock on this voucher expired before commit. Verify the code again to take a new lock.",
         AlreadyComplete =>
             "This voucher was already completed in an earlier transaction.",
+        AmountExceedsValue =>
+            "The amount entered is more than this voucher is worth, so nothing was redeemed and no usage was "
+            + "recorded. Correct the Amount Used field, then press Commit (or Redeem) — the voucher is still held "
+            + "for this bill, so the customer does not need a new code.",
         AlreadyReleased =>
             "This voucher's lock was already released — nothing left to roll back.",
+        OutletMismatch =>
+            "This lock was opened by another store, so it cannot be released from here — the store that started "
+            + "the transaction must roll it back, or it releases itself after 10 minutes.",
+        RateLimited =>
+            "This terminal has sent too many voucher requests in the last minute. Wait 60 seconds, then scan the "
+            + "code once more — scans sent before then are rejected.",
+        TerminalRejected =>
+            "The NonCash service refused this terminal's API key, so no voucher can be checked until the terminal "
+            + "is re-provisioned. Reset the terminal on the login screen and provision it with this store's Setup Key.",
+        ServiceRejected =>
+            "The NonCash service refused this request and returned no voucher result. Check the terminal's internet "
+            + "connection and try once more; if it keeps happening the service may be down — tell the store manager "
+            + "and note the voucher details by hand.",
         _ => reason
     };
 }

@@ -135,6 +135,28 @@ public class VoucherTransferServiceAcceptanceTests
         result.ErrorCode.Should().Be("SelfTransferNotAllowed");
     }
 
+    [Fact]
+    [Trait("Category", "UAT")]
+    [Trait("Story", "5-1")]
+    public async Task InitiateTransfer_WhenSenderIsBlacklisted_ReturnsSenderBlacklistedError()
+    {
+        // CR-2026-09-11-32: the single-voucher endpoint calls InitiateAsync directly, so the
+        // sender gate has to live here too, not only in TransferService.TransferAsync.
+        var alice = await _fixture.Context.Customers.FindAsync(_fixture.AliceCustomerId);
+        alice!.Status = CustomerStatus.Blacklisted;
+        await _fixture.Context.SaveChangesAsync();
+
+        var result = await _fixture.TransferService.InitiateAsync(
+            _fixture.AliceMemberId,
+            _fixture.AliceVoucherId,
+            recipientPhone: "0909222222",
+            recipientMemberId: null,
+            note: "Sender is blacklisted");
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("SenderBlacklisted");
+    }
+
     #endregion
 
     #region Story 5-2: Recipient Confirmation

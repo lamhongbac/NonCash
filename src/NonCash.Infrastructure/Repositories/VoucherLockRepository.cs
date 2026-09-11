@@ -167,11 +167,14 @@ public class VoucherLockRepository : IVoucherLockRepository
 
     public async Task<RollbackOutcome> RollbackAsync(
         Guid lockId,
+        Guid outletId,
         CancellationToken cancellationToken = default)
     {
-        // Atomic conditional update: only flip InUse rows that still hold this lockId.
+        // Atomic conditional update: only flip InUse rows that still hold this lockId AND were
+        // locked by this outlet (CR-2026-09-06-01 — one outlet must not be able to release
+        // another outlet's lock and strand its transaction).
         var rowsAffected = await _context.Set<VoucherPlanDetail>()
-            .Where(v => v.LockId == lockId && v.UsageStatus == UsageStatus.InUse)
+            .Where(v => v.LockId == lockId && v.UsageStatus == UsageStatus.InUse && v.LockedOutletId == outletId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(v => v.UsageStatus, UsageStatus.Pending)
                 .SetProperty(v => v.LockId, (Guid?)null)
@@ -186,7 +189,8 @@ public class VoucherLockRepository : IVoucherLockRepository
             return RollbackOutcome.Success;
         }
 
-        // No row affected: check if voucher was already released (idempotency) or completed.
+        // No row affected: check if voucher was already released (idempotency), completed,
+        // or is still locked — but by a different outlet.
         var current = await _context.Set<VoucherPlanDetail>()
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.LockId == lockId, cancellationToken);
@@ -205,6 +209,10 @@ public class VoucherLockRepository : IVoucherLockRepository
         if (current.UsageStatus == UsageStatus.Pending)
         {
             return RollbackOutcome.AlreadyReleased;
+        }
+        if (current.LockedOutletId != outletId)
+        {
+            return RollbackOutcome.OutletMismatch;
         }
 
         return RollbackOutcome.LockNotFound;

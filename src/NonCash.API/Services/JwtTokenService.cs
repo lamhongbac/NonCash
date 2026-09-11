@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using NonCash.Core.Entities;
@@ -90,13 +89,11 @@ public class JwtTokenService : IJwtTokenService
     private string BuildToken(List<Claim> claims)
     {
         var jwtConfig = _configuration.GetSection("Jwt");
-        var key = jwtConfig["Key"] ?? "noncash-dev-key-min-32-bytes-long!!";
         var issuer = jwtConfig["Issuer"] ?? "NonCash";
         var audience = jwtConfig["Audience"] ?? "NonCash.Users";
         var expiryHours = int.TryParse(jwtConfig["ExpiryHours"], out var h) ? h : 8;
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var credentials = new SigningCredentials(JwtSigningKey.Resolve(_configuration), SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
             issuer: issuer,
@@ -143,7 +140,6 @@ public class JwtTokenService : IJwtTokenService
     public Guid? ValidateMagicLinkToken(string token)
     {
         var jwtConfig = _configuration.GetSection("Jwt");
-        var key = jwtConfig["Key"] ?? "noncash-dev-key-min-32-bytes-long!!";
         var issuer = jwtConfig["Issuer"] ?? "NonCash";
         var audience = jwtConfig["Audience"] ?? "NonCash.Users";
 
@@ -151,7 +147,7 @@ public class JwtTokenService : IJwtTokenService
         var validationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+            IssuerSigningKey = JwtSigningKey.Resolve(_configuration),
             ValidateIssuer = true,
             ValidIssuer = issuer,
             ValidateAudience = true,
@@ -183,12 +179,10 @@ public class JwtTokenService : IJwtTokenService
     private string BuildTokenWithExpiry(List<Claim> claims, DateTime expires)
     {
         var jwtConfig = _configuration.GetSection("Jwt");
-        var key = jwtConfig["Key"] ?? "noncash-dev-key-min-32-bytes-long!!";
         var issuer = jwtConfig["Issuer"] ?? "NonCash";
         var audience = jwtConfig["Audience"] ?? "NonCash.Users";
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var credentials = new SigningCredentials(JwtSigningKey.Resolve(_configuration), SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
             issuer: issuer,

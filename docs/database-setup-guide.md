@@ -35,7 +35,7 @@ Connect as the `postgres` superuser and run:
 
 ```sql
 CREATE DATABASE noncash;
-CREATE USER noncash_app WITH PASSWORD 'UseAStrongRandomPassword!';
+CREATE USER noncash_app WITH PASSWORD '<pwd>';
 GRANT ALL PRIVILEGES ON DATABASE noncash TO noncash_app;
 ```
 
@@ -130,7 +130,7 @@ Each environment has its own `appsettings.{Environment}.json` in `src/NonCash.AP
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=localhost;Database=noncash;Username=noncash_app;Password=UseAStrongRandomPassword!;SSL Mode=Disable"
+  "DefaultConnection": "Host=localhost;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Disable"
 }
 ```
 
@@ -138,7 +138,7 @@ Each environment has its own `appsettings.{Environment}.json` in `src/NonCash.AP
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=UseAStrongRandomPassword!;SSL Mode=Require"
+  "DefaultConnection": "Host=45.119.87.247;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require"
 }
 ```
 
@@ -147,7 +147,7 @@ Replace `45.119.87.247` with the actual database server IP or hostname.
 For production secrets, prefer environment variables over checked-in JSON:
 
 ```powershell
-$env:NONCASH_CONNECTION_STRING="Host=prod-db.example.com;Database=noncash;Username=noncash_app;Password=...;SSL Mode=Require"
+$env:NONCASH_CONNECTION_STRING="Host=prod-db.example.com;Database=noncash;Username=noncash_app;Password=<pwd>;SSL Mode=Require"
 ```
 
 The application falls back to the environment variable in `Program.cs` if `DefaultConnection` is not present.

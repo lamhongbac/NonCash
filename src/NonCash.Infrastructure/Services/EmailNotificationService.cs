@@ -125,7 +125,9 @@ public class EmailNotificationService : INotificationService
             return;
         }
 
-        var subject = $"You've received a voucher: {notification.VoucherName ?? "NonCash voucher"}";
+        var subject = string.IsNullOrWhiteSpace(notification.VoucherName)
+            ? "Your NonCash voucher"
+            : $"Your NonCash voucher: {notification.VoucherName}";
         var magicLinkHtml = string.IsNullOrWhiteSpace(notification.MagicLinkUrl)
             ? string.Empty
             : $"<p style=\"text-align:center;margin:24px 0;\"><a href=\"{notification.MagicLinkUrl}\" style=\"display:inline-block;background-color:#388e3c;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold;\">View My Voucher</a></p>" +
@@ -134,7 +136,7 @@ public class EmailNotificationService : INotificationService
         var body = await _templateRenderer.RenderAsync("VoucherReceived", new Dictionary<string, string?>
         {
             ["RecipientName"] = notification.RecipientName,
-            ["VoucherName"] = notification.VoucherName ?? "NonCash voucher",
+            ["VoucherName"] = string.IsNullOrWhiteSpace(notification.VoucherName) ? "Your voucher" : notification.VoucherName,
             ["FaceValue"] = notification.FaceValue.ToString("N0"),
             ["ExpiryDate"] = notification.ExpiryDate.ToString("yyyy-MM-dd"),
             ["PhoneNumber"] = notification.PhoneNumber,
@@ -619,7 +621,7 @@ public class EmailNotificationService : INotificationService
         {
             // Hard kill-switch: dev mode never delivers real email, so test runs
             // can never reach real customers. The attempt is still audited.
-            _logger.LogWarning("[DEV MODE] Email to {ToAddress} suppressed (subject: {Subject}). Set Environment:Name to 'production' to enable real delivery.", toAddress, subject);
+            _logger.LogWarning("[DEV MODE] Email to {ToAddress} suppressed (subject: {Subject}). Environment:Name is 'dev'; set it to a non-dev value such as 'pilot' to enable real delivery.", toAddress, subject);
             await LogEmailAsync(toAddress, subject, templateName, notificationType, success: false, errorMessage: "Suppressed: dev mode (Environment:Name=dev)", retryCount: 0, cancellationToken);
             return;
         }

@@ -13,11 +13,11 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         <MudText Typo="Typo.h6" Class="ml-3">NonCash</MudText>
         <MudSpacer />
-        @if (_environmentName != null)
+        @if (_systemInfo != null)
         {
-            var isDev = _environmentName.Equals("dev", StringComparison.OrdinalIgnoreCase);
-            <MudChip T="string" Size="Size.Small" Color="@(isDev ? Color.Warning : Color.Error)" Class="mr-3">
-                @(isDev ? "DEV MODE - emails off" : "PRODUCTION - real emails ON")
+            var envName = (_systemInfo.Environment ?? "unknown").ToUpperInvariant();
+            <MudChip T="string" Size="Size.Small" Color="@(_systemInfo.EmailDelivery ? Color.Error : Color.Warning)" Class="mr-3">
+                @(envName + (_systemInfo.EmailDelivery ? " - real emails ON" : " - emails off"))
             </MudChip>
         }
         @if (AuthState.IsLoggedIn)
@@ -106,7 +106,7 @@
 
 @code {
     private bool _drawerOpen = true;
-    private string? _environmentName;
+    private SystemInfoDto? _systemInfo;
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,7 +129,7 @@
             if (response.IsSuccessStatusCode)
             {
                 var info = await response.Content.ReadFromJsonAsync<SystemInfoDto>();
-                _environmentName = info?.Environment;
+                _systemInfo = info;
             }
         }
         catch
