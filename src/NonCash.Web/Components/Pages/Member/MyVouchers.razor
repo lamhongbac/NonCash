@@ -1,4 +1,5 @@
 @page "/my-vouchers"
+@implements IDisposable
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -146,11 +147,37 @@ else if (_vouchers.Any())
             {
                 <MudDivider Class="my-3" />
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Show this at the checkout counter</MudText>
-                <VoucherBarcode SvgId="detail-voucher-barcode" Code="@_detail.VoucherCode" />
-                <MudText Typo="Typo.caption" Style="font-family: monospace;">@_detail.VoucherCode</MudText>
-                <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color: #ed6c02;">
-                    Treat this code like cash — anyone holding it can redeem the voucher.
-                </MudText>
+                @if (string.IsNullOrEmpty(_detail.VoucherCode))
+                {
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.QrCode2"
+                               OnClick="RevealCodeAsync" Disabled="_revealing">
+                        @(_revealing ? "Preparing your code…" : "Show code")
+                    </MudButton>
+                    <MudText Typo="Typo.caption" Class="d-block mt-2" Style="color: #ed6c02;">
+                        The code only lives for a short countdown — a photo of it dies with the timer, so nobody can reuse it later.
+                    </MudText>
+                }
+                else if (CodeExpired)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                        This code has expired. Codes are one-window: ask the cashier to wait and get a fresh one.
+                    </MudAlert>
+                    <MudButton Color="Color.Primary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="RevealCodeAsync" Disabled="_revealing">
+                        @(_revealing ? "Preparing your code…" : "Get a new code")
+                    </MudButton>
+                }
+                else
+                {
+                    <VoucherBarcode @key="_detail.VoucherCode" SvgId="detail-voucher-barcode" Code="@_detail.VoucherCode" />
+                    <MudText Typo="Typo.caption" Style="font-family: monospace;">@_detail.VoucherCode</MudText>
+                    <MudText Typo="Typo.caption" Class="d-block mt-1" Style="color: #ed6c02;">
+                        Treat this code like cash — anyone holding it can redeem the voucher.
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mt-2">
+                        Code dies in <b>@SecondsRemaining s</b> — let the cashier scan it before the countdown ends.
+                    </MudText>
+                }
             }
             else if (_detail.UsedDate.HasValue)
             {
@@ -160,7 +187,7 @@ else if (_vouchers.Any())
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _showDetail = false">Close</MudButton>
+        <MudButton OnClick="CloseDetail">Close</MudButton>
         @if (_detail is not null && CanGift(_detail))
         {
             <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CardGiftcard" OnClick="GiftFromDetail">
@@ -314,6 +341,20 @@ else if (_vouchers.Any())
     private DialogOptions _dialogOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
     private DialogOptions _detailOptions = new() { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
 
+    // Mint-on-tap state (CR-2026-09-06-06): the code does not exist until the member asks for it,
+    // then it lives only for the token's exp window — decoded client-side from the payload.
+    private bool _revealing;
+    private long? _codeExpUnix;
+    private PeriodicTimer? _countdown;
+    private CancellationTokenSource? _countdownCts;
+
+    private bool CodeExpired => _codeExpUnix.HasValue
+        && DateTimeOffset.UtcNow.ToUnixTimeSeconds() > _codeExpUnix.Value;
+
+    private int SecondsRemaining => _codeExpUnix.HasValue
+        ? Math.Max(0, (int)(_codeExpUnix.Value - DateTimeOffset.UtcNow.ToUnixTimeSeconds()))
+        : 0;
+
     protected override async Task OnInitializedAsync()
     {
         await AuthState.GetTokenAsync();
@@ -389,12 +430,111 @@ else if (_vouchers.Any())
     private void OpenDetail(MemberVoucher voucher)
     {
         _detail = voucher;
+        _codeExpUnix = string.IsNullOrEmpty(voucher.VoucherCode) ? null : ExtractExp(voucher.VoucherCode);
+        if (_codeExpUnix.HasValue && !CodeExpired)
+            StartCountdown();
         _showDetail = true;
     }
+
+    private void CloseDetail()
+    {
+        _showDetail = false;
+        StopCountdown();
+    }
+
+    private async Task RevealCodeAsync()
+    {
+        if (_detail is null) return;
+
+        _revealing = true;
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Post, $"api/v1/members/{_memberId}/vouchers/{_detail.Id}/code");
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                await ShowApiFailureAsync("We could not prepare your code", response);
+                return;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<MintCodeResponse>();
+            if (payload is null || string.IsNullOrEmpty(payload.Code))
+            {
+                await MessageDialog.ShowAsync(DialogService, "We could not prepare your code",
+                    "The server answered without a code. Close this screen, open the voucher again and tap Show code.",
+                    Severity.Error);
+                return;
+            }
+
+            _detail.VoucherCode = payload.Code;
+            _codeExpUnix = ExtractExp(payload.Code);
+            StartCountdown();
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "We could not prepare your code",
+                $"The voucher service did not answer ({ex.Message}). Close this screen, open the voucher again and tap Show code.",
+                Severity.Error);
+        }
+        finally
+        {
+            _revealing = false;
+        }
+    }
+
+    private static long? ExtractExp(string code)
+    {
+        try
+        {
+            var parts = code.Split('.');
+            if (parts.Length != 2) return null;
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(parts[0]));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("exp").GetInt64();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void StartCountdown()
+    {
+        StopCountdown();
+        if (!_codeExpUnix.HasValue) return;
+
+        _countdownCts = new CancellationTokenSource();
+        var token = _countdownCts.Token;
+        _countdown = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _countdown.WaitForNextTickAsync(token))
+                    await InvokeAsync(StateHasChanged);
+            }
+            catch (OperationCanceledException)
+            {
+                // Dialog closed or a fresh code replaced this one.
+            }
+        }, token);
+    }
+
+    private void StopCountdown()
+    {
+        _countdownCts?.Cancel();
+        _countdownCts?.Dispose();
+        _countdownCts = null;
+        _countdown?.Dispose();
+        _countdown = null;
+    }
+
+    public void Dispose() => StopCountdown();
 
     private void GiftFromDetail()
     {
         if (_detail is null) return;
+        StopCountdown();
         _selectedIds = new HashSet<Guid> { _detail.Id };
         _showDetail = false;
         OpenGiftDialog();
@@ -685,10 +825,15 @@ else if (_vouchers.Any())
         public string ValueType { get; set; } = "";
         public DateTime? ExpiryDate { get; set; }
         public string? ImageUrl { get; set; }
-        public string VoucherCode { get; set; } = "";
+        public string? VoucherCode { get; set; }
         public string BrandName { get; set; } = "";
         public string ScopeSummary { get; set; } = "";
         public List<string> ApplicableStores { get; set; } = new();
+    }
+
+    public class MintCodeResponse
+    {
+        public string Code { get; set; } = "";
     }
 
     public class GiftItem

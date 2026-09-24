@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 using System.Security.Cryptography;
@@ -12,14 +13,23 @@ public class VoucherCodeService : IVoucherCodeService
     // must be case-insensitive to map them onto VoucherCodePayload properties.
     private static readonly JsonSerializerOptions PayloadJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public string GenerateCode(Guid voucherDetailId, string secretKey, int validitySeconds = 120)
+    private readonly int _defaultValiditySeconds;
+
+    // IOptions is optional so hand-built instances (tests, SeedTool) keep working: without
+    // registration the configured default falls back to VoucherCodeOptions' 120 seconds.
+    public VoucherCodeService(IOptions<VoucherCodeOptions>? options = null)
+    {
+        _defaultValiditySeconds = options?.Value.ClampedCodeValiditySeconds ?? new VoucherCodeOptions().CodeValiditySeconds;
+    }
+
+    public string GenerateCode(Guid voucherDetailId, string secretKey, int? validitySeconds = null)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var payload = new
         {
             vid = voucherDetailId.ToString(),
             iat = now,
-            exp = now + validitySeconds
+            exp = now + (validitySeconds ?? _defaultValiditySeconds)
         };
 
         var payloadJson = JsonSerializer.Serialize(payload);

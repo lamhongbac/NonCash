@@ -40,36 +40,41 @@ else
 
             @* ── Action buttons ── *@
             <MudStack Row Spacing="2" Class="mb-3">
-                <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="HandleVerify"
-                           Disabled="@IsVerifyDisabled">
-                    @if (_loading && _action == "verify")
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    }
-                    Verify
-                </MudButton>
+                @* While a lock is held, only COMMIT / ROLLBACK / CLEAR may act —
+                   starting a new verify/lock/redeem would orphan the live server lock. *@
+                @if (_lockId is null)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" OnClick="HandleVerify"
+                               Disabled="@IsVerifyDisabled">
+                        @if (_loading && _action == "verify")
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Verify
+                    </MudButton>
 
-                @if (IsOneClick)
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="HandleRedeem"
-                               Disabled="@IsRedeemDisabled">
-                        @if (_loading && _action == "redeem")
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        }
-                        Redeem
-                    </MudButton>
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="HandleLock"
-                               Disabled="@IsLockDisabled">
-                        @if (_loading && _action == "lock")
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        }
-                        Lock
-                    </MudButton>
+                    @if (IsOneClick)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="HandleRedeem"
+                                   Disabled="@IsRedeemDisabled">
+                            @if (_loading && _action == "redeem")
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Redeem
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="HandleLock"
+                                   Disabled="@IsLockDisabled">
+                            @if (_loading && _action == "lock")
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Lock
+                        </MudButton>
+                    }
                 }
 
                 @if (!IsOneClick || _lockId is not null)
@@ -97,6 +102,17 @@ else
                     Clear
                 </MudButton>
             </MudStack>
+
+            @if (_lockId is not null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    <strong>This voucher is being held for bill @_billNumber.</strong>
+                    Press COMMIT to finish the redemption, or ROLLBACK to release the voucher for the customer.
+                    Pressing Clear or scanning a different code abandons this screen but does <strong>not</strong> release
+                    the hold server-side — the voucher stays unavailable elsewhere until the hold expires on its own
+                    (about 10 minutes) or you press Rollback.
+                </MudAlert>
+            }
         </MudPaper>
     </MudItem>
 
@@ -244,6 +260,11 @@ else
     private bool IsLockDisabled => _loading || _verifyResult?.Status != "Valid";
     private bool IsCommitDisabled => _loading || _lockId == null;
     private bool IsRollbackDisabled => _loading || _lockId == null;
+
+    // The server no longer holds this lock (it expired, was released, or the voucher already
+    // completed), so the local LockId is stale and must not keep the screen in the held state.
+    // Rollback spells the consumed state "AlreadyCompleted"; commit spells it "AlreadyComplete".
+    private static bool IsDeadLockReason(string? reason) => reason is "LockExpired" or "AlreadyComplete" or "AlreadyCompleted" or "AlreadyReleased";
 
     protected override void OnInitialized()
     {
@@ -402,6 +423,7 @@ else
             }
             else
             {
+                if (IsDeadLockReason(result?.Reason)) _lockId = null;
                 _error = PosFailureReasons.Describe(result?.Reason, Auth.CurrentShift?.StoreCode)
                          ?? result?.Message ?? "Commit failed";
             }
@@ -430,6 +452,7 @@ else
             }
             else
             {
+                if (IsDeadLockReason(result?.Reason)) _lockId = null;
                 _error = PosFailureReasons.Describe(result?.Reason, Auth.CurrentShift?.StoreCode)
                          ?? result?.Message ?? "Rollback failed";
             }

@@ -21,8 +21,11 @@ public interface IVoucherCodeService
     /// <summary>
     /// Generates a short-lived signed token for the given voucher detail.
     /// The token contains {vid, iat, exp} signed with HMAC-SHA256 using the detail's secret.
+    /// <paramref name="validitySeconds"/> overrides the configured default
+    /// (<see cref="VoucherCodeOptions.CodeValiditySeconds"/>) for this one token; pass null to
+    /// use the configured value.
     /// </summary>
-    string GenerateCode(Guid voucherDetailId, string secretKey, int validitySeconds = 120);
+    string GenerateCode(Guid voucherDetailId, string secretKey, int? validitySeconds = null);
 
     /// <summary>
     /// Classifies a presented code against the detail's secret and outputs the voucher

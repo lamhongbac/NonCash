@@ -209,7 +209,7 @@
 
 ---
 
-## 5. Voucher Code Security Posture (assessed 2026-09-06)
+## 5. Voucher Code Security Posture (assessed 2026-09-06, extended 2026-09-24)
 
 Assessment of the voucher-code solution against forgery, theft, and misuse. Verified against code (`VoucherCodeService`, `PosService`, `MembersController`, `ApiKeyMiddleware`).
 
@@ -221,6 +221,9 @@ Assessment of the voucher-code solution against forgery, theft, and misuse. Veri
 - Spend integrity: atomic `Pending → InUse → Complete` transitions with idempotency keys, compensating rollback, and auto-expiring 10-minute locks; a pending member-to-member transfer soft-locks the voucher against redemption.
 - Verify enforces outlet scope (the outlet must belong to the plan's brand or be in scope via a sponsored campaign) and plan expiry.
 - POS auth: per-outlet API keys (`X-API-Key` header, outlet resolved from the key). Wallet auth: member JWT with an ownership check.
+- Identity & tenant isolation (extended 2026-09-24): JWTs are validated on issuer/audience/lifetime/signing key with no hardcoded defaults (`JwtSigningKey.Resolve` fails fast); roles are separated (Admin / BrandManager / StoreStaff / member); `BrandScopeMiddleware` + `ICurrentUserService` enforce brand scoping at the query layer, so a BrandManager of brand A cannot read brand B's data; POS identity is resolved from the outlet API key and cross-checked against the request body (`TerminalKeyMismatch`).
+- Secrets hygiene (extended 2026-09-24): git-tracked `appsettings*.json` keep empty values — real values come from the per-environment key → env-var chain or user-secrets; `Smtp:Password` was removed from tracked files (CR-2026-09-06-13); email has an environment kill-switch; all credentials present in pre-2026-09-11 git history are treated as exposed and must be rotated at their providers (Immediate Actions #11).
+- Error contract (extended 2026-09-24): every failure states cause + next action (CR-2026-09-09-24), and business outcomes return HTTP 200 with a machine reason while genuine transport errors are 4xx/5xx — this prevents retry-storms against rate-limited endpoints and panic commits on ambiguous errors.
 
 ### 5.2 Verdicts
 
@@ -228,7 +231,7 @@ Assessment of the voucher-code solution against forgery, theft, and misuse. Veri
 |---|---|
 | Forgery | Strong — per-voucher secret + HMAC + constant-time compare |
 | Double-spend | Strong — atomic status transitions + idempotency |
-| Code theft (shoulder-surf / screenshot within the 120s window) | Moderate — the code is a bearer token; mitigated only by the TTL |
+| Code theft (shoulder-surf / screenshot within the 120s window) | Moderate in absolute terms — the code is a bearer token; mitigated only by the TTL. Relative to market practice this is a strength, not a weakness: static codes used by typical voucher platforms stay valid indefinitely once copied, while a copied NonCash token self-destructs within its ≤120 s window and is single-use |
 | Member account takeover | Weak — password-only member login, no OTP |
 | Outlet key compromise | Weak — outlet keys are matched on plaintext prefix (dev-grade; `integration_partners` keys are stored hashed, outlet keys are not) and there is no rotation procedure |
 | Customer data enumeration | Moderate — customer search requires BrandManager/Admin (CR-2026-09-06-02), and the anonymous auth endpoints plus every POS call are now rate limited (CR-2026-09-06-04). Residual: `staff-login` and `member-auth` are one *global* bucket rather than per-IP, so they throttle an abuser and every legitimate user alike |
@@ -248,6 +251,18 @@ Sorted by implementation ease (easy → hard), decoupled from risk ranking. Each
 | CR-2026-09-06-07 | Shrink code TTL 120s → 60s (only after CR-2026-09-06-06) | ~2h | Registered — pending decision |
 | CR-2026-09-06-08 | Member OTP login (closes the biggest residual risk; needs SMS/email OTP infrastructure) | ~2–3d | Registered — pending decision |
 | CR-2026-09-06-09 | Optional deep defense (device binding, per-outlet velocity checks, alerting on bursts of `Forged` results) | TBD | Registered — pending decision |
+
+### 5.4 Security as a selling point — positioning vs market practice (owner-approved 2026-09-24)
+
+The owner-approved lead pair is **code self-destruct** and **invoice-level traceability**. Frame every B2B security conversation as: threat → typical market practice → NonCash design → the sentence to sell with.
+
+| Threat | Market practice (static-code platforms, printed vouchers) | NonCash design | The sentence to sell |
+|---|---|---|---|
+| Leaked / copied code | A copied or leaked code stays valid until someone redeems it — often months | Rotating HMAC-signed token, single-use, self-destructs ≤ 120 s | "Mã lộ không giết chiến dịch của anh — ảnh chụp tự vô hiệu trong 2 phút." |
+| Double-spend at the counter | Two tills can both succeed with a static code; the brand eats the dispute | Atomic `Pending → InUse → Complete` inside a single UPDATE; 10-min lock TTL with auto-cleanup | "Hai thu ngân không bao giờ cùng thắng — không tranh chấp tiền giữa các cửa hàng." |
+| Campaign blindness | Provider reports only "used / not used" | Every redemption binds bill number + POS No + operator + outlet; the brand redemption report separates face value from the amount the bill actually absorbed (breakage) | "Brand lần đầu tiên thấy voucher kéo bao nhiêu doanh thu thật — tới tận số hóa đơn." |
+
+Honest limit — never over-promise: we sell "**copy also dies**", never "cannot be copied". Bearer-within-120 s is a registered residual risk (CR-2026-09-06-06/07/08/09); identity-bound redemption would close it entirely at the cost of the forward-as-a-gift property — a product decision recorded in §5.3.
 
 ---
 
@@ -303,6 +318,6 @@ Get-NetTCPConnection -LocalPort 5432 | Select-Object LocalAddress, State, Owning
 
 ---
 
-**Next review date:** 2026-09-15  
+**Next review date:** 2026-12-24  
 **Owner:** Dev Team  
 **Approved by:** _TBD_

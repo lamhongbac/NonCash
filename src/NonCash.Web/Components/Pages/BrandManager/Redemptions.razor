@@ -1,0 +1,317 @@
+@page "/brandmanager/redemptions"
+@attribute [Authorize(Roles = "BrandManager,Admin")]
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject IDialogService DialogService
+@inject NonCash.Web.Services.ClientAuthService AuthState
+
+@using NonCash.Shared.Helpers
+
+<PageTitle>Redemptions</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h4" Class="mb-1">Redemptions</MudText>
+        <MudText Typo="Typo.body2">
+            Every voucher of your brand redeemed at a store. "Bill amount" is the amount the POS settled
+            against the voucher (amount used); "breakage" is face value left over, for fixed-value vouchers only. Read-only.
+        </MudText>
+    </div>
+</MudStack>
+
+<MudPaper Class="pa-3 mb-4" Elevation="1">
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+        @if (_outlets.Count > 0)
+        {
+            <MudSelect T="Guid?" Value="_outletId" ValueChanged="OnOutletChanged" Label="Outlet" Clearable="true"
+                       Variant="Variant.Outlined" Style="min-width: 200px;">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">All outlets</MudSelectItem>
+                @foreach (var o in _outlets)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)o.OutletId)">@o.OutletName</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        <MudDatePicker Label="From" @bind-Date="_from" Clearable="true" />
+        <MudDatePicker Label="To" @bind-Date="_to" Clearable="true" />
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="() => LoadReport(1)" Disabled="_loading">Apply</MudButton>
+        <MudButton Color="Color.Default" Variant="Variant.Outlined" OnClick="ResetFilters" Disabled="_loading">Reset</MudButton>
+        <MudTooltip Text="Refresh">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" OnClick="() => LoadReport(1)" Disabled="_loading" />
+        </MudTooltip>
+        <MudTooltip Text="Download all matching rows as CSV">
+            <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportCsv" Disabled="_exporting">
+                @(_exporting ? "Exporting…" : "Export CSV")
+            </MudButton>
+        </MudTooltip>
+    </MudStack>
+</MudPaper>
+
+@if (_loading && !_loaded)
+{
+    <MudProgressLinear Indeterminate="true" Class="my-4" />
+}
+else if (_report is null || !_report.Items.Any())
+{
+    <MudAlert Severity="Severity.Info">
+        No redemptions match this filter. A row appears here as soon as a store redeems one of your vouchers on the POS.
+    </MudAlert>
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Total Face Value</MudText>
+                    <MudText Typo="Typo.h5">@_report.TotalFaceValue.ToString("N0") ₫</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Total Bill Amount (amount used)</MudText>
+                    <MudText Typo="Typo.h5">@_report.TotalAmountUsed.ToString("N0") ₫</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle2">Total Breakage</MudText>
+                    <MudText Typo="Typo.h5">@_report.TotalBreakage.ToString("N0") ₫</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.caption" Class="mb-2">
+        Totals cover all @_report.TotalCount row(s) matching the filter, not just this page.
+        Breakage totals fixed-value vouchers only.
+    </MudText>
+
+    <MudTable Items="_report.Items" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Redeemed</MudTh>
+            <MudTh>Outlet</MudTh>
+            <MudTh>Bill</MudTh>
+            <MudTh>Voucher</MudTh>
+            <MudTh>Face Value</MudTh>
+            <MudTh>Bill Amount</MudTh>
+            <MudTh>Breakage</MudTh>
+            <MudTh>POS / Operator</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Redeemed">@context.UsageDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Outlet">@(context.OutletName ?? "—")</MudTd>
+            <MudTd DataLabel="Bill">@(context.BillNumber ?? context.TransactionId)</MudTd>
+            <MudTd DataLabel="Voucher">@context.SerialNo</MudTd>
+            <MudTd DataLabel="Face Value">@VoucherDisplayHelper.FormatValue(context.FaceValue, context.ValueType)</MudTd>
+            <MudTd DataLabel="Bill Amount">@context.AmountUsed.ToString("N0") ₫</MudTd>
+            <MudTd DataLabel="Breakage">
+                @(context.Breakage.HasValue ? $"{context.Breakage.Value:N0} ₫" : "—")
+            </MudTd>
+            <MudTd DataLabel="POS / Operator">
+                @(context.PosNo ?? "—")
+                @if (!string.IsNullOrWhiteSpace(context.OperatorId))
+                {
+                    <MudText Typo="Typo.caption" Class="d-block">@context.OperatorId</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mt-3">
+        <MudText Typo="Typo.caption" Class="mr-3">Page @_page · @_report.Items.Count row(s)</MudText>
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ChevronLeft"
+                   Disabled="@(_loading || _page <= 1)" OnClick="() => LoadReport(_page - 1)">Newer</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" EndIcon="@Icons.Material.Filled.ChevronRight" Class="ml-2"
+                   Disabled="@(_loading || _report.Items.Count < PageSize)" OnClick="() => LoadReport(_page + 1)">Older</MudButton>
+    </MudStack>
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private bool _loading;
+    private bool _loaded;
+    private bool _exporting;
+    private int _page = 1;
+    private Guid? _outletId;
+    private DateTime? _from;
+    private DateTime? _to;
+    private RedemptionReportDto? _report;
+    private List<OutletOption> _outlets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOutlets();
+        await LoadReport(1);
+    }
+
+    private async Task OnOutletChanged(Guid? outletId)
+    {
+        _outletId = outletId;
+        await LoadReport(1);
+    }
+
+    private async Task ResetFilters()
+    {
+        _outletId = null;
+        _from = null;
+        _to = null;
+        await LoadReport(1);
+    }
+
+    private async Task LoadOutlets()
+    {
+        try
+        {
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, "api/v1/brand/redemptions/outlets");
+            var response = await Http.SendAsync(request);
+            // Admin without a brandId gets 400 — outlet filter stays hidden for them.
+            if (response.IsSuccessStatusCode)
+                _outlets = await response.Content.ReadFromJsonAsync<List<OutletOption>>() ?? new();
+        }
+        catch
+        {
+            // Outlet filter is a convenience; the report itself still loads without it.
+        }
+    }
+
+    private async Task LoadReport(int page)
+    {
+        if (page < 1) page = 1;
+        _loading = true;
+        try
+        {
+            var parts = new List<string> { $"page={page}", $"pageSize={PageSize}" };
+            if (_outletId.HasValue) parts.Add($"outletId={_outletId.Value}");
+            if (_from.HasValue) parts.Add($"from={_from.Value:yyyy-MM-dd}");
+            if (_to.HasValue) parts.Add($"to={_to.Value:yyyy-MM-dd}");
+
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, "api/v1/brand/redemptions?" + string.Join("&", parts));
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _report = await response.Content.ReadFromJsonAsync<RedemptionReportDto>();
+                _page = page;
+                _loaded = true;
+            }
+            else
+            {
+                await ShowApiFailureAsync("We could not load the redemption report", response);
+            }
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "We could not load the redemption report",
+                $"The report service did not answer ({ex.Message}). Check your connection, then tap Refresh.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ShowApiFailureAsync(string title, HttpResponseMessage response)
+    {
+        string detail;
+        try
+        {
+            var payload = await response.Content.ReadAsStringAsync();
+            detail = string.IsNullOrWhiteSpace(payload) ? $"The server answered {(int)response.StatusCode}." : payload;
+        }
+        catch
+        {
+            detail = $"The server answered {(int)response.StatusCode}.";
+        }
+
+        await MessageDialog.ShowAsync(DialogService, title,
+            $"{detail}\n\nIf this keeps happening, tap Refresh and try again.", Severity.Error);
+    }
+
+    // Export contains every row matching the current filters (not just this page), so the
+    // file agrees with the totals under the cards.
+    private async Task ExportCsv()
+    {
+        _exporting = true;
+        try
+        {
+            var parts = new List<string>();
+            if (_outletId.HasValue) parts.Add($"outletId={_outletId.Value}");
+            if (_from.HasValue) parts.Add($"from={_from.Value:yyyy-MM-dd}");
+            if (_to.HasValue) parts.Add($"to={_to.Value:yyyy-MM-dd}");
+
+            var url = "api/v1/brand/redemptions/export";
+            if (parts.Count > 0) url += "?" + string.Join("&", parts);
+
+            var request = await CreateAuthRequestAsync(HttpMethod.Get, url);
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                await ShowApiFailureAsync("We could not export the redemption report", response);
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var fileName = $"redemption-report-{DateTime.UtcNow:yyyyMMddHHmmss}.csv";
+            await JS.InvokeVoidAsync("downloadFromBase64", fileName, "text/csv", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            await MessageDialog.ShowAsync(DialogService, "We could not export the redemption report",
+                $"The export did not finish ({ex.Message}). Check your connection, then try again.", Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private async Task<HttpRequestMessage> CreateAuthRequestAsync(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = await AuthState.GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    public class RedemptionReportDto
+    {
+        public List<RedemptionRowDto> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public decimal TotalFaceValue { get; set; }
+        public decimal TotalAmountUsed { get; set; }
+        public decimal TotalBreakage { get; set; }
+    }
+
+    public class RedemptionRowDto
+    {
+        public Guid UsageId { get; set; }
+        public DateTime UsageDate { get; set; }
+        public string TransactionId { get; set; } = "";
+        public string? BillNumber { get; set; }
+        public string SerialNo { get; set; } = "";
+        public string ValueType { get; set; } = "";
+        public decimal FaceValue { get; set; }
+        public decimal AmountUsed { get; set; }
+        public decimal? Breakage { get; set; }
+        public Guid OutletId { get; set; }
+        public string? OutletName { get; set; }
+        public string? PosNo { get; set; }
+        public string? OperatorId { get; set; }
+    }
+
+    public class OutletOption
+    {
+        public Guid OutletId { get; set; }
+        public string OutletName { get; set; } = "";
+        public string? OutletCode { get; set; }
+    }
+}

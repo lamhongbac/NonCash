@@ -83,6 +83,7 @@ builder.Services.AddScoped<IBusinessRegistrationRequestRepository, BusinessRegis
 builder.Services.AddScoped<IVoucherPlanRepository, VoucherPlanRepository>();
 builder.Services.AddScoped<IVoucherTransferRepository, VoucherTransferRepository>();
 builder.Services.AddScoped<IVoucherLockRepository, VoucherLockRepository>();
+builder.Services.AddScoped<IRedemptionReportRepository, RedemptionReportRepository>();
 
 // Business services
 builder.Services.AddScoped<BrandService>();
@@ -101,6 +102,7 @@ builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 
 // ZaloPay payment options
 builder.Services.Configure<ZaloPayOptions>(builder.Configuration.GetSection("ZaloPay"));
+builder.Services.Configure<VoucherCodeOptions>(builder.Configuration.GetSection(VoucherCodeOptions.SectionName));
 builder.Services.AddHttpClient("ZaloPay", client =>
 {
     client.BaseAddress = new Uri("https://sb-openapi.zalopay.vn");
@@ -267,6 +269,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+    // Minting a code is a cheap HMAC but a replayable credential, so a stolen-session script must
+    // not be able to farm fresh codes without limit. Claims are unavailable this early in the
+    // pipeline (UseRateLimiter precedes UseAuthentication), so partition on client IP.
+    options.AddPolicy("member-code", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            RateLimitPartitionKeys.ForClientIp(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
     options.OnRejected = async (context, token) =>
     {
         // OnRejectedContext carries no policy name, so read it back off the endpoint that was throttled.
@@ -275,7 +289,9 @@ builder.Services.AddRateLimiter(options =>
         var message = policyName == "pos-outlet"
             ? "This terminal has sent too many voucher requests in the last minute. Wait 60 seconds, then scan "
               + "the code again — requests sent before then are rejected."
-            : "Too many attempts. Please wait a minute and try again.";
+            : policyName == "member-code"
+                ? "You asked for new voucher codes too many times. Wait 60 seconds, then tap the voucher again."
+                : "Too many attempts. Please wait a minute and try again.";
 
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";

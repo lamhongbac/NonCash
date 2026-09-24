@@ -29,7 +29,7 @@
             <MudTextField @bind-Value="_voucherCode" Label="Voucher Code" Required="true" RequiredError="Voucher code is required" />
         </MudItem>
         <MudItem xs="12" md="4" Class="d-flex align-center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="VerifyAsync" Disabled="_processing || !CanAct">Verify</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="VerifyAsync" Disabled="_processing || !CanAct || _lockId != null">Verify</MudButton>
         </MudItem>
     </MudGrid>
 </MudPaper>
@@ -67,12 +67,21 @@
                              HelperText="The voucher is consumed in full either way — this records how much of the bill it covered." />
         </MudItem>
         <MudItem xs="12" md="8" Class="d-flex align-center gap-2">
-            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LockAsync" Disabled="_processing || !CanAct || string.IsNullOrWhiteSpace(_voucherCode)">Lock</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="LockAsync" Disabled="_processing || !CanAct || string.IsNullOrWhiteSpace(_voucherCode) || _lockId != null">Lock</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="CommitAsync" Disabled="_processing || _lockId == null">Commit</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="RollbackAsync" Disabled="_processing || _lockId == null">Rollback</MudButton>
             <MudButton Variant="Variant.Text" OnClick="ResetForm">Reset</MudButton>
         </MudItem>
     </MudGrid>
+    @if (_lockId is not null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            <strong>This voucher is being held for bill @_billNumber.</strong>
+            Press COMMIT to finish the redemption, or ROLLBACK to release the voucher for the customer.
+            Pressing Reset does <strong>not</strong> release the hold server-side — the voucher stays unavailable
+            elsewhere until the hold expires on its own (about 10 minutes) or you press Rollback.
+        </MudAlert>
+    }
 </MudPaper>
 
 @if (!string.IsNullOrWhiteSpace(_lastStatus))
@@ -246,7 +255,11 @@
         if (root == null) return;
 
         var status = root["status"]?.GetValue<string>();
-        ShowStatus(status, root["reason"]?.GetValue<string>(), status is "Success" or "AlreadyComplete" ? Severity.Success : Severity.Warning);
+        var reason = root["reason"]?.GetValue<string>();
+        // Success and AlreadyComplete mean the voucher is consumed; LockExpired / AlreadyReleased
+        // mean the server no longer holds the lock. In all four cases the local LockId is dead.
+        if (status is "Success" or "AlreadyComplete" || IsDeadLockReason(reason)) _lockId = null;
+        ShowStatus(status, reason, status is "Success" or "AlreadyComplete" ? Severity.Success : Severity.Warning);
     }
 
     private async Task RollbackAsync()
@@ -256,8 +269,16 @@
         if (root == null) return;
 
         var status = root["status"]?.GetValue<string>();
-        ShowStatus(status, root["reason"]?.GetValue<string>(), status is "Success" or "AlreadyReleased" ? Severity.Success : Severity.Warning);
+        var reason = root["reason"]?.GetValue<string>();
+        // Success / AlreadyReleased: the lock is released. AlreadyCompleted / LockExpired: the
+        // lock is gone. Either way the local LockId must not stay enabled.
+        if (status is "Success" or "AlreadyReleased" || IsDeadLockReason(reason)) _lockId = null;
+        ShowStatus(status, reason, status is "Success" or "AlreadyReleased" ? Severity.Success : Severity.Warning);
     }
+
+    // The server no longer holds this lock (expired, released, or the voucher already completed),
+    // so the local LockId is stale. Rollback spells the consumed state "AlreadyCompleted"; commit "AlreadyComplete".
+    private static bool IsDeadLockReason(string? reason) => reason is "LockExpired" or "AlreadyComplete" or "AlreadyCompleted" or "AlreadyReleased";
 
     private async Task<JsonNode?> CallPosAsync(string action, object body)
     {

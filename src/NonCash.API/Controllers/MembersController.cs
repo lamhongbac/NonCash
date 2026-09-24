@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NonCash.Core.Entities;
 using NonCash.Core.Interfaces;
 using NonCash.Core.Services;
@@ -110,7 +111,7 @@ public class MembersController : ControllerBase
                     plan?.ValueType.ToString() ?? string.Empty,
                     plan?.ExpiryDate,
                     plan?.ImageUrl,
-                    _voucherCodeService.GenerateCode(d.Id, d.VoucherCodeSecret),
+                    null,
                     brandName,
                     scopeSummary,
                     storeNames);
@@ -118,6 +119,34 @@ public class MembersController : ControllerBase
             .ToList();
 
         return Ok(result);
+    }
+
+    // Mint-on-tap: the code is created only when the member taps to reveal it, so a stolen wallet
+    // list no longer hands out a batch of live credentials at once. Throttled per client IP.
+    [HttpPost("{memberId:guid}/vouchers/{voucherId:guid}/code")]
+    [EnableRateLimiting("member-code")]
+    public async Task<IActionResult> MintVoucherCode(Guid memberId, Guid voucherId, CancellationToken cancellationToken)
+    {
+        var currentMemberId = GetCurrentMemberId();
+        if (currentMemberId == Guid.Empty)
+            return Unauthorized(new { error = "Unauthorized", message = "Member identity is required." });
+
+        if (memberId != currentMemberId)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Forbidden", message = "You can only reveal codes for your own vouchers." });
+
+        var detail = await _detailRepository.GetByIdAsync(voucherId, cancellationToken);
+        if (detail == null || detail.MemberId != currentMemberId)
+            return NotFound(new { error = "NotFound", message = "That voucher is not in your wallet." });
+
+        if (detail.UsageStatus != UsageStatus.Pending && detail.UsageStatus != UsageStatus.InUse)
+            return Conflict(new
+            {
+                error = "VoucherNotUsable",
+                message = "This voucher has already been used or has expired. Used or expired vouchers cannot show a redemption code — check the voucher status in your wallet."
+            });
+
+        var code = _voucherCodeService.GenerateCode(detail.Id, detail.VoucherCodeSecret);
+        return Ok(new { code });
     }
 }
 
@@ -130,7 +159,7 @@ public record MemberVoucherResponse(
     string ValueType,
     DateTime? ExpiryDate,
     string? ImageUrl,
-    string VoucherCode,
+    string? VoucherCode,
     string BrandName,
     string ScopeSummary,
     IReadOnlyList<string> ApplicableStores);
